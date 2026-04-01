@@ -1,0 +1,19 @@
+services:
+  frontend:
+    build:
+      context: ./restohub
+      dockerfile: Dockerfile
+    container_name: restohub_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./restohub:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://gateway_service:8000/api/graphql/
+    command: npm run dev -- --host
+
+networks:
+  default:
+    external: true
+    name: restohub_backend_restohub_network
