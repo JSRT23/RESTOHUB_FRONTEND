@@ -11,9 +11,13 @@ services:
       - /app/node_modules
     environment:
       - VITE_API_URL=http://gateway_service:8000/api/graphql/
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
     command: npm run dev -- --host
+    networks:
+      - restohub_network
 
 networks:
-  default:
+  restohub_network:
     external: true
     name: restohub_backend_restohub_network

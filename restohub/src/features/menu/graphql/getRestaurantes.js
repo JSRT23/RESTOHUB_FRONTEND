@@ -9,6 +9,7 @@ export const GET_RESTAURANTES = gql`
       ciudad
       direccion
       moneda
+      activo
     }
   }
 `;
