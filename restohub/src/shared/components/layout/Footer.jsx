@@ -1,36 +1,26 @@
+// src/shared/components/layout/Footer.jsx
 export default function Footer() {
   return (
-    <footer className="bg-white border-t mt-12">
-      <div className="max-w-7xl mx-auto px-6 py-10 grid gap-8 md:grid-cols-3 text-sm text-gray-500">
-        {/* Brand */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">RestoHub</h2>
-          <p>
-            Plataforma de gestión para restaurantes moderna, escalable y pensada
-            para equipos.
-          </p>
+    <footer className="border-t border-stone-100 bg-white mt-auto">
+      <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-lg bg-amber-500 flex items-center justify-center">
+            <span className="text-white font-black text-[9px]">R</span>
+          </div>
+          <span className="text-stone-400 font-dm text-xs">
+            RestoHub ·{" "}
+            <span className="text-amber-500">Management Platform</span>
+          </span>
         </div>
-
-        {/* Links */}
-        <div className="flex flex-col gap-2">
-          <span className="text-gray-800 font-medium">Producto</span>
-          <a className="hover:text-blue-600 transition">Funciones</a>
-          <a className="hover:text-blue-600 transition">Precios</a>
-          <a className="hover:text-blue-600 transition">Integraciones</a>
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] font-dm text-stone-400">
+            v1.0.0 · Microservicios activos
+          </span>
         </div>
-
-        {/* Support */}
-        <div className="flex flex-col gap-2">
-          <span className="text-gray-800 font-medium">Soporte</span>
-          <a className="hover:text-blue-600 transition">Ayuda</a>
-          <a className="hover:text-blue-600 transition">Contacto</a>
-          <a className="hover:text-blue-600 transition">Términos</a>
-        </div>
-      </div>
-
-      {/* Bottom */}
-      <div className="border-t py-4 text-center text-xs text-gray-400">
-        © {new Date().getFullYear()} RestoHub. Todos los derechos reservados.
+        <p className="text-[10px] font-dm text-stone-300">
+          © {new Date().getFullYear()} Universidad Cooperativa de Colombia
+        </p>
       </div>
     </footer>
   );

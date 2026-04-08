@@ -1,197 +1,294 @@
+// restohub/src/features/menu/components/CreateRestaurante.jsx
 import { useState } from "react";
 import { useMutation } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
-import { Building2, MapPin, Home, Coins, Globe } from "lucide-react";
-import { CREATE_RESTAURANTE } from "../graphql/createRestaurante";
+import {
+  Building2,
+  MapPin,
+  Home,
+  Coins,
+  Globe,
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
+import { CREATE_RESTAURANTE } from "../graphql/mutations";
 
+const MONEDAS = [
+  { value: "COP", label: "COP — Peso colombiano" },
+  { value: "USD", label: "USD — Dólar estadounidense" },
+  { value: "EUR", label: "EUR — Euro" },
+  { value: "MXN", label: "MXN — Peso mexicano" },
+  { value: "ARS", label: "ARS — Peso argentino" },
+  { value: "BRL", label: "BRL — Real brasileño" },
+  { value: "CLP", label: "CLP — Peso chileno" },
+];
+
+// ── Field component ────────────────────────────────────────────────────────
+function Field({ label, icon: Icon, children, hint }) {
+  return (
+    <div className="space-y-2">
+      <label className="flex items-center gap-1.5 text-xs font-dm font-semibold tracking-wide uppercase text-[#666]">
+        <Icon size={11} className="text-[#C9A84C]" />
+        {label}
+      </label>
+      {children}
+      {hint && <p className="text-[11px] font-dm text-[#444] pl-1">{hint}</p>}
+    </div>
+  );
+}
+
+// ── Input ──────────────────────────────────────────────────────────────────
+function Input({ value, onChange, placeholder, required, name }) {
+  return (
+    <input
+      name={name}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      className="w-full px-3.5 py-2.5 rounded-xl bg-[#0D0D0F] border border-[#1E1E20]
+                 text-sm font-dm text-white placeholder:text-[#333]
+                 outline-none
+                 focus:border-[#C9A84C]/40 focus:bg-[#141416]
+                 hover:border-[#2A2A2C]
+                 transition-all duration-150"
+    />
+  );
+}
+
+// ── Select ─────────────────────────────────────────────────────────────────
+function Select({ value, onChange, name, children }) {
+  return (
+    <select
+      name={name}
+      value={value}
+      onChange={onChange}
+      className="w-full px-3.5 py-2.5 rounded-xl bg-[#0D0D0F] border border-[#1E1E20]
+                 text-sm font-dm text-white
+                 outline-none appearance-none
+                 focus:border-[#C9A84C]/40 focus:bg-[#141416]
+                 hover:border-[#2A2A2C]
+                 transition-all duration-150
+                 cursor-pointer"
+    >
+      {children}
+    </select>
+  );
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────
 export default function CreateRestaurante() {
   const navigate = useNavigate();
-
   const [form, setForm] = useState({
     nombre: "",
     pais: "",
-    direccion: "",
     ciudad: "",
-    moneda: "",
+    direccion: "",
+    moneda: "COP",
   });
 
   const [createRestaurante, { loading }] = useMutation(CREATE_RESTAURANTE, {
     refetchQueries: ["GetRestaurantes"],
   });
 
-  const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
-      const { data } = await createRestaurante({
-        variables: form,
-      });
+      const { data } = await createRestaurante({ variables: form });
 
       if (data.crearRestaurante.ok) {
         await Swal.fire({
+          background: "#0D0D0F",
+          color: "#F0EDE8",
           icon: "success",
+          iconColor: "#C9A84C",
           title: "Restaurante creado",
-          html: `
-            <b>${form.nombre}</b><br/>
-            ${form.ciudad}, ${form.pais}
-          `,
-          confirmButtonColor: "#2563eb",
+          html: `<span style="font-family:'DM Sans',sans-serif;color:#888">${form.nombre} — ${form.ciudad}, ${form.pais}</span>`,
+          confirmButtonColor: "#C9A84C",
+          confirmButtonText: "Ver restaurantes",
         });
-
         navigate("/restaurantes");
       } else {
         Swal.fire({
+          background: "#0D0D0F",
+          color: "#F0EDE8",
           icon: "error",
+          iconColor: "#ef4444",
           title: "Error",
           text: data.crearRestaurante.error,
+          confirmButtonColor: "#C9A84C",
         });
       }
     } catch (err) {
       Swal.fire({
+        background: "#0D0D0F",
+        color: "#F0EDE8",
         icon: "error",
         title: "Error inesperado",
         text: err.message,
+        confirmButtonColor: "#C9A84C",
       });
     }
   };
 
+  const isComplete = Object.values(form).every((v) => v.trim() !== "");
+
   return (
-    <section className="min-h-[80vh] flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 px-6 py-10">
-      <div className="w-full max-w-2xl">
-        {/* Card */}
-        <div className="rounded-3xl border border-gray-200 bg-white shadow-xl shadow-gray-200/50 p-8">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">
-              Crear restaurante
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Completa la información para registrar un nuevo restaurante
-            </p>
+    <div className="font-dm max-w-2xl mx-auto">
+      {/* ── Breadcrumb ── */}
+      <button
+        onClick={() => navigate("/restaurantes")}
+        className="flex items-center gap-2 text-[#555] hover:text-[#888] transition-colors text-sm mb-6 group"
+      >
+        <ArrowLeft
+          size={14}
+          className="group-hover:-translate-x-0.5 transition-transform"
+        />
+        Volver a restaurantes
+      </button>
+
+      {/* ── Header ── */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-6 h-px bg-[#C9A84C]" />
+          <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-[#C9A84C]">
+            Nuevo registro
+          </span>
+        </div>
+        <h1 className="font-playfair text-3xl font-bold text-white">
+          Crear restaurante
+        </h1>
+        <p className="text-[#555] text-sm mt-1.5">
+          Completa la información para registrar una nueva sede en la cadena.
+        </p>
+      </div>
+
+      {/* ── Card ── */}
+      <div className="rounded-2xl border border-[#1E1E20] bg-[#0D0D0F] overflow-hidden">
+        {/* Top accent */}
+        <div className="h-px bg-gradient-to-r from-[#C9A84C] via-[#C9A84C]/30 to-transparent" />
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Nombre */}
+          <Field label="Nombre del restaurante" icon={Building2}>
+            <Input
+              name="nombre"
+              value={form.nombre}
+              onChange={handleChange}
+              placeholder="Ej: RestoHub Central Bogotá"
+              required
+            />
+          </Field>
+
+          {/* País + Ciudad */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="País" icon={Globe}>
+              <Input
+                name="pais"
+                value={form.pais}
+                onChange={handleChange}
+                placeholder="Ej: Colombia"
+                required
+              />
+            </Field>
+            <Field label="Ciudad" icon={MapPin}>
+              <Input
+                name="ciudad"
+                value={form.ciudad}
+                onChange={handleChange}
+                placeholder="Ej: Bogotá"
+                required
+              />
+            </Field>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Nombre */}
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Nombre
-              </label>
-              <div className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500">
-                <Building2 className="h-4 w-4 text-gray-400" />
-                <input
-                  name="nombre"
-                  value={form.nombre}
-                  onChange={handleChange}
-                  placeholder="Ej: Restaurante Central"
-                  className="w-full outline-none text-sm"
-                  required
-                />
-              </div>
+          {/* Dirección */}
+          <Field
+            label="Dirección"
+            icon={Home}
+            hint="Incluye calle, número y referencias útiles."
+          >
+            <Input
+              name="direccion"
+              value={form.direccion}
+              onChange={handleChange}
+              placeholder="Ej: Calle 10 # 20-30, Local 5"
+              required
+            />
+          </Field>
+
+          {/* Moneda */}
+          <Field label="Moneda" icon={Coins}>
+            <Select name="moneda" value={form.moneda} onChange={handleChange}>
+              {MONEDAS.map(({ value, label }) => (
+                <option key={value} value={value} className="bg-[#141416]">
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          {/* Divider */}
+          <div className="h-px bg-[#1E1E20]" />
+
+          {/* Preview pill */}
+          {isComplete && (
+            <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-[#C9A84C]/5 border border-[#C9A84C]/15">
+              <CheckCircle2 size={14} className="text-[#C9A84C] shrink-0" />
+              <p className="text-xs font-dm text-[#C9A84C]/80">
+                <span className="font-semibold text-[#C9A84C]">
+                  {form.nombre}
+                </span>
+                {" — "}
+                {form.ciudad}, {form.pais} · {form.moneda}
+              </p>
             </div>
+          )}
 
-            {/* País y Ciudad */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  País
-                </label>
-                <div className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500">
-                  <Globe className="h-4 w-4 text-gray-400" />
-                  <input
-                    name="pais"
-                    value={form.pais}
-                    onChange={handleChange}
-                    placeholder="Ej: Colombia"
-                    className="w-full outline-none text-sm"
-                    required
-                  />
-                </div>
-              </div>
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => navigate("/restaurantes")}
+              className="px-4 py-2.5 rounded-xl text-sm font-dm font-medium text-[#555]
+                         hover:text-[#888] hover:bg-[#141416]
+                         border border-transparent hover:border-[#1E1E20]
+                         transition-all duration-150"
+            >
+              Cancelar
+            </button>
 
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Ciudad
-                </label>
-                <div className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500">
-                  <MapPin className="h-4 w-4 text-gray-400" />
-                  <input
-                    name="ciudad"
-                    value={form.ciudad}
-                    onChange={handleChange}
-                    placeholder="Ej: Medellín"
-                    className="w-full outline-none text-sm"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Dirección */}
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Dirección
-              </label>
-              <div className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500">
-                <Home className="h-4 w-4 text-gray-400" />
-                <input
-                  name="direccion"
-                  value={form.direccion}
-                  onChange={handleChange}
-                  placeholder="Ej: Calle 10 #20-30"
-                  className="w-full outline-none text-sm"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Moneda */}
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Moneda
-              </label>
-              <div className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500">
-                <Coins className="h-4 w-4 text-gray-400" />
-                <input
-                  name="moneda"
-                  value={form.moneda}
-                  onChange={handleChange}
-                  placeholder="Ej: COP"
-                  className="w-full outline-none text-sm"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4">
-              <button
-                type="button"
-                onClick={() => navigate("/restaurantes")}
-                className="px-5 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition"
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? "Creando..." : "Crear restaurante"}
-              </button>
-            </div>
-          </form>
-        </div>
+            <button
+              type="submit"
+              disabled={loading || !isComplete}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl
+                         bg-[#C9A84C] text-[#0A0A0B]
+                         font-dm font-semibold text-sm
+                         shadow-lg shadow-[#C9A84C]/20
+                         hover:bg-[#E8C96A] hover:shadow-[#C9A84C]/30
+                         disabled:opacity-40 disabled:cursor-not-allowed
+                         transition-all duration-200 active:scale-95"
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={14} strokeWidth={2.5} />
+                  Crear restaurante
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
-    </section>
+    </div>
   );
 }

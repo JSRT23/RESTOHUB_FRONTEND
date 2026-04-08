@@ -1,3 +1,70 @@
+/* src/shared/styles/index.css */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    html {
+        background-color: #F8F7F4;
+        color: #1A1A1A;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    ::-webkit-scrollbar {
+        width: 5px;
+        height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #F0EDE8;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #D4C9B0;
+        border-radius: 99px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #B8A880;
+    }
+
+    .scrollbar-none::-webkit-scrollbar {
+        display: none;
+    }
+
+    .scrollbar-none {
+        scrollbar-width: none;
+    }
+}
+
+@layer utilities {
+    .font-playfair {
+        font-family: 'Playfair Display', Georgia, serif;
+    }
+
+    .font-dm {
+        font-family: 'DM Sans', system-ui, sans-serif;
+    }
+
+    .text-amber-gradient {
+        background: linear-gradient(135deg, #F59E0B 0%, #D97706 60%, #B45309 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    /* Sombra card suave */
+    .shadow-card {
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
+    }
+
+    .shadow-card-hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 16px 40px rgba(0, 0, 0, 0.06);
+    }
+}
