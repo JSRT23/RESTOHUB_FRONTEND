@@ -1,301 +1,523 @@
-// src/features/menu/components/RestauranteList.jsx
+// src/features/restaurantes/components/RestaurantesList.jsx
 import { useState } from "react";
-import { useQuery } from "@apollo/client/react";
+import { useQuery, useMutation } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import {
-  MapPin,
-  Building2,
-  Coins,
-  ArrowRight,
   Plus,
   Search,
-  UtensilsCrossed,
-  CheckCircle2,
-  XCircle,
-  Globe,
-  SlidersHorizontal,
+  MapPin,
+  Coins,
+  Pencil,
+  ToggleLeft,
+  ToggleRight,
+  Loader2,
+  Building2,
+  ArrowRight,
 } from "lucide-react";
-import { GET_RESTAURANTES } from "../graphql/queries";
 import {
-  Badge,
-  Button,
-  Card,
   PageHeader,
+  Button,
   EmptyState,
   Skeleton,
-  StatCard,
 } from "../../../shared/components/ui";
+import {
+  GET_RESTAURANTES,
+  ACTIVAR_RESTAURANTE,
+  DESACTIVAR_RESTAURANTE,
+  ACTUALIZAR_RESTAURANTE,
+} from "../graphql/operations";
 
-const MONEDA_LABEL = {
-  COP: "Peso colombiano",
-  USD: "Dólar",
-  EUR: "Euro",
-  MXN: "Peso mexicano",
-  ARS: "Peso argentino",
-  BRL: "Real brasileño",
-  CLP: "Peso chileno",
+const G = {
+  50: "#DAF1DE",
+  100: "#8EB69B",
+  300: "#235347",
+  500: "#163832",
+  900: "#051F20",
 };
 
-// ── Skeleton card ──────────────────────────────────────────────────────────
-function SkeletonCard() {
+const PAIS_FLAG = {
+  Colombia: "🇨🇴",
+  México: "🇲🇽",
+  Perú: "🇵🇪",
+  Argentina: "🇦🇷",
+  Chile: "🇨🇱",
+  Ecuador: "🇪🇨",
+  Bolivia: "🇧🇴",
+  Venezuela: "🇻🇪",
+  España: "🇪🇸",
+  "Estados Unidos": "🇺🇸",
+  Brasil: "🇧🇷",
+};
+
+const MONEDA_NOMBRE = {
+  COP: "Peso colombiano",
+  USD: "Dólar americano",
+  EUR: "Euro",
+  MXN: "Peso mexicano",
+  PEN: "Sol peruano",
+  ARS: "Peso argentino",
+  CLP: "Peso chileno",
+  BOB: "Boliviano",
+  VES: "Bolívar venezolano",
+  BRL: "Real brasileño",
+};
+
+function getInitials(nombre = "") {
+  const words = nombre.split(" ").filter((w) => w.length > 2);
+  return words.length >= 2
+    ? words[0][0].toUpperCase() + words[1][0].toUpperCase()
+    : nombre.slice(0, 2).toUpperCase();
+}
+
+// ── Card ───────────────────────────────────────────────────────────────────
+function RestauranteCard({ r, onToggle, onEdit, toggling }) {
+  const navigate = useNavigate();
+  const flag = PAIS_FLAG[r.pais] || "🌎";
+  const initials = getInitials(r.nombre);
+
   return (
-    <div className="rounded-2xl bg-white border border-stone-200 shadow-card p-5 space-y-4">
-      <div className="flex justify-between">
-        <div className="flex items-center gap-3">
-          <Skeleton className="w-10 h-10 rounded-xl" />
-          <div>
-            <Skeleton className="h-4 w-28 mb-1.5" />
-            <Skeleton className="h-3 w-16" />
+    <div
+      className="bg-white rounded-2xl border border-stone-200 overflow-hidden flex flex-col
+                 hover:-translate-y-1 transition-all duration-300 group"
+      style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.07)" }}
+    >
+      {/* ── COVER — iniciales siempre, imagen si el modelo la tiene ────── */}
+      <div
+        className="relative h-44 shrink-0 overflow-hidden"
+        style={{ background: G[50] }}
+      >
+        {/* Si el restaurante tiene imagen: <img src={r.imagen} className="w-full h-full object-cover" /> */}
+        <div className="w-full h-full flex items-center justify-center">
+          <div
+            className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-sm"
+            style={{
+              background: "white",
+              color: G[500],
+              border: `2px solid ${G[100]}`,
+            }}
+          >
+            {initials}
           </div>
         </div>
-        <Skeleton className="h-6 w-16 rounded-full" />
+
+        {/* Badge estado */}
+        <div className="absolute top-3 right-3">
+          <span
+            style={
+              r.activo
+                ? {
+                    background: G[50],
+                    color: G[500],
+                    border: `1px solid ${G[100]}`,
+                  }
+                : {
+                    background: "#f3f4f6",
+                    color: "#6b7280",
+                    border: "1px solid #e5e7eb",
+                  }
+            }
+            className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide"
+          >
+            {r.activo ? "ACTIVO" : "INACTIVO"}
+          </span>
+        </div>
+
+        {/* Acciones — visibles al hover */}
+        <div className="absolute top-3 left-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200">
+          <button
+            onClick={() => onEdit(r)}
+            className="w-8 h-8 rounded-xl bg-white border border-stone-200 shadow-sm
+                       flex items-center justify-center text-stone-500
+                       hover:text-stone-900 hover:border-stone-300 transition-all"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={() => onToggle(r)}
+            disabled={toggling === r.id}
+            style={
+              r.activo
+                ? {
+                    background: "#fef2f2",
+                    color: "#dc2626",
+                    borderColor: "#fecaca",
+                  }
+                : { background: G[50], color: G[300], borderColor: G[100] }
+            }
+            className="w-8 h-8 rounded-xl border shadow-sm flex items-center justify-center transition-all disabled:opacity-50"
+          >
+            {toggling === r.id ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : r.activo ? (
+              <ToggleRight size={13} />
+            ) : (
+              <ToggleLeft size={13} />
+            )}
+          </button>
+        </div>
       </div>
-      <div className="space-y-2.5">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center gap-2.5">
-            <Skeleton className="w-7 h-7 rounded-lg" />
-            <Skeleton className="h-3 flex-1 max-w-[180px]" />
-          </div>
-        ))}
+
+      {/* ── CONTENT ───────────────────────────────────────────────────── */}
+      <div className="flex flex-col flex-1 p-5">
+        {/* Nombre */}
+        <h3
+          className="text-[22px] font-bold text-stone-900 leading-tight mb-2"
+          style={{ fontFamily: "'Playfair Display', serif" }}
+        >
+          {r.nombre}
+        </h3>
+
+        {/* País */}
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="text-base leading-none">{flag}</span>
+          <span className="text-xs font-dm text-stone-400">{r.pais}</span>
+        </div>
+
+        {/* Dirección */}
+        <div className="flex items-start gap-1.5 mb-3">
+          <MapPin size={12} className="text-stone-300 shrink-0 mt-0.5" />
+          <p className="text-sm font-dm text-stone-500 leading-snug line-clamp-2">
+            {[r.ciudad, r.direccion].filter(Boolean).join(" — ")}
+          </p>
+        </div>
+
+        {/* Moneda */}
+        <div className="flex items-center gap-1.5">
+          <Coins size={12} style={{ color: G[300] }} />
+          <span
+            style={{ color: G[300] }}
+            className="text-sm font-dm font-semibold"
+          >
+            {r.moneda} · {MONEDA_NOMBRE[r.moneda] || r.moneda}
+          </span>
+        </div>
+
+        {/* Ver detalle */}
+        <div className="mt-auto pt-4 flex justify-end border-t border-stone-100">
+          <button
+            onClick={() => navigate(`/restaurantes/${r.id}`)}
+            className="flex items-center gap-1.5 text-sm font-dm font-semibold text-stone-400
+                       hover:text-stone-900 transition-all group/link"
+          >
+            Ver detalle
+            <ArrowRight
+              size={14}
+              className="group-hover/link:translate-x-1 transition-transform"
+            />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── RestauranteCard ────────────────────────────────────────────────────────
-function RestauranteCard({ r, index, onClick }) {
-  const initials = r.nombre
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-  const colors = [
-    "bg-amber-50 text-amber-700 border-amber-200",
-    "bg-emerald-50 text-emerald-700 border-emerald-200",
-    "bg-blue-50 text-blue-700 border-blue-200",
-    "bg-violet-50 text-violet-700 border-violet-200",
-    "bg-rose-50 text-rose-700 border-rose-200",
-    "bg-orange-50 text-orange-700 border-orange-200",
-  ];
-  const color = colors[index % colors.length];
+// ── Modal Editar ───────────────────────────────────────────────────────────
+function EditarModal({ restaurante: r, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    nombre: r.nombre,
+    ciudad: r.ciudad || "",
+    direccion: r.direccion || "",
+  });
+  const [error, setError] = useState("");
+  const [actualizar, { loading }] = useMutation(ACTUALIZAR_RESTAURANTE);
+
+  const fi = (e) => {
+    e.target.style.borderColor = "transparent";
+    e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
+  };
+  const fb = (e) => {
+    e.target.style.borderColor = "#e2e8f0";
+    e.target.style.boxShadow = "none";
+  };
+  const cls =
+    "w-full px-3.5 py-3 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none transition-all shadow-sm";
+
+  const handleSave = async () => {
+    const { data } = await actualizar({ variables: { id: r.id, ...form } });
+    const res = data?.actualizarRestaurante;
+    if (!res?.ok) {
+      setError(res?.error || "Error al guardar.");
+      return;
+    }
+    onSaved();
+  };
 
   return (
-    <article
-      onClick={onClick}
-      className="group rounded-2xl bg-white border border-stone-200 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200 cursor-pointer overflow-hidden"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
     >
-      {/* Accent top bar */}
-      <div className="h-1 bg-gradient-to-r from-amber-400 to-amber-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-
-      <div className="p-5">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-xl border flex items-center justify-center font-playfair font-bold text-sm shrink-0 ${color}`}
-            >
-              {initials}
-            </div>
-            <div>
-              <h2 className="font-playfair text-stone-900 font-semibold text-base leading-tight group-hover:text-amber-700 transition-colors line-clamp-1">
-                {r.nombre}
-              </h2>
-              <p className="text-[10px] font-dm text-stone-400 mt-0.5">
-                ID · {r.id.slice(0, 8)}
-              </p>
-            </div>
-          </div>
-          <Badge variant={r.activo ? "green" : "red"} size="xs">
-            {r.activo ? <CheckCircle2 size={9} /> : <XCircle size={9} />}
-            {r.activo ? "Activo" : "Inactivo"}
-          </Badge>
+      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-md rounded-2xl bg-white border border-stone-200 overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="h-1" style={{ background: G[900] }} />
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
+          <h2
+            className="font-semibold text-stone-900 text-lg"
+            style={{ fontFamily: "'Playfair Display', serif" }}
+          >
+            Editar restaurante
+          </h2>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg hover:bg-stone-100 flex items-center justify-center text-stone-400 text-sm transition"
+          >
+            ✕
+          </button>
         </div>
-
-        {/* Info */}
-        <div className="space-y-2 mb-4">
+        <div className="p-5 space-y-4">
           {[
-            { icon: MapPin, text: `${r.ciudad}, ${r.pais}` },
-            { icon: Building2, text: r.direccion, truncate: true },
-            {
-              icon: Coins,
-              text: `${r.moneda} · ${MONEDA_LABEL[r.moneda] ?? r.moneda}`,
-            },
-          ].map(({ icon: Icon, text, truncate }) => (
-            <div key={text} className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-stone-50 border border-stone-100 flex items-center justify-center shrink-0">
-                <Icon size={12} className="text-stone-400" />
-              </div>
-              <span
-                className={`text-sm font-dm text-stone-500 ${truncate ? "truncate" : ""}`}
-              >
-                {text}
-              </span>
+            { label: "Nombre", key: "nombre", ph: "Nombre del restaurante" },
+            { label: "Ciudad", key: "ciudad", ph: "Ciudad" },
+            { label: "Dirección", key: "direccion", ph: "Dirección completa" },
+          ].map((f) => (
+            <div key={f.key} className="space-y-1.5">
+              <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
+                {f.label}
+              </label>
+              <input
+                value={form[f.key]}
+                onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                placeholder={f.ph}
+                className={cls}
+                onFocus={fi}
+                onBlur={fb}
+              />
             </div>
           ))}
+          {error && (
+            <div className="px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
+              <p className="text-xs font-dm text-red-600">{error}</p>
+            </div>
+          )}
         </div>
-
-        {/* Footer */}
-        <div className="pt-4 border-t border-stone-100 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-stone-300 text-xs font-dm">
-            <Globe size={11} />
-            {r.pais}
-          </div>
-          <div className="flex items-center gap-1.5 text-amber-500 text-xs font-dm font-semibold group-hover:gap-2 transition-all">
-            Ver detalles
-            <ArrowRight
-              size={12}
-              className="group-hover:translate-x-0.5 transition-transform"
-            />
-          </div>
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-stone-100 bg-stone-50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-sm font-dm font-semibold text-stone-500 bg-white border border-stone-200 hover:border-stone-300 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            style={{ background: G[900] }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-dm font-bold text-white hover:opacity-90 disabled:opacity-40 transition-all"
+          >
+            {loading && <Loader2 size={13} className="animate-spin" />} Guardar
+            cambios
+          </button>
         </div>
       </div>
-    </article>
+    </div>
   );
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
 export default function RestaurantesList() {
-  const { data, loading, error } = useQuery(GET_RESTAURANTES);
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [filterActivo, setFilterActivo] = useState("all");
+  const [filtro, setFiltro] = useState("todos");
+  const [editando, setEditando] = useState(null);
+  const [toggling, setToggling] = useState(null);
 
-  const restaurantes = data?.restaurantes ?? [];
-  const activos = restaurantes.filter((r) => r.activo).length;
+  const { data, loading, refetch } = useQuery(GET_RESTAURANTES, {
+    fetchPolicy: "cache-and-network",
+  });
+  const [activar] = useMutation(ACTIVAR_RESTAURANTE);
+  const [desactivar] = useMutation(DESACTIVAR_RESTAURANTE);
 
-  const filtered = restaurantes.filter((r) => {
+  const todos = data?.restaurantes || [];
+  const restaurantes = todos.filter((r) => {
     const q = search.toLowerCase();
-    const matchSearch =
+    const matchQ =
+      !q ||
       r.nombre.toLowerCase().includes(q) ||
-      r.ciudad.toLowerCase().includes(q) ||
-      r.pais.toLowerCase().includes(q);
-    const matchFilter =
-      filterActivo === "all" ||
-      (filterActivo === "activo" && r.activo) ||
-      (filterActivo === "inactivo" && !r.activo);
-    return matchSearch && matchFilter;
+      r.ciudad?.toLowerCase().includes(q) ||
+      r.pais?.toLowerCase().includes(q);
+    const matchF =
+      filtro === "todos" ? true : filtro === "activos" ? r.activo : !r.activo;
+    return matchQ && matchF;
   });
 
-  if (error)
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center">
-          <XCircle size={20} className="text-red-400" />
-        </div>
-        <p className="font-dm text-stone-500 text-sm">{error.message}</p>
-        <Button variant="secondary" onClick={() => window.location.reload()}>
-          Reintentar
-        </Button>
-      </div>
-    );
+  const handleToggle = async (r) => {
+    setToggling(r.id);
+    if (r.activo) {
+      await desactivar({ variables: { id: r.id } });
+    } else {
+      await activar({ variables: { id: r.id } });
+    }
+    await refetch();
+    setToggling(null);
+  };
+
+  const activos = todos.filter((r) => r.activo).length;
+  const inactivos = todos.filter((r) => !r.activo).length;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <PageHeader
-        eyebrow="Menu Service"
+        eyebrow="Admin Central"
         title="Restaurantes"
-        description="Gestiona todas las sedes de la cadena desde un solo lugar."
+        description="Gestiona la red de restaurantes de la cadena"
         action={
-          <>
-            <StatCard
-              label="Total"
-              value={restaurantes.length}
-              icon={UtensilsCrossed}
-            />
-            <StatCard
-              label="Activos"
-              value={activos}
-              icon={CheckCircle2}
-              accent
-            />
-            <Button onClick={() => navigate("/restaurantes/new")}>
-              <Plus size={15} strokeWidth={2.5} />
-              Nuevo restaurante
-            </Button>
-          </>
+          <Button
+            onClick={() => navigate("/restaurantes/nuevo")}
+            variant="primary"
+            size="md"
+          >
+            <Plus size={15} /> Nuevo restaurante
+          </Button>
         }
       />
 
-      {/* Filters */}
+      {/* Stats */}
+      {!loading && todos.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {[
+            { n: todos.length, l: "en total", style: {} },
+            {
+              n: activos,
+              l: "activos",
+              style: { background: `${G[50]}99`, borderColor: G[100] },
+            },
+            ...(inactivos > 0
+              ? [{ n: inactivos, l: "inactivos", style: {} }]
+              : []),
+          ].map((s, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-4 py-2.5 shadow-sm"
+              style={s.style}
+            >
+              <span
+                className="text-2xl font-bold"
+                style={{
+                  fontFamily: "'Playfair Display', serif",
+                  color: s.style.borderColor ? G[500] : "#1c1917",
+                }}
+              >
+                {s.n}
+              </span>
+              <span
+                className="text-xs font-dm"
+                style={{ color: s.style.borderColor ? G[300] : "#9ca3af" }}
+              >
+                {s.l}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex items-center gap-2.5 flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 shadow-sm focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-100 transition-all">
-          <Search size={14} className="text-stone-300 shrink-0" />
+        <div className="relative max-w-sm flex-1">
+          <Search
+            size={14}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-300"
+          />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nombre, ciudad o país..."
-            className="flex-1 bg-transparent text-sm text-stone-800 placeholder:text-stone-300 outline-none font-dm"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-700 placeholder:text-stone-300 outline-none shadow-sm transition-all"
+            onFocus={(e) => {
+              e.target.style.borderColor = "transparent";
+              e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = "#e2e8f0";
+              e.target.style.boxShadow = "none";
+            }}
           />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="text-stone-300 hover:text-stone-500 transition text-xs"
-            >
-              ✕
-            </button>
-          )}
         </div>
-
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-white border border-stone-200 shadow-sm">
-          {[
-            { v: "all", l: "Todos" },
-            { v: "activo", l: "Activos" },
-            { v: "inactivo", l: "Inactivos" },
-          ].map(({ v, l }) => (
+        <div className="flex items-center gap-1 bg-white border border-stone-200 rounded-xl p-1 shadow-sm">
+          {["todos", "activos", "inactivos"].map((f) => (
             <button
-              key={v}
-              onClick={() => setFilterActivo(v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-dm font-medium transition-all ${
-                filterActivo === v
-                  ? "bg-amber-500 text-white shadow-sm"
-                  : "text-stone-400 hover:text-stone-700"
-              }`}
+              key={f}
+              onClick={() => setFiltro(f)}
+              style={filtro === f ? { background: G[900], color: "white" } : {}}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-dm font-semibold capitalize transition-all ${filtro === f ? "" : "text-stone-500 hover:bg-stone-50"}`}
             >
-              {l}
+              {f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
         </div>
       </div>
 
-      {search && (
-        <p className="text-xs font-dm text-stone-400">
-          {filtered.length} resultado{filtered.length !== 1 ? "s" : ""} para{" "}
-          <span className="text-amber-600 font-semibold">"{search}"</span>
-        </p>
-      )}
-
       {/* Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <SkeletonCard key={i} />
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {[...Array(8)].map((_, i) => (
+            <div
+              key={i}
+              className="rounded-2xl bg-white border border-stone-200 overflow-hidden shadow-sm"
+            >
+              <Skeleton className="h-44 rounded-none" />
+              <div className="p-5 space-y-3">
+                <Skeleton className="h-7 w-3/4" />
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            </div>
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : restaurantes.length === 0 ? (
         <EmptyState
-          icon={UtensilsCrossed}
-          title="No hay restaurantes"
-          description="Crea el primer restaurante de la cadena."
+          icon={Building2}
+          title={search ? "Sin resultados" : "Sin restaurantes"}
+          description={
+            search
+              ? `No hay coincidencias con "${search}"`
+              : "Crea el primer restaurante de la cadena"
+          }
           action={
-            <Button onClick={() => navigate("/restaurantes/new")}>
-              <Plus size={14} />
-              Nuevo restaurante
-            </Button>
+            !search && (
+              <Button
+                onClick={() => navigate("/restaurantes/nuevo")}
+                variant="primary"
+                size="sm"
+              >
+                <Plus size={13} /> Crear restaurante
+              </Button>
+            )
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((r, i) => (
-            <RestauranteCard
-              key={r.id}
-              r={r}
-              index={i}
-              onClick={() => navigate(`/restaurantes/${r.id}`)}
-            />
-          ))}
-        </div>
+        <>
+          <p className="text-xs font-dm text-stone-400">
+            {restaurantes.length} restaurante
+            {restaurantes.length !== 1 ? "s" : ""}
+            {filtro !== "todos" ? ` ${filtro}` : ""}
+            {search ? ` · "${search}"` : ""}
+          </p>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {restaurantes.map((r) => (
+              <RestauranteCard
+                key={r.id}
+                r={r}
+                toggling={toggling}
+                onToggle={handleToggle}
+                onEdit={setEditando}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {editando && (
+        <EditarModal
+          restaurante={editando}
+          onClose={() => setEditando(null)}
+          onSaved={() => {
+            setEditando(null);
+            refetch();
+          }}
+        />
       )}
     </div>
   );

@@ -4,12 +4,23 @@ export default function Footer() {
     <footer className="border-t border-stone-100 bg-white mt-auto">
       <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-lg bg-amber-500 flex items-center justify-center">
-            <span className="text-white font-black text-[9px]">R</span>
+          <div
+            className="w-5 h-5 rounded-lg flex items-center justify-center"
+            style={{ background: "#051F20" }}
+          >
+            <span
+              style={{
+                color: "#DAF1DE",
+                fontFamily: "'Playfair Display', serif",
+              }}
+              className="font-black text-[9px]"
+            >
+              R
+            </span>
           </div>
           <span className="text-stone-400 font-dm text-xs">
             RestoHub ·{" "}
-            <span className="text-amber-500">Management Platform</span>
+            <span style={{ color: "#235347" }}>Management Platform</span>
           </span>
         </div>
         <div className="flex items-center gap-1.5">

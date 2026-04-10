@@ -5,7 +5,10 @@ import Footer from "./Footer";
 
 export default function MainLayout() {
   return (
-    <div className="flex flex-col min-h-screen bg-stone-50 font-dm">
+    <div
+      className="flex flex-col min-h-screen font-dm"
+      style={{ background: "#e8e8e6" }}
+    >
       <Navbar />
       <main className="flex-1 pt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">

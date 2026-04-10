@@ -1,77 +1,130 @@
-// src/routes/index.jsx
-import { createBrowserRouter } from "react-router-dom";
+// src/app/routes/index.jsx
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import { PrivateRoute, RoleRoute } from "./guards";
 import MainLayout from "../../shared/components/layout/MainLayout";
+import LoginPage from "../../features/auth/components/LoginPage";
 
-// ── Menu ───────────────────────────────────────────────────────────────────
-import RestaurantesList from "../../features/menu/components/RestauranteList";
-import CreateRestaurante from "../../features/menu/components/CreateRestaurante";
-import RestauranteDetail from "../../features/menu/components/RestauranteDetail";
-import MenuPublico from "../../features/menu/components/MenuPublico";
-import PlatosList from "../../features/menu/components/PlatosList";
-import CreatePlato from "../../features/menu/components/CreatePlato";
-import PlatoDetail from "../../features/menu/components/PlatoDetail";
+// categorias
 import CategoriasList from "../../features/menu/components/CategoriasList";
-import IngredientesList from "../../features/menu/components/IngredientesList";
+// Restaurantes
+import RestaurantesList from "../../features/menu/components/RestauranteList";
+import CreateRestauranteWizard from "../../features/menu/components/CreateRestauranteWizard";
+import RestauranteDetail from "../../features/menu/components/RestauranteDetail";
 
-// ── Inventory ──────────────────────────────────────────────────────────────
-import InventarioDashboard from "../../features/inventory/components/InventarioDashboard";
-import StockList from "../../features/inventory/components/StockList";
-import OrdenesCompra, {
-  CreateOrdenWizard,
-} from "../../features/inventory/components/OrdenesCompra";
-import ProveedoresList from "../../features/inventory/components/ProveedoresList";
-import AlmacenesList from "../../features/inventory/components/AlmacenesList";
-import LotesList from "../../features/inventory/components/LotesList";
-import AlertasList from "../../features/inventory/components/AlertasList";
-
-// ── 404 ────────────────────────────────────────────────────────────────────
-function NotFound() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-      <p className="font-playfair text-stone-900 text-5xl font-bold">404</p>
-      <p className="font-dm text-stone-400">Página no encontrada.</p>
-      <a href="/" className="text-amber-600 text-sm font-dm hover:underline">
-        Volver al inicio
-      </a>
+// Placeholder para secciones futuras
+const WIP = ({ title }) => (
+  <div className="flex flex-col items-center justify-center py-24 gap-3">
+    <div className="w-12 h-12 rounded-2xl bg-white border border-stone-200 flex items-center justify-center text-stone-300 text-xl">
+      🚧
     </div>
-  );
-}
-
+    <p className="text-stone-500 font-dm text-sm">{title} — próximamente</p>
+  </div>
+);
 const router = createBrowserRouter([
+  { path: "/login", element: <LoginPage /> },
   {
     path: "/",
-    element: <MainLayout />,
+    element: (
+      <PrivateRoute>
+        <MainLayout />
+      </PrivateRoute>
+    ),
     children: [
-      // ── Index ──────────────────────────────────────────────────────────
-      { index: true, element: <RestaurantesList /> },
+      { index: true, element: <Navigate to="/restaurantes" replace /> },
 
-      // ── MENU SERVICE ───────────────────────────────────────────────────
-      { path: "restaurantes", element: <RestaurantesList /> },
-      { path: "restaurantes/new", element: <CreateRestaurante /> },
-      { path: "restaurantes/:id", element: <RestauranteDetail /> },
-      { path: "restaurantes/:id/menu", element: <MenuPublico /> },
+      // ── Restaurantes (admin_central) ──────────────────────────────────────
+      {
+        path: "restaurantes",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <RestaurantesList />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "restaurantes/nuevo",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <CreateRestauranteWizard />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "restaurantes/:id",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <RestauranteDetail />
+          </RoleRoute>
+        ),
+      },
 
-      { path: "menu/platos", element: <PlatosList /> },
-      { path: "menu/platos/new", element: <CreatePlato /> },
-      { path: "menu/platos/:id", element: <PlatoDetail /> },
+      // ── Menú ──────────────────────────────────────────────────────────────
+      { path: "menu/platos", element: <WIP title="Gestión de platos" /> },
+      {
+        path: "menu/categorias",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <CategoriasList />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "menu/ingredientes",
+        element: <WIP title="Gestión de ingredientes" />,
+      },
 
-      { path: "menu/categorias", element: <CategoriasList /> },
-      { path: "menu/ingredientes", element: <IngredientesList /> },
+      // ── Inventario ────────────────────────────────────────────────────────
+      { path: "inventario", element: <WIP title="Dashboard inventario" /> },
+      { path: "inventario/stock", element: <WIP title="Stock" /> },
+      { path: "inventario/almacenes", element: <WIP title="Almacenes" /> },
+      { path: "inventario/proveedores", element: <WIP title="Proveedores" /> },
+      { path: "inventario/lotes", element: <WIP title="Lotes" /> },
+      {
+        path: "inventario/ordenes",
+        element: (
+          <RoleRoute roles={["admin_central", "gerente_local"]}>
+            <WIP title="Órdenes de compra" />
+          </RoleRoute>
+        ),
+      },
+      { path: "inventario/alertas", element: <WIP title="Alertas de stock" /> },
 
-      // ── INVENTORY SERVICE ──────────────────────────────────────────────
-      { path: "inventario", element: <InventarioDashboard /> },
-      { path: "inventario/stock", element: <StockList /> },
-      { path: "inventario/ordenes", element: <OrdenesCompra /> },
-      { path: "inventario/ordenes/new", element: <CreateOrdenWizard /> },
-      { path: "inventario/alertas", element: <AlertasList /> },
-      { path: "inventario/proveedores", element: <ProveedoresList /> },
-      { path: "inventario/almacenes", element: <AlmacenesList /> },
-      { path: "inventario/lotes", element: <LotesList /> },
+      // ── Admin ─────────────────────────────────────────────────────────────
+      {
+        path: "admin/usuarios",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <WIP title="Usuarios" />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "admin/staff",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <WIP title="Staff" />
+          </RoleRoute>
+        ),
+      },
 
-      // ── 404 ────────────────────────────────────────────────────────────
-      { path: "*", element: <NotFound /> },
+      // Auxiliares
+      {
+        path: "sin-permiso",
+        element: (
+          <div className="flex flex-col items-center justify-center py-24 gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-red-400 text-xl">
+              🔒
+            </div>
+            <p className="text-stone-600 font-dm text-sm font-semibold">
+              Sin permiso para esta sección
+            </p>
+          </div>
+        ),
+      },
+      { path: "*", element: <Navigate to="/restaurantes" replace /> },
     ],
   },
+  { path: "*", element: <Navigate to="/login" replace /> },
 ]);
 
 export default router;

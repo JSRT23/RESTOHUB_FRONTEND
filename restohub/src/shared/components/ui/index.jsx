@@ -1,33 +1,34 @@
 // src/shared/components/ui/index.jsx
 import { Loader2, ChevronRight } from "lucide-react";
 
-// ── Tokens de color (light mode) ───────────────────────────────────────────
-// amber-500  = #F59E0B  (acento principal)
-// amber-600  = #D97706  (hover)
-// stone-100  = #F5F5F4  (bg superficie)
-// stone-200  = #E7E5E4  (bordes)
-// stone-400  = #A8A29E  (texto muted)
-// stone-700  = #44403C  (texto secundario)
-// stone-900  = #1C1917  (texto primario)
+// Acentos verdes sobre blanco
+const G = {
+  50: "#DAF1DE",
+  100: "#8EB69B",
+  300: "#235347",
+  500: "#163832",
+  700: "#0B2B26",
+  900: "#051F20",
+};
 
 // ── Badge ──────────────────────────────────────────────────────────────────
 export function Badge({ children, variant = "default", size = "sm" }) {
   const variants = {
-    default: "bg-stone-100 text-stone-500 border-stone-200",
-    amber: "bg-amber-50  text-amber-700  border-amber-200",
-    green: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    red: "bg-red-50    text-red-600    border-red-200",
-    blue: "bg-blue-50   text-blue-700   border-blue-200",
-    muted: "bg-stone-50  text-stone-400  border-stone-200",
+    default: "bg-stone-100 text-stone-500 border border-stone-200",
+    amber: "bg-amber-50 text-amber-700 border border-amber-200",
+    green: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    red: "bg-red-50 text-red-600 border border-red-200",
+    blue: "bg-blue-50 text-blue-700 border border-blue-200",
+    muted: "bg-stone-50 text-stone-400 border border-stone-200",
   };
   const sizes = {
     xs: "px-1.5 py-0.5 text-[9px] gap-1",
-    sm: "px-2.5 py-1   text-[10px] gap-1.5",
-    md: "px-3   py-1.5 text-xs gap-2",
+    sm: "px-2.5 py-1 text-[10px] gap-1.5",
+    md: "px-3 py-1.5 text-xs gap-2",
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full font-dm font-semibold border ${variants[variant]} ${sizes[size]}`}
+      className={`inline-flex items-center rounded-full font-dm font-semibold ${variants[variant] || variants.default} ${sizes[size]}`}
     >
       {children}
     </span>
@@ -44,27 +45,38 @@ export function Button({
   className = "",
   ...props
 }) {
+  const base =
+    "inline-flex items-center justify-center rounded-xl font-dm font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed";
+
   const variants = {
-    primary:
-      "bg-amber-500 text-white hover:bg-amber-600 shadow-sm shadow-amber-200 hover:shadow-amber-300",
-    secondary:
-      "bg-white text-stone-700 border border-stone-200 hover:bg-stone-50 hover:border-stone-300",
-    ghost: "text-stone-500 hover:text-stone-800 hover:bg-stone-100",
-    danger: "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100",
-    outline:
-      "bg-transparent border border-stone-200 text-stone-700 hover:border-amber-300 hover:text-amber-700",
-    dark: "bg-stone-900 text-white hover:bg-stone-800",
+    primary: `text-white hover:opacity-90`,
+    secondary: `bg-white text-stone-600 border border-stone-200 hover:border-[${G[300]}] hover:text-[${G[300]}]`,
+    ghost: `text-stone-500 hover:text-stone-800 hover:bg-stone-50`,
+    danger: `bg-red-50 text-red-600 border border-red-200 hover:bg-red-100`,
+    outline: `bg-transparent border text-stone-600 hover:text-[${G[300]}]`,
+    dark: `bg-stone-900 text-white hover:bg-stone-800`,
   };
+
   const sizes = {
     xs: "px-2.5 py-1.5 text-[11px] gap-1",
-    sm: "px-3   py-2   text-xs gap-1.5",
-    md: "px-4   py-2.5 text-sm gap-2",
-    lg: "px-5   py-3   text-sm gap-2.5",
+    sm: "px-3 py-2 text-xs gap-1.5",
+    md: "px-4 py-2.5 text-sm gap-2",
+    lg: "px-5 py-3 text-sm gap-2.5",
   };
+
+  // Estilos inline para el verde (evitar purge de Tailwind con valores dinámicos)
+  const inlineStyle =
+    variant === "primary"
+      ? { background: G[900] }
+      : variant === "secondary" || variant === "outline"
+        ? {}
+        : {};
+
   return (
     <button
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center rounded-xl font-dm font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]} ${className}`}
+      style={inlineStyle}
+      className={`${base} ${variants[variant] || variants.primary} ${sizes[size]} ${className}`}
       {...props}
     >
       {loading && <Loader2 size={13} className="animate-spin" />}
@@ -85,13 +97,21 @@ export function Input({
   return (
     <div className="space-y-1.5">
       {label && (
-        <label className="flex items-center gap-1.5 text-xs font-dm font-semibold text-stone-600">
-          {Icon && <Icon size={11} className="text-amber-500" />}
+        <label className="flex items-center gap-1.5 text-xs font-dm font-semibold text-stone-500">
+          {Icon && <Icon size={11} style={{ color: G[300] }} />}
           {label}
         </label>
       )}
       <input
-        className={`w-full px-3.5 py-2.5 rounded-xl bg-white border ${error ? "border-red-300 ring-1 ring-red-200" : "border-stone-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100"} text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none transition-all duration-150 shadow-sm ${className}`}
+        className={`w-full px-3.5 py-2.5 rounded-xl bg-white border ${error ? "border-red-300" : "border-stone-200"} text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none transition-all shadow-sm ${className}`}
+        onFocus={(e) => {
+          e.target.style.borderColor = "transparent";
+          e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
+        }}
+        onBlur={(e) => {
+          e.target.style.borderColor = error ? "#fca5a5" : "#e2e8f0";
+          e.target.style.boxShadow = "none";
+        }}
         {...props}
       />
       {hint && !error && (
@@ -116,16 +136,24 @@ export function Textarea({
   return (
     <div className="space-y-1.5">
       {label && (
-        <label className="flex items-center gap-1.5 text-xs font-dm font-semibold text-stone-600">
-          {Icon && <Icon size={11} className="text-amber-500" />}
+        <label className="flex items-center gap-1.5 text-xs font-dm font-semibold text-stone-500">
+          {Icon && <Icon size={11} style={{ color: G[300] }} />}
           {label}
         </label>
       )}
       <textarea
-        className={`w-full px-3.5 py-2.5 rounded-xl bg-white border ${error ? "border-red-300" : "border-stone-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100"} text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none transition-all resize-none shadow-sm ${className}`}
+        className={`w-full px-3.5 py-2.5 rounded-xl bg-white border ${error ? "border-red-300" : "border-stone-200"} text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none transition-all resize-none shadow-sm ${className}`}
+        onFocus={(e) => {
+          e.target.style.borderColor = "transparent";
+          e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
+        }}
+        onBlur={(e) => {
+          e.target.style.borderColor = "#e2e8f0";
+          e.target.style.boxShadow = "none";
+        }}
         {...props}
       />
-      {hint && !error && (
+      {hint && (
         <p className="text-[11px] font-dm text-stone-400 pl-1">{hint}</p>
       )}
       {error && (
@@ -147,13 +175,21 @@ export function Select({
   return (
     <div className="space-y-1.5">
       {label && (
-        <label className="flex items-center gap-1.5 text-xs font-dm font-semibold text-stone-600">
-          {Icon && <Icon size={11} className="text-amber-500" />}
+        <label className="flex items-center gap-1.5 text-xs font-dm font-semibold text-stone-500">
+          {Icon && <Icon size={11} style={{ color: G[300] }} />}
           {label}
         </label>
       )}
       <select
-        className={`w-full px-3.5 py-2.5 rounded-xl bg-white border ${error ? "border-red-300" : "border-stone-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100"} text-sm font-dm text-stone-900 outline-none appearance-none transition-all cursor-pointer shadow-sm ${className}`}
+        className={`w-full px-3.5 py-2.5 rounded-xl bg-white border ${error ? "border-red-300" : "border-stone-200"} text-sm font-dm text-stone-900 outline-none appearance-none cursor-pointer transition-all shadow-sm ${className}`}
+        onFocus={(e) => {
+          e.target.style.borderColor = "transparent";
+          e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
+        }}
+        onBlur={(e) => {
+          e.target.style.borderColor = "#e2e8f0";
+          e.target.style.boxShadow = "none";
+        }}
         {...props}
       >
         {children}
@@ -175,7 +211,11 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-2xl bg-white border border-stone-200 shadow-card ${hover ? "hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200 cursor-pointer" : ""} ${accent ? "border-t-2 border-t-amber-400" : ""} ${padding ? "p-5" : ""} ${className}`}
+      style={accent ? { borderTop: `2px solid ${G[300]}` } : {}}
+      className={`rounded-2xl bg-white border border-stone-200 shadow-sm
+        ${hover ? "hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer" : ""}
+        ${padding ? "p-5" : ""}
+        ${className}`}
     >
       {children}
     </div>
@@ -189,13 +229,22 @@ export function PageHeader({ eyebrow, title, description, action }) {
       <div>
         {eyebrow && (
           <div className="flex items-center gap-2 mb-1.5">
-            <div className="w-4 h-0.5 bg-amber-500 rounded-full" />
-            <span className="text-[10px] font-dm font-bold tracking-[0.18em] uppercase text-amber-600">
+            <div
+              style={{ background: G[300] }}
+              className="w-4 h-0.5 rounded-full"
+            />
+            <span
+              style={{ color: G[300] }}
+              className="text-[10px] font-dm font-bold tracking-[0.18em] uppercase"
+            >
               {eyebrow}
             </span>
           </div>
         )}
-        <h1 className="font-playfair text-2xl md:text-3xl font-bold text-stone-900 leading-tight">
+        <h1
+          style={{ fontFamily: "'Playfair Display', serif" }}
+          className="text-2xl md:text-3xl font-bold text-stone-900 leading-tight"
+        >
           {title}
         </h1>
         {description && (
@@ -219,7 +268,7 @@ export function Breadcrumb({ items }) {
           {item.onClick ? (
             <button
               onClick={item.onClick}
-              className="hover:text-stone-700 transition-colors"
+              className="hover:text-stone-700 transition"
             >
               {item.label}
             </button>
@@ -240,7 +289,10 @@ export function EmptyState({ icon: Icon, title, description, action }) {
         <Icon size={22} className="text-stone-300" />
       </div>
       <div className="text-center">
-        <p className="font-playfair text-stone-700 font-semibold text-lg">
+        <p
+          style={{ fontFamily: "'Playfair Display', serif" }}
+          className="text-stone-700 font-semibold text-lg"
+        >
           {title}
         </p>
         {description && (
@@ -260,40 +312,29 @@ export function Skeleton({ className }) {
 }
 
 // ── StatCard ───────────────────────────────────────────────────────────────
-export function StatCard({ label, value, icon: Icon, accent = false, trend }) {
+export function StatCard({ label, value, icon: Icon, accent = false }) {
   return (
     <div
-      className={`rounded-2xl border p-4 flex flex-col gap-3 ${accent ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-stone-200 shadow-card"}`}
+      style={accent ? { borderColor: G[300], background: `${G[50]}55` } : {}}
+      className={`rounded-2xl border p-4 flex flex-col gap-3 bg-white ${!accent ? "border-stone-200 shadow-sm" : ""}`}
     >
-      <div className="flex items-start justify-between">
-        <div
-          className={`w-9 h-9 rounded-xl flex items-center justify-center ${accent ? "bg-white/20" : "bg-amber-50 border border-amber-100"}`}
-        >
-          <Icon
-            size={16}
-            className={accent ? "text-white" : "text-amber-500"}
-          />
-        </div>
-        {trend !== undefined && (
-          <span
-            className={`text-[10px] font-dm font-semibold px-2 py-0.5 rounded-full ${trend >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"}`}
-          >
-            {trend >= 0 ? "+" : ""}
-            {trend}%
-          </span>
-        )}
+      <div
+        style={{ background: accent ? `${G[50]}` : "#f8fafc" }}
+        className="w-9 h-9 rounded-xl flex items-center justify-center border border-stone-100"
+      >
+        <Icon size={16} style={{ color: accent ? G[300] : "#94a3b8" }} />
       </div>
       <div>
         <p
-          className={`font-playfair text-3xl font-bold ${accent ? "text-white" : "text-stone-900"}`}
+          style={{
+            fontFamily: "'Playfair Display', serif",
+            color: accent ? G[500] : "#1c1917",
+          }}
+          className="text-3xl font-bold"
         >
           {value}
         </p>
-        <p
-          className={`text-xs font-dm mt-0.5 ${accent ? "text-white/70" : "text-stone-400"}`}
-        >
-          {label}
-        </p>
+        <p className="text-xs font-dm text-stone-400 mt-0.5">{label}</p>
       </div>
     </div>
   );
@@ -313,15 +354,18 @@ export function Modal({ open, onClose, title, children, size = "md" }) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <div
         className={`relative w-full ${sizes[size]} rounded-2xl bg-white border border-stone-200 shadow-2xl overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="h-1 bg-gradient-to-r from-amber-400 to-amber-600" />
+        <div style={{ background: G[900] }} className="h-1" />
         {title && (
           <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
-            <h2 className="font-playfair text-stone-900 font-semibold text-lg">
+            <h2
+              style={{ fontFamily: "'Playfair Display', serif" }}
+              className="text-stone-900 font-semibold text-lg"
+            >
               {title}
             </h2>
             <button
@@ -359,22 +403,30 @@ export function StepIndicator({ steps, current }) {
       {steps.map((step, i) => (
         <div key={i} className="flex items-center">
           <div
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-dm font-semibold transition-all ${
+            style={
               i === current
-                ? "bg-amber-500 text-white shadow-sm shadow-amber-200"
+                ? { background: G[900], color: "white" }
                 : i < current
-                  ? "bg-emerald-50 text-emerald-600"
-                  : "bg-stone-100 text-stone-400"
-            }`}
+                  ? {
+                      background: "#f0fdf4",
+                      color: "#16a34a",
+                      border: "1px solid #bbf7d0",
+                    }
+                  : {
+                      background: "#f8fafc",
+                      color: "#94a3b8",
+                      border: "1px solid #e2e8f0",
+                    }
+            }
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-dm font-semibold transition-all"
           >
             <span
-              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+              style={
                 i === current
-                  ? "bg-white/20"
-                  : i < current
-                    ? "bg-emerald-100"
-                    : "bg-stone-200"
-              }`}
+                  ? { background: "rgba(255,255,255,0.2)" }
+                  : { background: i < current ? "#dcfce7" : "#f1f5f9" }
+              }
+              className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold"
             >
               {i < current ? "✓" : i + 1}
             </span>
@@ -382,7 +434,7 @@ export function StepIndicator({ steps, current }) {
           </div>
           {i < steps.length - 1 && (
             <div
-              className={`w-8 h-px mx-1 ${i < current ? "bg-emerald-300" : "bg-stone-200"}`}
+              className={`w-8 h-px mx-1 ${i < current ? "bg-emerald-200" : "bg-stone-200"}`}
             />
           )}
         </div>
