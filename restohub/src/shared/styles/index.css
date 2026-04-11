@@ -59,7 +59,6 @@
         background-clip: text;
     }
 
-    /* Sombra card suave */
     .shadow-card {
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
     }
@@ -67,4 +66,113 @@
     .shadow-card-hover {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 16px 40px rgba(0, 0, 0, 0.06);
     }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SWEETALERT2 — Fix completo para Tailwind Preflight
+   El preflight hace: button { background-color: transparent; }
+   Swal pone el color via .style pero el !important de preflight lo gana.
+   Solución: sobreescribir con !important y máxima especificidad posible.
+───────────────────────────────────────────────────────────────────────── */
+
+/* Popup contenedor */
+.swal2-popup {
+    border-radius: 20px !important;
+    padding: 28px !important;
+    font-family: 'DM Sans', sans-serif !important;
+}
+
+/* Tipografía */
+.swal2-title {
+    font-family: 'Playfair Display', Georgia, serif !important;
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    color: #1c1917 !important;
+}
+
+.swal2-html-container {
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 14px !important;
+    color: #78716c !important;
+    margin-top: 8px !important;
+}
+
+.swal2-footer {
+    border-top: 1px solid #f3f4f6 !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 12px !important;
+    color: #9ca3af !important;
+}
+
+/* Contenedor de botones */
+.swal2-actions {
+    margin-top: 20px !important;
+    gap: 10px !important;
+}
+
+/* ── BOTÓN CONFIRM ─────────────────────────────────────────────────────── */
+/* Swal pone el color via element.style.background — Tailwind lo pisa.
+   La única forma de ganar es !important en background-color aquí. */
+.swal2-confirm {
+    background-color: #051F20 !important;
+    /* fallback si confirmButtonColor no carga */
+    color: #ffffff !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 10px 28px !important;
+    border-radius: 12px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    border: none !important;
+    outline: none !important;
+    cursor: pointer !important;
+    box-shadow: none !important;
+    transition: opacity 0.15s ease !important;
+}
+
+.swal2-confirm:hover {
+    opacity: 0.88 !important;
+}
+
+.swal2-confirm:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* ── BOTÓN CANCEL ──────────────────────────────────────────────────────── */
+.swal2-cancel {
+    background-color: #e2e8f0 !important;
+    color: #475569 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 10px 28px !important;
+    border-radius: 12px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    border: none !important;
+    outline: none !important;
+    cursor: pointer !important;
+    box-shadow: none !important;
+    transition: opacity 0.15s ease !important;
+}
+
+.swal2-cancel:hover {
+    opacity: 0.80 !important;
+}
+
+.swal2-cancel:focus {
+    box-shadow: none !important;
+}
+
+/* Timer y icono */
+.swal2-timer-progress-bar {
+    background: #235347 !important;
+}
+
+.swal2-icon {
+    margin-bottom: 16px !important;
 }

@@ -19,13 +19,13 @@ import {
   Button,
   EmptyState,
   Skeleton,
-} from "../../../shared/components/ui";
+} from "../../../../shared/components/ui";
 import {
   GET_RESTAURANTES,
   ACTIVAR_RESTAURANTE,
   DESACTIVAR_RESTAURANTE,
   ACTUALIZAR_RESTAURANTE,
-} from "../graphql/operations";
+} from "../../graphql/operations";
 
 const G = {
   50: "#DAF1DE",

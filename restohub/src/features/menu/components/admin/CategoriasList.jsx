@@ -1,5 +1,6 @@
 // src/features/menu/components/CategoriasList.jsx
 import { useState } from "react";
+import Swal from "sweetalert2";
 import { useQuery, useMutation } from "@apollo/client/react";
 import {
   Tag,
@@ -17,14 +18,13 @@ import {
   Button,
   EmptyState,
   Skeleton,
-} from "../../../shared/components/ui";
+} from "../../../../shared/components/ui";
 import {
   GET_CATEGORIAS,
   CREAR_CATEGORIA,
   ACTUALIZAR_CATEGORIA,
-  ACTIVAR_CATEGORIA,
   DESACTIVAR_CATEGORIA,
-} from "../graphql/categorias.operations";
+} from "../../graphql/categorias.operations";
 
 const G = {
   50: "#DAF1DE",
@@ -33,7 +33,6 @@ const G = {
   500: "#163832",
   900: "#051F20",
 };
-
 const fi = (e) => {
   e.target.style.borderColor = "transparent";
   e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
@@ -50,44 +49,96 @@ function CategoriaModal({ categoria, onClose, onSaved }) {
   const editando = !!categoria;
   const [form, setForm] = useState({
     nombre: categoria?.nombre || "",
-    descripcion: categoria?.descripcion || "",
     orden: categoria?.orden ?? "",
   });
-  const [error, setError] = useState("");
-
   const [crear, { loading: lc }] = useMutation(CREAR_CATEGORIA);
   const [actualizar, { loading: la }] = useMutation(ACTUALIZAR_CATEGORIA);
   const loading = lc || la;
 
   const handleSave = async () => {
-    setError("");
     if (!form.nombre.trim()) {
-      setError("El nombre es obligatorio.");
+      Swal.fire({
+        background: "#fff",
+        icon: "warning",
+        iconColor: "#f59e0b",
+        title: "Campo requerido",
+        text: "El nombre de la categoría es obligatorio.",
+        confirmButtonColor: G[900],
+      });
       return;
     }
-
     const vars = {
       nombre: form.nombre.trim(),
-      descripcion: form.descripcion.trim() || null,
       orden: form.orden !== "" ? parseInt(form.orden) : null,
     };
-
-    if (editando) {
-      const { data } = await actualizar({
-        variables: { id: categoria.id, ...vars },
+    try {
+      if (editando) {
+        const { data } = await actualizar({
+          variables: { id: categoria.id, ...vars },
+        });
+        const res = data?.actualizarCategoria;
+        if (!res?.ok) {
+          Swal.fire({
+            background: "#fff",
+            icon: "error",
+            iconColor: "#dc2626",
+            draggable: true,
+            title: "Error al actualizar",
+            text: res?.error || "No se pudo actualizar la categoría.",
+            confirmButtonColor: G[900],
+          });
+          return;
+        }
+        Swal.fire({
+          background: "#fff",
+          icon: "success",
+          iconColor: G[300],
+          draggable: true,
+          title: "¡Categoría actualizada!",
+          html: `<span style="font-family:'DM Sans',sans-serif;color:#78716c"><b>${vars.nombre}</b> fue actualizada correctamente.</span>`,
+          confirmButtonColor: G[900],
+          timer: 2000,
+          timerProgressBar: true,
+        });
+      } else {
+        const { data } = await crear({ variables: vars });
+        const res = data?.crearCategoria;
+        if (!res?.ok) {
+          Swal.fire({
+            background: "#fff",
+            icon: "error",
+            iconColor: "#dc2626",
+            draggable: true,
+            title: "Error al crear categoría",
+            text: res?.error || "No se pudo crear la categoría.",
+            confirmButtonColor: G[900],
+          });
+          return;
+        }
+        Swal.fire({
+          background: "#fff",
+          icon: "success",
+          iconColor: G[300],
+          draggable: true,
+          title: "¡Categoría creada!",
+          html: `<span style="font-family:'DM Sans',sans-serif;color:#78716c"><b>${vars.nombre}</b> fue creada exitosamente.</span>`,
+          confirmButtonColor: G[900],
+          timer: 2000,
+          timerProgressBar: true,
+        });
+      }
+      onSaved();
+    } catch (e) {
+      Swal.fire({
+        background: "#fff",
+        icon: "error",
+        iconColor: "#dc2626",
+        draggable: true,
+        title: "Error inesperado",
+        text: e.message,
+        confirmButtonColor: G[900],
       });
-      if (!data?.actualizarCategoria?.ok) {
-        setError(data?.actualizarCategoria?.error || "Error al actualizar.");
-        return;
-      }
-    } else {
-      const { data } = await crear({ variables: vars });
-      if (!data?.crearCategoria?.ok) {
-        setError(data?.crearCategoria?.error || "Error al crear.");
-        return;
-      }
     }
-    onSaved();
   };
 
   return (
@@ -97,12 +148,10 @@ function CategoriaModal({ categoria, onClose, onSaved }) {
     >
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-md rounded-2xl bg-white border border-stone-200 overflow-hidden shadow-2xl"
+        className="relative w-full max-w-sm rounded-2xl bg-white border border-stone-200 overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="h-1" style={{ background: G[900] }} />
-
-        {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-stone-100">
           <div
             className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
@@ -123,10 +172,7 @@ function CategoriaModal({ categoria, onClose, onSaved }) {
             ✕
           </button>
         </div>
-
-        {/* Formulario */}
         <div className="p-5 space-y-4">
-          {/* Nombre */}
           <div className="space-y-1.5">
             <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
               Nombre <span className="text-red-400">*</span>
@@ -141,33 +187,10 @@ function CategoriaModal({ categoria, onClose, onSaved }) {
               autoFocus
             />
           </div>
-
-          {/* Descripción */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
-              Descripción{" "}
-              <span className="text-stone-300 font-normal normal-case">
-                (opcional)
-              </span>
-            </label>
-            <textarea
-              value={form.descripcion}
-              onChange={(e) =>
-                setForm({ ...form, descripcion: e.target.value })
-              }
-              placeholder="Describe brevemente esta categoría..."
-              rows={3}
-              className={`${inputCls} resize-none`}
-              onFocus={fi}
-              onBlur={fb}
-            />
-          </div>
-
-          {/* Orden */}
           <div className="space-y-1.5">
             <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider flex items-center gap-1.5">
               <Hash size={11} style={{ color: G[300] }} />
-              Orden de aparición{" "}
+              Orden{" "}
               <span className="text-stone-300 font-normal normal-case">
                 (opcional)
               </span>
@@ -183,19 +206,10 @@ function CategoriaModal({ categoria, onClose, onSaved }) {
               onBlur={fb}
             />
             <p className="text-[11px] font-dm text-stone-400 pl-1">
-              Controla el orden en que aparecen las categorías en el menú
+              Controla el orden de aparición en el menú
             </p>
           </div>
-
-          {/* Error */}
-          {error && (
-            <div className="px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
-              <p className="text-xs font-dm text-red-600">{error}</p>
-            </div>
-          )}
         </div>
-
-        {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-stone-100 bg-stone-50">
           <button
             onClick={onClose}
@@ -218,24 +232,19 @@ function CategoriaModal({ categoria, onClose, onSaved }) {
   );
 }
 
-// ── Fila de categoría ──────────────────────────────────────────────────────
+// ── Fila ───────────────────────────────────────────────────────────────────
 function CategoriaRow({ cat, onEdit, onToggle, toggling }) {
   return (
     <div className="flex items-center gap-4 px-5 py-4 hover:bg-stone-50/60 transition-colors group">
-      {/* Drag handle (visual) */}
       <div className="text-stone-200 group-hover:text-stone-300 transition-colors shrink-0">
         <GripVertical size={14} />
       </div>
-
-      {/* Icono */}
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
         style={{ background: cat.activo ? G[50] : "#f3f4f6" }}
       >
         <Tag size={14} style={{ color: cat.activo ? G[300] : "#9ca3af" }} />
       </div>
-
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-dm font-semibold text-stone-800 truncate">
@@ -247,14 +256,7 @@ function CategoriaRow({ cat, onEdit, onToggle, toggling }) {
             </span>
           )}
         </div>
-        {cat.descripcion && (
-          <p className="text-xs font-dm text-stone-400 truncate mt-0.5">
-            {cat.descripcion}
-          </p>
-        )}
       </div>
-
-      {/* Estado */}
       <span
         style={
           cat.activo
@@ -273,14 +275,11 @@ function CategoriaRow({ cat, onEdit, onToggle, toggling }) {
       >
         {cat.activo ? "ACTIVA" : "INACTIVA"}
       </span>
-
-      {/* Acciones */}
       <div className="flex items-center gap-1.5 shrink-0">
         <button
           onClick={() => onEdit(cat)}
           className="w-8 h-8 rounded-xl flex items-center justify-center text-stone-400
-                     bg-white border border-stone-200 hover:border-stone-300 hover:text-stone-700
-                     transition-all shadow-sm"
+                     bg-white border border-stone-200 hover:border-stone-300 hover:text-stone-700 transition-all shadow-sm"
         >
           <Pencil size={12} />
         </button>
@@ -296,8 +295,7 @@ function CategoriaRow({ cat, onEdit, onToggle, toggling }) {
                 }
               : { background: G[50], color: G[300], borderColor: G[100] }
           }
-          className="w-8 h-8 rounded-xl flex items-center justify-center border
-                     transition-all shadow-sm disabled:opacity-50"
+          className="w-8 h-8 rounded-xl flex items-center justify-center border transition-all shadow-sm disabled:opacity-50"
         >
           {toggling === cat.id ? (
             <Loader2 size={12} className="animate-spin" />
@@ -316,24 +314,19 @@ function CategoriaRow({ cat, onEdit, onToggle, toggling }) {
 export default function CategoriasList() {
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState("todas");
-  const [modal, setModal] = useState(null); // null | "nueva" | categoria
+  const [modal, setModal] = useState(null);
   const [toggling, setToggling] = useState(null);
 
   const { data, loading, refetch } = useQuery(GET_CATEGORIAS, {
     fetchPolicy: "cache-and-network",
   });
-
-  const [activar] = useMutation(ACTIVAR_CATEGORIA);
   const [desactivar] = useMutation(DESACTIVAR_CATEGORIA);
 
   const todas = data?.categorias || [];
   const categorias = todas
     .filter((c) => {
       const q = search.toLowerCase();
-      const matchQ =
-        !q ||
-        c.nombre.toLowerCase().includes(q) ||
-        c.descripcion?.toLowerCase().includes(q);
+      const matchQ = !q || c.nombre.toLowerCase().includes(q);
       const matchF =
         filtro === "todas" ? true : filtro === "activas" ? c.activo : !c.activo;
       return matchQ && matchF;
@@ -344,11 +337,73 @@ export default function CategoriasList() {
     );
 
   const handleToggle = async (cat) => {
-    setToggling(cat.id);
     if (cat.activo) {
-      await desactivar({ variables: { id: cat.id } });
-    } else {
-      await activar({ variables: { id: cat.id } });
+      const confirm = await Swal.fire({
+        background: "#fff",
+        icon: "warning",
+        iconColor: "#f59e0b",
+        draggable: true,
+        title: "¿Desactivar categoría?",
+        html: `<span style="font-family:'DM Sans',sans-serif;color:#78716c">Los platos de <b>${cat.nombre}</b> dejarán de aparecer en el menú.</span>`,
+        showCancelButton: true,
+        confirmButtonColor: "#dc2626",
+        cancelButtonColor: "#e2e8f0",
+        confirmButtonText: "Sí, desactivar",
+        cancelButtonText: "Cancelar",
+      });
+      if (!confirm.isConfirmed) return;
+    }
+
+    setToggling(cat.id);
+    try {
+      if (cat.activo) {
+        const { data } = await desactivar({ variables: { id: cat.id } });
+        if (!data?.desactivarCategoria?.ok) {
+          Swal.fire({
+            background: "#fff",
+            icon: "error",
+            iconColor: "#dc2626",
+            draggable: true,
+            title: "Error al desactivar",
+            text: data?.desactivarCategoria?.error || "No se pudo desactivar.",
+            confirmButtonColor: G[900],
+          });
+        } else {
+          Swal.fire({
+            background: "#fff",
+            icon: "success",
+            iconColor: G[300],
+            draggable: true,
+            title: "Categoría desactivada",
+            html: `<span style="font-family:'DM Sans',sans-serif;color:#78716c"><b>${cat.nombre}</b> fue desactivada.</span>`,
+            confirmButtonColor: G[900],
+            timer: 1800,
+            timerProgressBar: true,
+          });
+        }
+      } else {
+        // Reactivar — no hay mutation de activar en el backend, usamos actualizar sin cambios
+        // o simplemente refetch si el backend lo maneja de otra forma
+        Swal.fire({
+          background: "#fff",
+          icon: "info",
+          iconColor: G[300],
+          draggable: true,
+          title: "Sin mutation de activar",
+          text: "El backend solo tiene desactivarCategoria. Para reactivar, edita la categoría desde el panel de administración del backend.",
+          confirmButtonColor: G[900],
+        });
+      }
+    } catch (e) {
+      Swal.fire({
+        background: "#fff",
+        icon: "error",
+        iconColor: "#dc2626",
+        draggable: true,
+        title: "Error inesperado",
+        text: e.message,
+        confirmButtonColor: G[900],
+      });
     }
     await refetch();
     setToggling(null);
@@ -358,7 +413,6 @@ export default function CategoriasList() {
     setModal(null);
     refetch();
   };
-
   const activas = todas.filter((c) => c.activo).length;
   const inactivas = todas.filter((c) => !c.activo).length;
 
@@ -424,9 +478,8 @@ export default function CategoriasList() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre o descripción..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm
-                       text-stone-700 placeholder:text-stone-300 outline-none shadow-sm transition-all"
+            placeholder="Buscar categoría..."
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-700 placeholder:text-stone-300 outline-none shadow-sm transition-all"
             onFocus={fi}
             onBlur={fb}
           />
@@ -457,7 +510,6 @@ export default function CategoriasList() {
               <Skeleton className="w-9 h-9 rounded-xl" />
               <div className="flex-1 space-y-2">
                 <Skeleton className="h-4 w-1/3" />
-                <Skeleton className="h-3 w-1/2" />
               </div>
               <Skeleton className="h-6 w-20 rounded-full" />
               <Skeleton className="w-8 h-8 rounded-xl" />
@@ -472,7 +524,7 @@ export default function CategoriasList() {
           description={
             search
               ? `No hay categorías que coincidan con "${search}"`
-              : "Crea la primera categoría global para que los gerentes puedan organizar sus platos"
+              : "Crea la primera categoría global"
           }
           action={
             !search && (
@@ -491,7 +543,6 @@ export default function CategoriasList() {
           className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
         >
-          {/* Header tabla */}
           <div className="flex items-center gap-4 px-5 py-3 border-b border-stone-100 bg-stone-50/50">
             <div className="w-4 shrink-0" />
             <div className="w-9 shrink-0" />
@@ -505,8 +556,6 @@ export default function CategoriasList() {
               Acciones
             </p>
           </div>
-
-          {/* Filas */}
           {categorias.map((cat, i) => (
             <div
               key={cat.id}
@@ -518,12 +567,10 @@ export default function CategoriasList() {
                 cat={cat}
                 toggling={toggling}
                 onToggle={handleToggle}
-                onEdit={(cat) => setModal(cat)}
+                onEdit={(c) => setModal(c)}
               />
             </div>
           ))}
-
-          {/* Footer */}
           <div className="px-5 py-3 border-t border-stone-100 bg-stone-50/50">
             <p className="text-xs font-dm text-stone-400">
               {categorias.length} categoría{categorias.length !== 1 ? "s" : ""}
@@ -534,7 +581,6 @@ export default function CategoriasList() {
         </div>
       )}
 
-      {/* Modal */}
       {modal && (
         <CategoriaModal
           categoria={modal === "nueva" ? null : modal}

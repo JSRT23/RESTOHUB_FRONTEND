@@ -15,8 +15,8 @@ import {
   ImageOff,
 } from "lucide-react";
 import Swal from "sweetalert2";
-import { GET_PLATOS, GET_CATEGORIAS } from "../graphql/queries";
-import { ACTIVAR_PLATO, DESACTIVAR_PLATO } from "../graphql/mutations";
+import { GET_PLATOS, GET_CATEGORIAS } from "../../graphql/queries";
+import { ACTIVAR_PLATO, DESACTIVAR_PLATO } from "../../graphql/mutations";
 import {
   Badge,
   Button,
@@ -24,7 +24,7 @@ import {
   EmptyState,
   Skeleton,
   StatCard,
-} from "../../../shared/components/ui";
+} from "../../../../shared/components/ui";
 
 // ── PlatoRow ───────────────────────────────────────────────────────────────
 function PlatoRow({ plato, onToggle, onView, toggling }) {

@@ -35,30 +35,7 @@ const G = {
 const NAV_CONFIG = {
   admin_central: [
     { label: "Restaurantes", href: "/restaurantes", icon: Building2 },
-    {
-      label: "Menú",
-      icon: UtensilsCrossed,
-      children: [
-        {
-          label: "Platos",
-          href: "/menu/platos",
-          icon: UtensilsCrossed,
-          desc: "Catálogo global",
-        },
-        {
-          label: "Categorías",
-          href: "/menu/categorias",
-          icon: Tag,
-          desc: "Organización",
-        },
-        {
-          label: "Ingredientes",
-          href: "/menu/ingredientes",
-          icon: FlaskConical,
-          desc: "Materias primas",
-        },
-      ],
-    },
+    { label: "Categorías", href: "/menu/categorias", icon: Tag },
     {
       label: "Inventario",
       icon: Package,

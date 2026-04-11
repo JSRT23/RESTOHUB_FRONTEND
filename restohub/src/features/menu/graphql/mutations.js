@@ -1,117 +1,10 @@
 // src/features/menu/graphql/mutations.js
+// Solo mutations del GERENTE — ingredientes, platos, precios
+// Las mutations de restaurante están en operations.js
+// Las mutations de categorías están en categorias.operations.js
 import { gql } from "@apollo/client";
 
-// ── RESTAURANTE ───────────────────────────────────────────────────────────
-export const CREATE_RESTAURANTE = gql`
-  mutation CrearRestaurante(
-    $nombre: String!
-    $pais: String!
-    $ciudad: String!
-    $direccion: String!
-    $moneda: String!
-  ) {
-    crearRestaurante(
-      nombre: $nombre
-      pais: $pais
-      ciudad: $ciudad
-      direccion: $direccion
-      moneda: $moneda
-    ) {
-      ok
-      error
-      restaurante {
-        id
-        nombre
-      }
-    }
-  }
-`;
-export const ACTUALIZAR_RESTAURANTE = gql`
-  mutation ActualizarRestaurante(
-    $id: ID!
-    $nombre: String
-    $pais: String
-    $ciudad: String
-    $direccion: String
-    $moneda: String
-  ) {
-    actualizarRestaurante(
-      id: $id
-      nombre: $nombre
-      pais: $pais
-      ciudad: $ciudad
-      direccion: $direccion
-      moneda: $moneda
-    ) {
-      ok
-      error
-      restaurante {
-        id
-        nombre
-        ciudad
-        pais
-        moneda
-        activo
-      }
-    }
-  }
-`;
-export const ACTIVAR_RESTAURANTE = gql`
-  mutation ActivarRestaurante($id: ID!) {
-    activarRestaurante(id: $id) {
-      ok
-      error
-    }
-  }
-`;
-export const DESACTIVAR_RESTAURANTE = gql`
-  mutation DesactivarRestaurante($id: ID!) {
-    desactivarRestaurante(id: $id) {
-      ok
-      error
-    }
-  }
-`;
-
-// ── CATEGORÍA ─────────────────────────────────────────────────────────────
-export const CREATE_CATEGORIA = gql`
-  mutation CrearCategoria($nombre: String!, $orden: Int) {
-    crearCategoria(nombre: $nombre, orden: $orden) {
-      ok
-      error
-      categoria {
-        id
-        nombre
-        orden
-        activo
-      }
-    }
-  }
-`;
-export const ACTUALIZAR_CATEGORIA = gql`
-  mutation ActualizarCategoria($id: ID!, $nombre: String, $orden: Int) {
-    actualizarCategoria(id: $id, nombre: $nombre, orden: $orden) {
-      ok
-      error
-      categoria {
-        id
-        nombre
-        orden
-        activo
-      }
-    }
-  }
-`;
-export const DESACTIVAR_CATEGORIA = gql`
-  mutation DesactivarCategoria($id: ID!) {
-    desactivarCategoria(id: $id) {
-      ok
-      error
-    }
-  }
-`;
-
-// ── INGREDIENTE ───────────────────────────────────────────────────────────
+// ── INGREDIENTE (gerente — locales por restaurante) ────────────────────────
 export const CREATE_INGREDIENTE = gql`
   mutation CrearIngrediente(
     $nombre: String!
@@ -129,13 +22,58 @@ export const CREATE_INGREDIENTE = gql`
         id
         nombre
         unidadMedida
+        descripcion
         activo
       }
     }
   }
 `;
 
-// ── PLATO ─────────────────────────────────────────────────────────────────
+export const ACTUALIZAR_INGREDIENTE = gql`
+  mutation ActualizarIngrediente(
+    $id: ID!
+    $nombre: String
+    $unidadMedida: String
+    $descripcion: String
+  ) {
+    actualizarIngrediente(
+      id: $id
+      nombre: $nombre
+      unidadMedida: $unidadMedida
+      descripcion: $descripcion
+    ) {
+      ok
+      error
+      ingrediente {
+        id
+        nombre
+        unidadMedida
+        descripcion
+        activo
+      }
+    }
+  }
+`;
+
+export const ACTIVAR_INGREDIENTE = gql`
+  mutation ActivarIngrediente($id: ID!) {
+    activarIngrediente(id: $id) {
+      ok
+      error
+    }
+  }
+`;
+
+export const DESACTIVAR_INGREDIENTE = gql`
+  mutation DesactivarIngrediente($id: ID!) {
+    desactivarIngrediente(id: $id) {
+      ok
+      error
+    }
+  }
+`;
+
+// ── PLATO (gerente — crea desde cero con categorías globales) ─────────────
 export const CREATE_PLATO = gql`
   mutation CrearPlato(
     $nombre: String!
@@ -160,6 +98,7 @@ export const CREATE_PLATO = gql`
     }
   }
 `;
+
 export const ACTUALIZAR_PLATO = gql`
   mutation ActualizarPlato(
     $id: ID!
@@ -187,6 +126,7 @@ export const ACTUALIZAR_PLATO = gql`
     }
   }
 `;
+
 export const ACTIVAR_PLATO = gql`
   mutation ActivarPlato($id: ID!) {
     activarPlato(id: $id) {
@@ -195,6 +135,7 @@ export const ACTIVAR_PLATO = gql`
     }
   }
 `;
+
 export const DESACTIVAR_PLATO = gql`
   mutation DesactivarPlato($id: ID!) {
     desactivarPlato(id: $id) {
@@ -220,6 +161,7 @@ export const AGREGAR_INGREDIENTE_PLATO = gql`
     }
   }
 `;
+
 export const QUITAR_INGREDIENTE_PLATO = gql`
   mutation QuitarIngredientePlato($platoId: ID!, $ingredienteId: ID!) {
     quitarIngredientePlato(platoId: $platoId, ingredienteId: $ingredienteId) {
@@ -229,7 +171,7 @@ export const QUITAR_INGREDIENTE_PLATO = gql`
   }
 `;
 
-// ── PRECIO ────────────────────────────────────────────────────────────────
+// ── PRECIO (gerente — asigna precio en su restaurante) ────────────────────
 export const CREATE_PRECIO = gql`
   mutation CrearPrecioPlato(
     $platoId: ID!
@@ -256,6 +198,7 @@ export const CREATE_PRECIO = gql`
     }
   }
 `;
+
 export const ACTIVAR_PRECIO = gql`
   mutation ActivarPrecio($id: ID!) {
     activarPrecio(id: $id) {
@@ -264,6 +207,7 @@ export const ACTIVAR_PRECIO = gql`
     }
   }
 `;
+
 export const DESACTIVAR_PRECIO = gql`
   mutation DesactivarPrecio($id: ID!) {
     desactivarPrecio(id: $id) {

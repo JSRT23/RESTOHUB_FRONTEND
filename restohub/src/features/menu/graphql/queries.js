@@ -1,69 +1,16 @@
 // src/features/menu/graphql/queries.js
+// Queries del GERENTE — ingredientes, platos, precios
+// Las queries de restaurante están en operations.js
+// Las queries de categorías (con descripcion) están en categorias.operations.js
 import { gql } from "@apollo/client";
 
-export const GET_RESTAURANTES = gql`
-  query GetRestaurantes($activo: Boolean, $pais: String) {
-    restaurantes(activo: $activo, pais: $pais) {
+export const GET_INGREDIENTES = gql`
+  query GetIngredientes($activo: Boolean) {
+    ingredientes(activo: $activo) {
       id
       nombre
-      pais
-      ciudad
-      direccion
-      moneda
-      activo
-      fechaCreacion
-      fechaActualizacion
-    }
-  }
-`;
-
-export const GET_RESTAURANTE = gql`
-  query GetRestaurante($id: ID!) {
-    restaurante(id: $id) {
-      id
-      nombre
-      pais
-      ciudad
-      direccion
-      moneda
-      activo
-      fechaCreacion
-      fechaActualizacion
-    }
-  }
-`;
-
-export const GET_MENU_RESTAURANTE = gql`
-  query GetMenuRestaurante($restauranteId: ID!) {
-    menuRestaurante(restauranteId: $restauranteId) {
-      restauranteId
-      nombre
-      ciudad
-      pais
-      moneda
-      categorias {
-        categoriaId
-        nombre
-        orden
-        platos {
-          platoId
-          nombre
-          descripcion
-          imagen
-          precio
-          moneda
-        }
-      }
-    }
-  }
-`;
-
-export const GET_CATEGORIAS = gql`
-  query GetCategorias($activo: Boolean) {
-    categorias(activo: $activo) {
-      id
-      nombre
-      orden
+      unidadMedida
+      descripcion
       activo
     }
   }
@@ -80,7 +27,6 @@ export const GET_PLATOS = gql`
       imagen
       activo
       fechaCreacion
-      fechaActualizacion
     }
   }
 `;
@@ -96,7 +42,6 @@ export const GET_PLATO = gql`
       imagen
       activo
       fechaCreacion
-      fechaActualizacion
       ingredientes {
         id
         ingredienteId
@@ -120,18 +65,6 @@ export const GET_PLATO = gql`
   }
 `;
 
-export const GET_INGREDIENTES = gql`
-  query GetIngredientes($activo: Boolean) {
-    ingredientes(activo: $activo) {
-      id
-      nombre
-      unidadMedida
-      descripcion
-      activo
-    }
-  }
-`;
-
 export const GET_PRECIOS = gql`
   query GetPrecios($platoId: ID, $restauranteId: ID, $activo: Boolean) {
     precios(platoId: $platoId, restauranteId: $restauranteId, activo: $activo) {
@@ -145,6 +78,32 @@ export const GET_PRECIOS = gql`
       fechaFin
       activo
       estaVigente
+    }
+  }
+`;
+
+// Menu público del restaurante (para vista pública y admin en solo lectura)
+export const GET_MENU_RESTAURANTE_PUBLICO = gql`
+  query GetMenuRestaurantePublico($restauranteId: ID!) {
+    menuRestaurante(restauranteId: $restauranteId) {
+      restauranteId
+      nombre
+      ciudad
+      pais
+      moneda
+      categorias {
+        categoriaId
+        nombre
+        orden
+        platos {
+          platoId
+          nombre
+          descripcion
+          imagen
+          precio
+          moneda
+        }
+      }
     }
   }
 `;

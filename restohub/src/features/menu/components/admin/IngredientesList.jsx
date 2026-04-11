@@ -8,8 +8,8 @@ import {
   XCircle,
   Plus,
 } from "lucide-react";
-import { GET_INGREDIENTES } from "../graphql/queries";
-import { CREATE_INGREDIENTE } from "../graphql/mutations";
+import { GET_INGREDIENTES } from "../../graphql/queries";
+import { CREATE_INGREDIENTE } from "../../graphql/mutations";
 import {
   Badge,
   Button,
@@ -18,7 +18,7 @@ import {
   Modal,
   Input,
   Select,
-} from "../../../shared/components/ui";
+} from "../../../../shared/components/ui";
 
 const UNIDADES = [
   { value: "kg", label: "Kilogramo (kg)" },

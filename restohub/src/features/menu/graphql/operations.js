@@ -61,7 +61,24 @@ export const GET_MENU_RESTAURANTE = gql`
   }
 `;
 
-// ── Mutations ──────────────────────────────────────────────────────────────
+// Gerente activo del restaurante — usa StaffQuery.gerente_restaurante
+export const GET_GERENTE_RESTAURANTE = gql`
+  query GetGerenteRestaurante($restauranteId: ID!) {
+    gerenteRestaurante(restauranteId: $restauranteId) {
+      id
+      nombre
+      apellido
+      email
+      telefono
+      documento
+      rol
+      rolDisplay
+      activo
+    }
+  }
+`;
+
+// ── Mutations restaurante ──────────────────────────────────────────────────
 export const CREAR_RESTAURANTE = gql`
   mutation CrearRestaurante(
     $nombre: String!
@@ -141,6 +158,7 @@ export const DESACTIVAR_RESTAURANTE = gql`
   }
 `;
 
+// ── Mutations auth — crear usuario gerente ────────────────────────────────
 export const REGISTRAR_GERENTE = gql`
   mutation RegistrarGerente(
     $email: String!
@@ -170,27 +188,70 @@ export const REGISTRAR_GERENTE = gql`
   }
 `;
 
-export const CREAR_EMPLEADO_GERENTE = gql`
-  mutation CrearEmpleadoGerente(
+// ── Mutations staff — crear empleado gerente ──────────────────────────────
+// Usa CrearEmpleado del StaffMutation (ya existe en el gateway)
+// Campos exactos del staff_service: nombre, apellido, documento,
+// email, rol, pais (código 2 letras), restaurante (UUID)
+export const CREAR_EMPLEADO_STAFF = gql`
+  mutation CrearEmpleadoStaff(
     $nombre: String!
+    $apellido: String!
+    $documento: String!
     $email: String!
+    $telefono: String
     $rol: String!
-    $restauranteId: ID!
-    $userId: ID!
+    $pais: String!
+    $restaurante: ID!
   ) {
     crearEmpleado(
       nombre: $nombre
+      apellido: $apellido
+      documento: $documento
       email: $email
+      telefono: $telefono
       rol: $rol
-      restauranteId: $restauranteId
-      userId: $userId
+      pais: $pais
+      restaurante: $restaurante
     ) {
       ok
-      error
+      errores
       empleado {
         id
         nombre
+        apellido
+        email
+        telefono
         rol
+        activo
+      }
+    }
+  }
+`;
+
+// ── Mutations empleado — activar/desactivar (admin_central) ───────────────
+export const ACTIVAR_EMPLEADO = gql`
+  mutation ActivarEmpleado($empleadoId: ID!) {
+    activarEmpleado(empleadoId: $empleadoId) {
+      ok
+      errores
+      empleado {
+        id
+        nombre
+        activo
+      }
+    }
+  }
+`;
+
+export const DESACTIVAR_EMPLEADO = gql`
+  mutation DesactivarEmpleado($empleadoId: ID!) {
+    desactivarEmpleado(empleadoId: $empleadoId) {
+      ok
+      errores
+      empleado {
+        id
+        nombre
+        activo
       }
     }
   }

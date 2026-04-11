@@ -1,6 +1,7 @@
 // src/features/restaurantes/components/RestauranteDetail.jsx
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
 import { useQuery, useMutation } from "@apollo/client/react";
 import {
   Building2,
@@ -18,19 +19,29 @@ import {
   DollarSign,
   ArrowLeft,
   ShieldCheck,
+  UserCheck,
+  UserX,
+  UserPlus,
+  Mail,
+  Phone,
+  CreditCard,
 } from "lucide-react";
 import {
   Breadcrumb,
   Skeleton,
   EmptyState,
-} from "../../../shared/components/ui";
+} from "../../../../shared/components/ui";
 import {
   GET_RESTAURANTE,
   GET_MENU_RESTAURANTE,
+  GET_GERENTE_RESTAURANTE,
   ACTUALIZAR_RESTAURANTE,
   ACTIVAR_RESTAURANTE,
   DESACTIVAR_RESTAURANTE,
-} from "../graphql/operations";
+  ACTIVAR_EMPLEADO,
+  DESACTIVAR_EMPLEADO,
+} from "../../graphql/operations";
+import CrearGerenteForm from "./CrearGerenteForm";
 
 const G = {
   50: "#DAF1DE",
@@ -699,6 +710,372 @@ function TabMenu({ restauranteId }) {
   );
 }
 
+// ── Modal Crear Gerente ────────────────────────────────────────────────────
+function ModalCrearGerente({ restaurante, onClose, onCreado }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/20 backdrop-blur-sm"
+        style={{ zIndex: -1 }}
+      />
+
+      {/* Panel */}
+      <div
+        className="relative w-full max-w-lg rounded-2xl bg-white border border-stone-200 overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Barra de color */}
+        <div className="h-1" style={{ background: G[900] }} />
+
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-stone-100">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: G[50] }}
+              >
+                <UserPlus size={15} style={{ color: G[300] }} />
+              </div>
+              <div>
+                <h2
+                  style={{ fontFamily: "'Playfair Display', serif" }}
+                  className="font-semibold text-stone-900 text-lg leading-tight"
+                >
+                  Crear gerente para
+                </h2>
+                <p
+                  className="text-sm font-dm font-bold mt-0.5"
+                  style={{ color: G[500] }}
+                >
+                  {restaurante.nombre}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-lg hover:bg-stone-100 flex items-center justify-center text-stone-400 text-sm transition shrink-0 mt-0.5"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Formulario */}
+        <div className="p-5 max-h-[75vh] overflow-y-auto">
+          <CrearGerenteForm
+            restaurante={restaurante}
+            onCreado={onCreado}
+            modoModal={true}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Tab Gerente ────────────────────────────────────────────────────────────
+function TabGerente({ restaurante }) {
+  const { data, loading, refetch } = useQuery(GET_GERENTE_RESTAURANTE, {
+    variables: { restauranteId: restaurante.id },
+    fetchPolicy: "cache-and-network",
+  });
+  const [modalCrear, setModalCrear] = useState(false);
+  const [desactivarEmp] = useMutation(DESACTIVAR_EMPLEADO);
+  const [toggling, setToggling] = useState(false);
+
+  const gerente = data?.gerenteRestaurante;
+
+  const handleDesactivar = async () => {
+    const result = await Swal.fire({
+      background: "#fff",
+      icon: "warning",
+      draggable: true,
+      title: "¿Desactivar gerente?",
+      html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.6">
+        <p><b style="color:#163832">${gerente.nombre} ${gerente.apellido || ""}</b>
+        dejará de tener acceso al restaurante.</p>
+        <p style="margin-top:6px">Podrás asignar un nuevo gerente después.</p>
+      </div>`,
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      confirmButtonText: "Sí, desactivar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!result.isConfirmed) return;
+
+    setToggling(true);
+    const { data: d } = await desactivarEmp({
+      variables: { empleadoId: gerente.id },
+    });
+    if (!d?.desactivarEmpleado?.ok) {
+      Swal.fire({
+        background: "#fff",
+        icon: "error",
+        draggable: true,
+        title: "Error al desactivar",
+        text:
+          d?.desactivarEmpleado?.errores || "No se pudo desactivar el gerente.",
+        confirmButtonColor: G[900],
+      });
+    } else {
+      await Swal.fire({
+        background: "#fff",
+        icon: "success",
+        draggable: true,
+        title: "Gerente desactivado",
+        html: `<span style="font-family:'DM Sans',sans-serif;color:#78716c">
+          Ahora puedes asignar un nuevo gerente.
+        </span>`,
+        confirmButtonColor: G[900],
+        timer: 2500,
+        timerProgressBar: true,
+      });
+    }
+    await refetch();
+    setToggling(false);
+  };
+
+  // ── Loading ───────────────────────────────────────────────────────────
+  if (loading)
+    return (
+      <div className="space-y-3">
+        <div className="h-32 rounded-2xl bg-stone-100 animate-pulse" />
+      </div>
+    );
+
+  // ── Render único con modal siempre montable ────────────────────────────
+  return (
+    <>
+      {/* ── Sin gerente ─────────────────────────────────────────────── */}
+      {!gerente && (
+        <div
+          className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
+          style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
+        >
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-stone-100">
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{ background: G[50] }}
+            >
+              <UserX size={14} style={{ color: G[300] }} />
+            </div>
+            <h2
+              style={{ fontFamily: "'Playfair Display', serif" }}
+              className="font-semibold text-stone-900 text-lg"
+            >
+              Gerente
+            </h2>
+          </div>
+          <div className="p-8 flex flex-col items-center gap-4 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-stone-50 border-2 border-dashed border-stone-200 flex items-center justify-center">
+              <UserPlus size={24} className="text-stone-300" />
+            </div>
+            <div>
+              <p
+                style={{ fontFamily: "'Playfair Display', serif" }}
+                className="text-stone-700 font-semibold text-lg"
+              >
+                Sin gerente asignado
+              </p>
+              <p className="text-sm font-dm text-stone-400 mt-1">
+                Este restaurante no tiene un gerente activo
+              </p>
+            </div>
+            <button
+              onClick={() => setModalCrear(true)}
+              style={{ background: G[900] }}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-dm font-bold text-white hover:opacity-90 transition-all"
+            >
+              <UserPlus size={14} /> Asignar gerente
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Con gerente ─────────────────────────────────────────────── */}
+      {gerente && (
+        <div
+          className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
+          style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-stone-100">
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{ background: G[50] }}
+            >
+              <UserCheck size={14} style={{ color: G[300] }} />
+            </div>
+            <h2
+              style={{ fontFamily: "'Playfair Display', serif" }}
+              className="font-semibold text-stone-900 text-lg flex-1"
+            >
+              Gerente activo
+            </h2>
+            <span
+              className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide"
+              style={{
+                background: G[50],
+                color: G[500],
+                border: `1px solid ${G[100]}`,
+              }}
+            >
+              ACTIVO
+            </span>
+          </div>
+
+          <div className="p-5 space-y-4">
+            {/* Avatar + nombre */}
+            <div className="flex items-center gap-4">
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold font-dm shrink-0"
+                style={{
+                  background: G[50],
+                  color: G[500],
+                  border: `2px solid ${G[100]}`,
+                }}
+              >
+                {gerente.nombre?.[0]?.toUpperCase()}
+                {gerente.apellido?.[0]?.toUpperCase()}
+              </div>
+              <div>
+                <p
+                  style={{ fontFamily: "'Playfair Display', serif" }}
+                  className="text-xl font-bold text-stone-900"
+                >
+                  {gerente.nombre} {gerente.apellido}
+                </p>
+                <p className="text-xs font-dm text-stone-400 mt-0.5">
+                  Gerente Local · RestoHub
+                </p>
+              </div>
+            </div>
+
+            <div className="h-px bg-stone-100" />
+
+            {/* Email */}
+            <div className="flex items-center gap-3">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                style={{ background: G[50] }}
+              >
+                <Mail size={12} style={{ color: G[300] }} />
+              </div>
+              <span className="text-xs font-dm font-semibold text-stone-400 w-20 shrink-0">
+                Email
+              </span>
+              <a
+                href={`mailto:${gerente.email}`}
+                className="text-sm font-dm text-stone-700 hover:underline truncate"
+              >
+                {gerente.email}
+              </a>
+            </div>
+
+            {/* Teléfono — solo si existe */}
+            {gerente.telefono && (
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: G[50] }}
+                >
+                  <Phone size={12} style={{ color: G[300] }} />
+                </div>
+                <span className="text-xs font-dm font-semibold text-stone-400 w-20 shrink-0">
+                  Teléfono
+                </span>
+                <a
+                  href={`tel:${gerente.telefono}`}
+                  className="text-sm font-dm text-stone-700 hover:underline"
+                >
+                  {gerente.telefono}
+                </a>
+              </div>
+            )}
+
+            {/* Documento — solo si existe */}
+            {gerente.documento && (
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: G[50] }}
+                >
+                  <CreditCard size={12} style={{ color: G[300] }} />
+                </div>
+                <span className="text-xs font-dm font-semibold text-stone-400 w-20 shrink-0">
+                  Documento
+                </span>
+                <span className="text-sm font-dm text-stone-700">
+                  {gerente.documento}
+                </span>
+              </div>
+            )}
+
+            {/* Rol */}
+            <div className="flex items-center gap-3">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                style={{ background: G[50] }}
+              >
+                <ShieldCheck size={12} style={{ color: G[300] }} />
+              </div>
+              <span className="text-xs font-dm font-semibold text-stone-400 w-20 shrink-0">
+                Rol
+              </span>
+              <span className="text-sm font-dm text-stone-700">
+                Gerente Local
+              </span>
+            </div>
+
+            <div className="h-px bg-stone-100" />
+
+            {/* Desactivar */}
+            <button
+              onClick={handleDesactivar}
+              disabled={toggling}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-dm font-semibold border transition-all disabled:opacity-50"
+              style={{
+                background: "#fef2f2",
+                color: "#dc2626",
+                borderColor: "#fecaca",
+              }}
+            >
+              {toggling ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <UserX size={13} />
+              )}
+              {toggling ? "Procesando..." : "Desactivar gerente"}
+            </button>
+
+            <p className="text-[11px] font-dm text-stone-400 text-center">
+              Solo desactiva si el gerente fue reemplazado. Podrás asignar uno
+              nuevo después.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal crear gerente — siempre accesible ──────────────────── */}
+      {modalCrear && (
+        <ModalCrearGerente
+          restaurante={restaurante}
+          onClose={() => setModalCrear(false)}
+          onCreado={() => {
+            setModalCrear(false);
+            refetch();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 export default function RestauranteDetail() {
   const { id } = useParams();
@@ -790,6 +1167,7 @@ export default function RestauranteDetail() {
             {[
               { key: "info", label: "Información", icon: Info },
               { key: "menu", label: "Menú", icon: BookOpen },
+              { key: "gerente", label: "Gerente", icon: UserCheck },
             ].map((t) => (
               <button
                 key={t.key}
@@ -809,6 +1187,7 @@ export default function RestauranteDetail() {
           {/* Contenido */}
           {tab === "info" && <TabInfo r={r} />}
           {tab === "menu" && <TabMenu restauranteId={id} />}
+          {tab === "gerente" && <TabGerente restaurante={r} />}
         </div>
       </div>
 

@@ -12,8 +12,8 @@ import {
   AlertCircle,
   Clock,
 } from "lucide-react";
-import { GET_MENU_RESTAURANTE } from "../graphql/queries";
-import { Skeleton, Badge } from "../../../shared/components/ui";
+import { GET_MENU_RESTAURANTE } from "../../graphql/queries";
+import { Skeleton, Badge } from "../../../../shared/components/ui";
 
 const fmt = (v, moneda = "COP") =>
   new Intl.NumberFormat("es-CO", {

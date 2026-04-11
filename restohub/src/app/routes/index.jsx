@@ -5,11 +5,11 @@ import MainLayout from "../../shared/components/layout/MainLayout";
 import LoginPage from "../../features/auth/components/LoginPage";
 
 // categorias
-import CategoriasList from "../../features/menu/components/CategoriasList";
+import CategoriasList from "../../features/menu/components/admin/CategoriasList";
 // Restaurantes
-import RestaurantesList from "../../features/menu/components/RestauranteList";
-import CreateRestauranteWizard from "../../features/menu/components/CreateRestauranteWizard";
-import RestauranteDetail from "../../features/menu/components/RestauranteDetail";
+import RestaurantesList from "../../features/menu/components/admin/RestauranteList";
+import CreateRestauranteWizard from "../../features/menu/components/admin/CreateRestauranteWizard";
+import RestauranteDetail from "../../features/menu/components/admin/RestauranteDetail";
 
 // Placeholder para secciones futuras
 const WIP = ({ title }) => (
@@ -22,6 +22,7 @@ const WIP = ({ title }) => (
 );
 const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
+
   {
     path: "/",
     element: (
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/restaurantes" replace /> },
 
       // ── Restaurantes (admin_central) ──────────────────────────────────────
+
       {
         path: "restaurantes",
         element: (

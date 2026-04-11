@@ -22,7 +22,7 @@ import {
   GET_PLATO,
   GET_INGREDIENTES,
   GET_RESTAURANTES,
-} from "../graphql/queries";
+} from "../../graphql/queries";
 import {
   ACTIVAR_PLATO,
   DESACTIVAR_PLATO,
@@ -31,14 +31,14 @@ import {
   CREATE_PRECIO,
   ACTIVAR_PRECIO,
   DESACTIVAR_PRECIO,
-} from "../graphql/mutations";
+} from "../../graphql/mutations";
 import {
   Badge,
   Button,
   Card,
   Modal,
   Skeleton,
-} from "../../../shared/components/ui";
+} from "../../../../shared/components/ui";
 
 // ── Formato precio ────────────────────────────────────────────────────────
 const fmt = (v, moneda = "COP") =>
