@@ -32,6 +32,12 @@ const G = {
   900: "#051F20",
 };
 
+// Normaliza el rol: "gerente" → "gerente_local" (auth_service puede devolver ambos)
+function normalizeRol(rol) {
+  if (rol === "gerente") return "gerente_local";
+  return rol;
+}
+
 const NAV_CONFIG = {
   admin_central: [
     { label: "Restaurantes", href: "/restaurantes", icon: Building2 },
@@ -103,11 +109,42 @@ const NAV_CONFIG = {
       ],
     },
   ],
+
+  gerente_local: [
+    { label: "Dashboard", href: "/gerente", icon: LayoutDashboard },
+    {
+      label: "Menú",
+      icon: UtensilsCrossed,
+      children: [
+        {
+          label: "Platos",
+          href: "/gerente/platos",
+          icon: UtensilsCrossed,
+          desc: "Catálogo y precios",
+        },
+        {
+          label: "Ingredientes",
+          href: "/gerente/ingredientes",
+          icon: FlaskConical,
+          desc: "Crear y gestionar",
+        },
+        {
+          label: "Categorías",
+          href: "/gerente/categorias",
+          icon: Tag,
+          desc: "Solo lectura",
+        },
+      ],
+    },
+    { label: "Inventario", href: "/gerente/inventario", icon: Package },
+    { label: "Mi equipo", href: "/gerente/staff", icon: Users },
+  ],
 };
 
 const ROL_LABEL = {
   admin_central: "Admin Central",
   gerente_local: "Gerente Local",
+  gerente: "Gerente Local", // alias por si el backend devuelve "gerente"
   supervisor: "Supervisor",
   cocinero: "Cocinero",
   mesero: "Mesero",
@@ -133,10 +170,7 @@ function DropdownMenu({ item, onClose }) {
               onClick={onClose}
               style={
                 active
-                  ? {
-                      background: `${G[50]}`,
-                      borderLeft: `2px solid ${G[300]}`,
-                    }
+                  ? { background: G[50], borderLeft: `2px solid ${G[300]}` }
                   : {}
               }
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group
@@ -402,7 +436,7 @@ function MobileMenu({ open, onClose, navItems, user, onLogout }) {
                 {user?.nombre}
               </p>
               <p style={{ color: G[300] }} className="text-[11px] font-dm">
-                {ROL_LABEL[user?.rol]}
+                {ROL_LABEL[user?.rol] || user?.rol}
               </p>
             </div>
           </div>
@@ -432,7 +466,10 @@ export default function Navbar() {
     logout();
     navigate("/login");
   };
-  const navItems = NAV_CONFIG[user?.rol] || NAV_CONFIG.admin_central;
+
+  // Normaliza "gerente" → "gerente_local" por si el auth_service devuelve el alias corto
+  const rol = normalizeRol(user?.rol);
+  const navItems = NAV_CONFIG[rol] || NAV_CONFIG.admin_central;
 
   return (
     <>

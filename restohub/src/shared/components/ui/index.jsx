@@ -64,7 +64,6 @@ export function Button({
     lg: "px-5 py-3 text-sm gap-2.5",
   };
 
-  // Estilos inline para el verde (evitar purge de Tailwind con valores dinámicos)
   const inlineStyle =
     variant === "primary"
       ? { background: G[900] }
@@ -383,15 +382,17 @@ export function Modal({ open, onClose, title, children, size = "md" }) {
 }
 
 // ── Divider ────────────────────────────────────────────────────────────────
+// Antes: líneas bg-stone-100 y texto text-stone-300 → casi invisible
+// Ahora: líneas bg-stone-300 y texto text-stone-500 → bien visible
 export function Divider({ label }) {
-  if (!label) return <div className="h-px bg-stone-100" />;
+  if (!label) return <div className="h-px bg-stone-300" />;
   return (
     <div className="flex items-center gap-3">
-      <div className="flex-1 h-px bg-stone-100" />
-      <span className="text-[10px] font-dm text-stone-300 uppercase tracking-widest">
+      <div className="flex-1 h-px bg-stone-300" />
+      <span className="text-[10px] font-dm font-semibold text-stone-500 uppercase tracking-widest">
         {label}
       </span>
-      <div className="flex-1 h-px bg-stone-100" />
+      <div className="flex-1 h-px bg-stone-300" />
     </div>
   );
 }
