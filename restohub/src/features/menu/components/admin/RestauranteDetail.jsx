@@ -1,4 +1,8 @@
-// src/features/restaurantes/components/RestauranteDetail.jsx
+// src/features/menu/components/admin/RestauranteDetail.jsx
+// FIX: TabMenu ahora usa la estructura REAL del schema (MenuRestauranteType):
+//   campos planos: restauranteId, nombre, moneda
+//   categorias[categoriaId, nombre, orden, platos[platoId, nombre, descripcion, precio, moneda]]
+// Se eliminó el acceso a menu.restaurante.moneda (no existe) → usa menu.moneda directamente.
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
@@ -40,7 +44,7 @@ import {
   DESACTIVAR_RESTAURANTE,
   ACTIVAR_EMPLEADO,
   DESACTIVAR_EMPLEADO,
-} from "../../graphql/operations";
+} from "./graphql/operations";
 import CrearGerenteForm from "./CrearGerenteForm";
 
 const G = {
@@ -83,7 +87,6 @@ function getInitials(nombre = "") {
     : nombre.slice(0, 2).toUpperCase();
 }
 
-// foco verde reutilizable
 const fi = (e) => {
   e.target.style.borderColor = "transparent";
   e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
@@ -187,7 +190,7 @@ function EditarModal({ r, onClose, onSaved }) {
   );
 }
 
-// ── Hero (columna izquierda — sticky) ─────────────────────────────────────
+// ── Hero ───────────────────────────────────────────────────────────────────
 function RestauranteHero({ r, onEdit, onToggle, toggling }) {
   const flag = PAIS_FLAG[r.pais] || "🌎";
   const initials = getInitials(r.nombre);
@@ -197,7 +200,6 @@ function RestauranteHero({ r, onEdit, onToggle, toggling }) {
       className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
       style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.07)" }}
     >
-      {/* Cover — iniciales, imagen cuando r.imagen exista */}
       <div
         className="relative h-48 flex items-center justify-center"
         style={{ background: G[50] }}
@@ -221,12 +223,10 @@ function RestauranteHero({ r, onEdit, onToggle, toggling }) {
             {initials}
           </div>
         )}
-        {/* Línea de estado abajo del cover */}
         <div
           className="absolute bottom-0 inset-x-0 h-1"
           style={{ background: r.activo ? G[300] : "#d1d5db" }}
         />
-        {/* Badge */}
         <div className="absolute top-3 right-3">
           <span
             style={
@@ -249,9 +249,7 @@ function RestauranteHero({ r, onEdit, onToggle, toggling }) {
         </div>
       </div>
 
-      {/* Info */}
       <div className="p-6 space-y-4">
-        {/* País */}
         <div className="flex items-center gap-2">
           <span className="text-lg leading-none">{flag}</span>
           <span className="text-xs font-dm text-stone-400 font-semibold uppercase tracking-wider">
@@ -259,7 +257,6 @@ function RestauranteHero({ r, onEdit, onToggle, toggling }) {
           </span>
         </div>
 
-        {/* Nombre */}
         <h1
           style={{ fontFamily: "'Playfair Display', serif" }}
           className="text-3xl font-bold text-stone-900 leading-tight"
@@ -267,70 +264,43 @@ function RestauranteHero({ r, onEdit, onToggle, toggling }) {
           {r.nombre}
         </h1>
 
-        {/* Separador */}
         <div className="h-px bg-stone-100" />
 
-        {/* Detalles */}
         <div className="space-y-3">
-          <div className="flex items-start gap-3">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-              style={{ background: G[50] }}
-            >
-              <MapPin size={12} style={{ color: G[300] }} />
-            </div>
-            <div>
-              <p className="text-[10px] font-dm font-bold text-stone-400 uppercase tracking-wider mb-0.5">
-                Ciudad
-              </p>
-              <p className="text-sm font-dm text-stone-700 font-medium">
-                {r.ciudad || "—"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-              style={{ background: G[50] }}
-            >
-              <MapPin size={12} style={{ color: G[300] }} />
-            </div>
-            <div>
-              <p className="text-[10px] font-dm font-bold text-stone-400 uppercase tracking-wider mb-0.5">
-                Dirección
-              </p>
-              <p className="text-sm font-dm text-stone-700 font-medium">
-                {r.direccion || "—"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-              style={{ background: G[50] }}
-            >
-              <Coins size={12} style={{ color: G[300] }} />
-            </div>
-            <div>
-              <p className="text-[10px] font-dm font-bold text-stone-400 uppercase tracking-wider mb-0.5">
-                Moneda
-              </p>
-              <p
-                className="text-sm font-dm font-bold"
-                style={{ color: G[300] }}
+          {[
+            { label: "Ciudad", value: r.ciudad, Icon: MapPin },
+            { label: "Dirección", value: r.direccion, Icon: MapPin },
+            {
+              label: "Moneda",
+              value: `${r.moneda} · ${MONEDA_NOMBRE[r.moneda] || r.moneda}`,
+              Icon: Coins,
+              colored: true,
+            },
+          ].map((item) => (
+            <div key={item.label} className="flex items-start gap-3">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                style={{ background: G[50] }}
               >
-                {r.moneda} · {MONEDA_NOMBRE[r.moneda] || r.moneda}
-              </p>
+                <item.Icon size={12} style={{ color: G[300] }} />
+              </div>
+              <div>
+                <p className="text-[10px] font-dm font-bold text-stone-400 uppercase tracking-wider mb-0.5">
+                  {item.label}
+                </p>
+                <p
+                  className="text-sm font-dm font-medium"
+                  style={{ color: item.colored ? G[300] : undefined }}
+                >
+                  {item.value || "—"}
+                </p>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
 
-        {/* Separador */}
         <div className="h-px bg-stone-100" />
 
-        {/* Acciones */}
         <div className="space-y-2">
           <button
             onClick={onEdit}
@@ -396,7 +366,6 @@ function TabInfo({ r }) {
       className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
       style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
     >
-      {/* Header */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-stone-100">
         <div
           className="w-8 h-8 rounded-xl flex items-center justify-center"
@@ -411,7 +380,6 @@ function TabInfo({ r }) {
           Información general
         </h2>
       </div>
-      {/* Filas */}
       {rows.map((row, i) => (
         <div
           key={row.label}
@@ -462,8 +430,11 @@ function TabInfo({ r }) {
   );
 }
 
-// ── Plato row ──────────────────────────────────────────────────────────────
-function PlatoRow({ plato, precio, moneda }) {
+// ── Plato row (para TabMenu) ───────────────────────────────────────────────
+// FIX: usa los campos PLANOS del MenuRestauranteType real:
+//   plato = { platoId, nombre, descripcion, precio, moneda }
+//   NO hay campo .activo en MenuPlatoType — se muestra el precio directamente
+function PlatoMenuRow({ plato, moneda }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-3 rounded-xl hover:bg-stone-50 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
@@ -481,47 +452,21 @@ function PlatoRow({ plato, precio, moneda }) {
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2.5 shrink-0">
-        <span
-          style={
-            plato.activo
-              ? {
-                  background: G[50],
-                  color: G[500],
-                  border: `1px solid ${G[100]}`,
-                }
-              : {
-                  background: "#f3f4f6",
-                  color: "#9ca3af",
-                  border: "1px solid #e5e7eb",
-                }
-          }
-          className="text-[9px] font-dm font-bold px-2 py-1 rounded-full"
-        >
-          {plato.activo ? "Activo" : "Inactivo"}
-        </span>
-        {precio ? (
-          <span
-            style={{ color: G[500] }}
-            className="text-sm font-dm font-bold whitespace-nowrap"
-          >
-            {Number(precio.precio).toLocaleString("es-CO")} {moneda}
-          </span>
-        ) : (
-          <span className="text-xs font-dm text-stone-300 italic">
-            Sin precio
-          </span>
-        )}
-      </div>
+      <span
+        style={{ color: G[500] }}
+        className="text-sm font-dm font-bold whitespace-nowrap shrink-0"
+      >
+        {Number(plato.precio).toLocaleString("es-CO")} {plato.moneda || moneda}
+      </span>
     </div>
   );
 }
 
-// ── Categoría accordion ────────────────────────────────────────────────────
-function CategoriaAccordion({ grupo, moneda }) {
+// ── Categoría accordion (para TabMenu) ────────────────────────────────────
+// FIX: usa categoriaId (no categoria.id), y platos directamente del array plano
+function CategoriaAccordion({ categoria, moneda }) {
   const [open, setOpen] = useState(true);
-  const { categoria, platos } = grupo;
-  const conPrecio = platos.filter((p) => p.precio).length;
+  const platos = categoria.platos ?? [];
 
   return (
     <div className="border border-stone-100 rounded-xl overflow-hidden">
@@ -536,16 +481,9 @@ function CategoriaAccordion({ grupo, moneda }) {
           >
             <Tag size={12} style={{ color: G[300] }} />
           </div>
-          <div className="text-left">
-            <p className="text-sm font-dm font-bold text-stone-800">
-              {categoria.nombre}
-            </p>
-            {categoria.descripcion && (
-              <p className="text-[11px] font-dm text-stone-400">
-                {categoria.descripcion}
-              </p>
-            )}
-          </div>
+          <p className="text-sm font-dm font-bold text-stone-800">
+            {categoria.nombre}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-dm font-bold px-2 py-1 rounded-full bg-stone-100 text-stone-500">
@@ -564,13 +502,8 @@ function CategoriaAccordion({ grupo, moneda }) {
               Sin platos en esta categoría
             </p>
           ) : (
-            platos.map(({ plato, precio }) => (
-              <PlatoRow
-                key={plato.id}
-                plato={plato}
-                precio={precio}
-                moneda={moneda}
-              />
+            platos.map((plato) => (
+              <PlatoMenuRow key={plato.platoId} plato={plato} moneda={moneda} />
             ))
           )}
         </div>
@@ -580,6 +513,9 @@ function CategoriaAccordion({ grupo, moneda }) {
 }
 
 // ── Tab Menú ───────────────────────────────────────────────────────────────
+// FIX: usa la estructura PLANA real del MenuRestauranteType
+//   menu.restauranteId, menu.nombre, menu.moneda (NO menu.restaurante.moneda)
+//   menu.categorias[categoriaId, nombre, orden, platos[platoId, nombre, precio, moneda]]
 function TabMenu({ restauranteId }) {
   const { data, loading } = useQuery(GET_MENU_RESTAURANTE, {
     variables: { restauranteId },
@@ -597,10 +533,10 @@ function TabMenu({ restauranteId }) {
 
   const menu = data?.menuRestaurante;
   const categorias = menu?.categorias || [];
-  const moneda = menu?.restaurante?.moneda || "COP";
-  const totalPlatos = categorias.reduce((s, g) => s + g.platos.length, 0);
-  const totalConPrecio = categorias.reduce(
-    (s, g) => s + g.platos.filter((p) => p.precio).length,
+  // FIX: moneda viene del campo plano menu.moneda (antes erróneo: menu.restaurante.moneda)
+  const moneda = menu?.moneda || "COP";
+  const totalPlatos = categorias.reduce(
+    (s, c) => s + (c.platos?.length ?? 0),
     0,
   );
 
@@ -609,7 +545,6 @@ function TabMenu({ restauranteId }) {
       className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
       style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
     >
-      {/* Header */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-stone-100">
         <div
           className="w-8 h-8 rounded-xl flex items-center justify-center"
@@ -641,21 +576,16 @@ function TabMenu({ restauranteId }) {
               Sin menú configurado
             </p>
             <p className="text-xs font-dm text-stone-400">
-              El gerente debe crear las categorías y platos
+              El gerente debe crear los platos con precio vigente
             </p>
           </div>
         ) : (
           <>
-            {/* Stats */}
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: "Categorías", value: categorias.length, icon: Tag },
                 { label: "Platos", value: totalPlatos, icon: UtensilsCrossed },
-                {
-                  label: "Con precio",
-                  value: totalConPrecio,
-                  icon: DollarSign,
-                },
+                { label: "Moneda", value: moneda, icon: DollarSign },
               ].map((s) => (
                 <div
                   key={s.label}
@@ -682,7 +612,6 @@ function TabMenu({ restauranteId }) {
               ))}
             </div>
 
-            {/* Banner */}
             <div
               className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border"
               style={{ background: `${G[50]}99`, borderColor: G[100] }}
@@ -693,12 +622,11 @@ function TabMenu({ restauranteId }) {
               </p>
             </div>
 
-            {/* Acordeones */}
             <div className="space-y-2">
-              {categorias.map((grupo) => (
+              {categorias.map((cat) => (
                 <CategoriaAccordion
-                  key={grupo.categoria.id}
-                  grupo={grupo}
+                  key={cat.categoriaId}
+                  categoria={cat}
                   moneda={moneda}
                 />
               ))}
@@ -717,21 +645,15 @@ function ModalCrearGerente({ restaurante, onClose, onCreado }) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/20 backdrop-blur-sm"
         style={{ zIndex: -1 }}
       />
-
-      {/* Panel */}
       <div
         className="relative w-full max-w-lg rounded-2xl bg-white border border-stone-200 overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Barra de color */}
         <div className="h-1" style={{ background: G[900] }} />
-
-        {/* Header */}
         <div className="px-5 py-4 border-b border-stone-100">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -764,8 +686,6 @@ function ModalCrearGerente({ restaurante, onClose, onCreado }) {
             </button>
           </div>
         </div>
-
-        {/* Formulario */}
         <div className="p-5 max-h-[75vh] overflow-y-auto">
           <CrearGerenteForm
             restaurante={restaurante}
@@ -840,7 +760,6 @@ function TabGerente({ restaurante }) {
     setToggling(false);
   };
 
-  // ── Loading ───────────────────────────────────────────────────────────
   if (loading)
     return (
       <div className="space-y-3">
@@ -848,10 +767,8 @@ function TabGerente({ restaurante }) {
       </div>
     );
 
-  // ── Render único con modal siempre montable ────────────────────────────
   return (
     <>
-      {/* ── Sin gerente ─────────────────────────────────────────────── */}
       {!gerente && (
         <div
           className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
@@ -897,13 +814,11 @@ function TabGerente({ restaurante }) {
         </div>
       )}
 
-      {/* ── Con gerente ─────────────────────────────────────────────── */}
       {gerente && (
         <div
           className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
         >
-          {/* Header */}
           <div className="flex items-center gap-3 px-5 py-4 border-b border-stone-100">
             <div
               className="w-8 h-8 rounded-xl flex items-center justify-center"
@@ -930,7 +845,6 @@ function TabGerente({ restaurante }) {
           </div>
 
           <div className="p-5 space-y-4">
-            {/* Avatar + nombre */}
             <div className="flex items-center gap-4">
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold font-dm shrink-0"
@@ -951,90 +865,62 @@ function TabGerente({ restaurante }) {
                   {gerente.nombre} {gerente.apellido}
                 </p>
                 <p className="text-xs font-dm text-stone-400 mt-0.5">
-                  Gerente Local · RestoHub
+                  Gerente Local · {restaurante.nombre}
                 </p>
               </div>
             </div>
 
             <div className="h-px bg-stone-100" />
 
-            {/* Email */}
-            <div className="flex items-center gap-3">
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                style={{ background: G[50] }}
-              >
-                <Mail size={12} style={{ color: G[300] }} />
-              </div>
-              <span className="text-xs font-dm font-semibold text-stone-400 w-20 shrink-0">
-                Email
-              </span>
-              <a
-                href={`mailto:${gerente.email}`}
-                className="text-sm font-dm text-stone-700 hover:underline truncate"
-              >
-                {gerente.email}
-              </a>
-            </div>
-
-            {/* Teléfono — solo si existe */}
-            {gerente.telefono && (
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: G[50] }}
-                >
-                  <Phone size={12} style={{ color: G[300] }} />
+            {[
+              {
+                icon: Mail,
+                label: "Email",
+                value: gerente.email,
+                href: `mailto:${gerente.email}`,
+              },
+              gerente.telefono && {
+                icon: Phone,
+                label: "Teléfono",
+                value: gerente.telefono,
+                href: `tel:${gerente.telefono}`,
+              },
+              gerente.documento && {
+                icon: CreditCard,
+                label: "Documento",
+                value: gerente.documento,
+              },
+              { icon: ShieldCheck, label: "Rol", value: "Gerente Local" },
+            ]
+              .filter(Boolean)
+              .map((item) => (
+                <div key={item.label} className="flex items-center gap-3">
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background: G[50] }}
+                  >
+                    <item.icon size={12} style={{ color: G[300] }} />
+                  </div>
+                  <span className="text-xs font-dm font-semibold text-stone-400 w-20 shrink-0">
+                    {item.label}
+                  </span>
+                  {item.href ? (
+                    <a
+                      href={item.href}
+                      className="text-sm font-dm text-stone-700 hover:underline truncate"
+                    >
+                      {item.value}
+                    </a>
+                  ) : (
+                    <span className="text-sm font-dm text-stone-700">
+                      {item.value}
+                    </span>
+                  )}
                 </div>
-                <span className="text-xs font-dm font-semibold text-stone-400 w-20 shrink-0">
-                  Teléfono
-                </span>
-                <a
-                  href={`tel:${gerente.telefono}`}
-                  className="text-sm font-dm text-stone-700 hover:underline"
-                >
-                  {gerente.telefono}
-                </a>
-              </div>
-            )}
-
-            {/* Documento — solo si existe */}
-            {gerente.documento && (
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: G[50] }}
-                >
-                  <CreditCard size={12} style={{ color: G[300] }} />
-                </div>
-                <span className="text-xs font-dm font-semibold text-stone-400 w-20 shrink-0">
-                  Documento
-                </span>
-                <span className="text-sm font-dm text-stone-700">
-                  {gerente.documento}
-                </span>
-              </div>
-            )}
-
-            {/* Rol */}
-            <div className="flex items-center gap-3">
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                style={{ background: G[50] }}
-              >
-                <ShieldCheck size={12} style={{ color: G[300] }} />
-              </div>
-              <span className="text-xs font-dm font-semibold text-stone-400 w-20 shrink-0">
-                Rol
-              </span>
-              <span className="text-sm font-dm text-stone-700">
-                Gerente Local
-              </span>
-            </div>
+              ))}
 
             <div className="h-px bg-stone-100" />
 
-            {/* Desactivar */}
             <button
               onClick={handleDesactivar}
               disabled={toggling}
@@ -1054,14 +940,12 @@ function TabGerente({ restaurante }) {
             </button>
 
             <p className="text-[11px] font-dm text-stone-400 text-center">
-              Solo desactiva si el gerente fue reemplazado. Podrás asignar uno
-              nuevo después.
+              Solo desactiva si el gerente fue reemplazado.
             </p>
           </div>
         </div>
       )}
 
-      {/* ── Modal crear gerente — siempre accesible ──────────────────── */}
       {modalCrear && (
         <ModalCrearGerente
           restaurante={restaurante}
@@ -1139,7 +1023,6 @@ export default function RestauranteDetail() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      {/* Breadcrumb */}
       <Breadcrumb
         items={[
           { label: "Restaurantes", onClick: () => navigate("/restaurantes") },
@@ -1148,7 +1031,6 @@ export default function RestauranteDetail() {
       />
 
       <div className="grid grid-cols-12 gap-6">
-        {/* ── Columna izquierda: Hero sticky ─────────────────────────── */}
         <div className="col-span-12 lg:col-span-5">
           <div className="lg:sticky lg:top-6">
             <RestauranteHero
@@ -1160,9 +1042,7 @@ export default function RestauranteDetail() {
           </div>
         </div>
 
-        {/* ── Columna derecha: tabs + contenido ───────────────────────── */}
         <div className="col-span-12 lg:col-span-7 space-y-4">
-          {/* Selector de tabs */}
           <div className="flex items-center gap-1 bg-white border border-stone-200 rounded-xl p-1 shadow-sm w-fit">
             {[
               { key: "info", label: "Información", icon: Info },
@@ -1184,14 +1064,12 @@ export default function RestauranteDetail() {
             ))}
           </div>
 
-          {/* Contenido */}
           {tab === "info" && <TabInfo r={r} />}
           {tab === "menu" && <TabMenu restauranteId={id} />}
           {tab === "gerente" && <TabGerente restaurante={r} />}
         </div>
       </div>
 
-      {/* Modal editar */}
       {editando && (
         <EditarModal
           r={r}

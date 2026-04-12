@@ -25,7 +25,7 @@ import {
   ACTIVAR_RESTAURANTE,
   DESACTIVAR_RESTAURANTE,
   ACTUALIZAR_RESTAURANTE,
-} from "../../graphql/operations";
+} from "./graphql/operations";
 
 const G = {
   50: "#DAF1DE",

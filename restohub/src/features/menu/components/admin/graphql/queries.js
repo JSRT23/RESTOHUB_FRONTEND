@@ -1,13 +1,18 @@
-// src/features/menu/graphql/queries.js
-// Queries del GERENTE — ingredientes, platos, precios
+// src/features/menu/components/admin/graphql/queries.js
+// Queries del ADMIN_CENTRAL para ingredientes, platos y precios.
+// El admin ve todos los ingredientes y platos (globales + de cualquier restaurante).
+// restauranteId se incluye en el return para saber si son globales (null) o scoped.
 // Las queries de restaurante están en operations.js
-// Las queries de categorías (con descripcion) están en categorias.operations.js
+// Las queries de categorías están en categorias.operations.js
 import { gql } from "@apollo/client";
 
+// Todos los ingredientes — admin ve globales y de todos los restaurantes.
+// restauranteId=null → global, restauranteId=UUID → del restaurante.
 export const GET_INGREDIENTES = gql`
-  query GetIngredientes($activo: Boolean) {
-    ingredientes(activo: $activo) {
+  query GetIngredientes($activo: Boolean, $restauranteId: ID) {
+    ingredientes(activo: $activo, restauranteId: $restauranteId) {
       id
+      restauranteId
       nombre
       unidadMedida
       descripcion
@@ -16,10 +21,17 @@ export const GET_INGREDIENTES = gql`
   }
 `;
 
+// Todos los platos — admin ve globales y de todos los restaurantes.
+// restauranteId=null → global, restauranteId=UUID → del restaurante.
 export const GET_PLATOS = gql`
-  query GetPlatos($activo: Boolean, $categoriaId: ID) {
-    platos(activo: $activo, categoriaId: $categoriaId) {
+  query GetPlatos($activo: Boolean, $categoriaId: ID, $restauranteId: ID) {
+    platos(
+      activo: $activo
+      categoriaId: $categoriaId
+      restauranteId: $restauranteId
+    ) {
       id
+      restauranteId
       nombre
       descripcion
       categoriaId
@@ -35,6 +47,7 @@ export const GET_PLATO = gql`
   query GetPlato($id: ID!) {
     plato(id: $id) {
       id
+      restauranteId
       nombre
       descripcion
       categoriaId
@@ -82,7 +95,8 @@ export const GET_PRECIOS = gql`
   }
 `;
 
-// Menu público del restaurante (para vista pública y admin en solo lectura)
+// Vista pública del menú de un restaurante — solo lectura para el admin.
+// Usa la estructura REAL del gateway (MenuRestauranteType): campos planos.
 export const GET_MENU_RESTAURANTE_PUBLICO = gql`
   query GetMenuRestaurantePublico($restauranteId: ID!) {
     menuRestaurante(restauranteId: $restauranteId) {

@@ -1,4 +1,7 @@
-// src/features/menu/components/MenuPublico.jsx
+// src/features/menu/components/admin/MenuPublico.jsx
+// FIX: usa GET_MENU_RESTAURANTE_PUBLICO desde ./graphql/queries
+//      (no GET_MENU_RESTAURANTE que venía de queries pero con estructura incorrecta)
+//      La estructura del schema es plana: restauranteId, nombre, moneda (no menu.restaurante.*)
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@apollo/client/react";
 import {
@@ -10,9 +13,8 @@ import {
   MapPin,
   Tag,
   AlertCircle,
-  Clock,
 } from "lucide-react";
-import { GET_MENU_RESTAURANTE } from "../../graphql/queries";
+import { GET_MENU_RESTAURANTE_PUBLICO } from "./graphql/queries";
 import { Skeleton, Badge } from "../../../../shared/components/ui";
 
 const fmt = (v, moneda = "COP") =>
@@ -26,7 +28,6 @@ const fmt = (v, moneda = "COP") =>
 function PlatoCard({ plato }) {
   return (
     <div className="group flex gap-4 p-4 bg-white rounded-2xl border border-stone-200 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200 cursor-default">
-      {/* Imagen */}
       <div className="w-20 h-20 rounded-xl overflow-hidden bg-stone-100 border border-stone-200 shrink-0 flex items-center justify-center">
         {plato.imagen ? (
           <img
@@ -42,7 +43,6 @@ function PlatoCard({ plato }) {
         )}
       </div>
 
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <h3 className="font-playfair text-stone-900 font-semibold text-base leading-tight">
           {plato.nombre}
@@ -52,7 +52,6 @@ function PlatoCard({ plato }) {
         </p>
       </div>
 
-      {/* Precio */}
       <div className="text-right shrink-0 flex flex-col items-end justify-between">
         <p className="font-playfair text-amber-600 font-bold text-xl">
           {fmt(plato.precio, plato.moneda)}
@@ -66,10 +65,10 @@ function PlatoCard({ plato }) {
 }
 
 // ── CategoriaSection ───────────────────────────────────────────────────────
+// FIX: usa categoriaId (campo plano del schema) para el id del anchor
 function CategoriaSection({ categoria }) {
   return (
     <section id={`cat-${categoria.categoriaId}`}>
-      {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <div className="w-8 h-8 rounded-xl bg-amber-500 flex items-center justify-center shrink-0 shadow-sm shadow-amber-200">
           <Tag size={14} className="text-white" />
@@ -88,6 +87,7 @@ function CategoriaSection({ categoria }) {
 
       <div className="space-y-3">
         {categoria.platos.map((p) => (
+          // FIX: usa platoId (campo plano) como key
           <PlatoCard key={p.platoId} plato={p} />
         ))}
       </div>
@@ -99,7 +99,8 @@ function CategoriaSection({ categoria }) {
 export default function MenuPublico() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data, loading, error } = useQuery(GET_MENU_RESTAURANTE, {
+  // FIX: usa GET_MENU_RESTAURANTE_PUBLICO (estructura plana correcta)
+  const { data, loading, error } = useQuery(GET_MENU_RESTAURANTE_PUBLICO, {
     variables: { restauranteId: id },
   });
 
@@ -140,6 +141,7 @@ export default function MenuPublico() {
       </div>
     );
 
+  // FIX: menu ahora tiene campos planos correctos del schema
   const menu = data.menuRestaurante;
   const totalPlatos = menu.categorias.reduce((a, c) => a + c.platos.length, 0);
 
@@ -166,7 +168,6 @@ export default function MenuPublico() {
 
       {/* Hero */}
       <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-stone-900 to-stone-800 text-white">
-        {/* Patrón decorativo */}
         <div
           className="absolute inset-0 opacity-10"
           style={{
@@ -176,7 +177,6 @@ export default function MenuPublico() {
         />
 
         <div className="relative p-7 sm:p-10 flex flex-col sm:flex-row items-start sm:items-center gap-6">
-          {/* Avatar */}
           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30 shrink-0">
             <span className="font-playfair text-white font-black text-2xl sm:text-3xl">
               {menu.nombre[0]}
@@ -190,6 +190,7 @@ export default function MenuPublico() {
             <h1 className="font-playfair text-white text-3xl sm:text-4xl font-bold leading-tight mb-3">
               {menu.nombre}
             </h1>
+            {/* FIX: usa menu.ciudad, menu.pais, menu.moneda (campos planos) */}
             <div className="flex flex-wrap gap-4 text-white/60 text-xs font-dm">
               <span className="flex items-center gap-1.5">
                 <MapPin size={11} />
@@ -206,7 +207,6 @@ export default function MenuPublico() {
             </div>
           </div>
 
-          {/* Big stat */}
           <div className="sm:text-right">
             <p className="font-playfair text-5xl font-bold text-amber-400">
               {totalPlatos}

@@ -1,4 +1,6 @@
-// src/features/menu/graphql/categorias.operations.js
+// src/features/menu/components/admin/graphql/categorias.operations.js
+// Queries y mutations de CATEGORÍAS — solo admin_central.
+// El gerente usa GET_CATEGORIAS_GERENTE en Gerente/graphql/operations.js (solo lectura).
 import { gql } from "@apollo/client";
 
 export const GET_CATEGORIAS = gql`
@@ -38,6 +40,16 @@ export const ACTUALIZAR_CATEGORIA = gql`
         orden
         activo
       }
+    }
+  }
+`;
+
+// Faltaba en el archivo original — completa el ciclo activo/inactivo
+export const ACTIVAR_CATEGORIA = gql`
+  mutation ActivarCategoria($id: ID!) {
+    activarCategoria(id: $id) {
+      ok
+      error
     }
   }
 `;

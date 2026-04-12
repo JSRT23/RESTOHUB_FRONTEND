@@ -1,6 +1,10 @@
 // src/features/gerente/menu/platos/PlatoDetailModal.jsx
 // Modal que muestra el detalle completo de un plato:
 // header, edición inline, ingredientes y precios.
+//
+// FIX: usa GET_INGREDIENTES_DISPONIBLES (disponibles=restauranteId) en lugar
+// de GET_INGREDIENTES_GERENTE sin filtro, para que el gerente vea globales
+// + los propios de su restaurante al agregar ingredientes.
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
@@ -9,7 +13,7 @@ import { Pencil, ToggleLeft, ToggleRight, ImageOff } from "lucide-react";
 import { Skeleton } from "../../../../../shared/components/ui";
 import {
   GET_PLATO_DETALLE,
-  GET_INGREDIENTES_GERENTE,
+  GET_INGREDIENTES_DISPONIBLES,
   ACTIVAR_PLATO,
   DESACTIVAR_PLATO,
 } from "../graphql/operations";
@@ -29,8 +33,10 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
     fetchPolicy: "cache-and-network",
   });
 
-  const { data: iData } = useQuery(GET_INGREDIENTES_GERENTE, {
-    variables: { activo: true },
+  // FIX: "disponibles" trae globales + propios del restaurante
+  const { data: iData } = useQuery(GET_INGREDIENTES_DISPONIBLES, {
+    variables: { disponibles: restauranteId, activo: true },
+    skip: !restauranteId,
   });
 
   const [activarPlato] = useMutation(ACTIVAR_PLATO, {
@@ -54,6 +60,7 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
   if (!plato) return null;
 
   const todosIngredientes = iData?.ingredientes ?? [];
+  // Filtrar los que ya están en el plato para no ofrecerlos de nuevo
   const disponibles = todosIngredientes.filter(
     (i) => !plato.ingredientes?.some((s) => s.ingredienteId === i.id),
   );

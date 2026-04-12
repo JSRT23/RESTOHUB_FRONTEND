@@ -1,4 +1,4 @@
-// src/features/gerente/menu/GCategoriasList.jsx
+// src/features/components/gerente/menu/GCategoriasList.jsx
 // El gerente solo puede VER las categorías globales.
 // Las crea y gestiona únicamente el admin_central.
 // Esta vista le permite saber qué categorías hay para asignarlas a sus platos.

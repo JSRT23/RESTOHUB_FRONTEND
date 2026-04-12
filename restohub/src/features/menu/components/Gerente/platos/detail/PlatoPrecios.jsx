@@ -1,5 +1,9 @@
 // src/features/gerente/menu/platos/detail/PlatoPrecios.jsx
 // Lista, crea y activa/desactiva precios de un plato.
+//
+// FIX: normaliza fechaInicio a formato YYYY-MM-DD (date-only) antes de
+// enviar al backend. El input datetime-local retorna "YYYY-MM-DDTHH:mm"
+// pero el backend espera solo la fecha.
 
 import { useState } from "react";
 import { useMutation } from "@apollo/client/react";
@@ -14,6 +18,9 @@ import {
 } from "../../graphql/operations";
 import { G, fmt, inputCls, fi, fb } from "../platoUtils";
 
+// Normaliza "2026-04-15T08:00" → "2026-04-15"
+const toDateOnly = (v) => (v ? v.split("T")[0] : v);
+
 export default function PlatoPrecios({
   platoId,
   restauranteId,
@@ -23,6 +30,7 @@ export default function PlatoPrecios({
   const [showForm, setShowForm] = useState(false);
   const [precioForm, setPrecioForm] = useState({ valor: "", fechaInicio: "" });
   const [toggling, setToggling] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const [crearPrecio] = useMutation(CREAR_PRECIO_PLATO, {
     refetchQueries: ["GetPlatoDetalle", "GetPlatosGerente"],
@@ -44,33 +52,43 @@ export default function PlatoPrecios({
       });
       return;
     }
-    const { data } = await crearPrecio({
-      variables: {
-        platoId,
-        restauranteId,
-        precio: parseFloat(precioForm.valor),
-        fechaInicio: precioForm.fechaInicio,
-      },
-    });
-    if (!data?.crearPrecioPlato?.ok) {
+    setSaving(true);
+    try {
+      const { data } = await crearPrecio({
+        variables: {
+          platoId,
+          restauranteId,
+          precio: parseFloat(precioForm.valor),
+          // FIX: normalizar a YYYY-MM-DD
+          fechaInicio: toDateOnly(precioForm.fechaInicio),
+        },
+      });
+      if (!data?.crearPrecioPlato?.ok) {
+        throw new Error(data?.crearPrecioPlato?.error || "Error desconocido");
+      }
+      setPrecioForm({ valor: "", fechaInicio: "" });
+      setShowForm(false);
+    } catch (e) {
       Swal.fire({
         background: "#fff",
         icon: "error",
         title: "Error al guardar precio",
-        text: data?.crearPrecioPlato?.error,
+        text: e.message,
         confirmButtonColor: G[900],
       });
-      return;
+    } finally {
+      setSaving(false);
     }
-    setPrecioForm({ valor: "", fechaInicio: "" });
-    setShowForm(false);
   };
 
   const handleToggle = async (p) => {
     setToggling(p.id);
-    const mutation = p.activo ? desactivarPrecio : activarPrecio;
-    await mutation({ variables: { id: p.id } });
-    setToggling(null);
+    try {
+      const mutation = p.activo ? desactivarPrecio : activarPrecio;
+      await mutation({ variables: { id: p.id } });
+    } finally {
+      setToggling(null);
+    }
   };
 
   return (
@@ -101,7 +119,7 @@ export default function PlatoPrecios({
                   color: p.estaVigente && p.activo ? G[500] : "#9ca3af",
                 }}
               >
-                {fmt(p.precio, p.moneda)}
+                {fmt(p.precio, p.moneda || moneda)}
               </p>
               <p className="text-[10px] font-dm text-stone-400">
                 desde{" "}
@@ -149,7 +167,11 @@ export default function PlatoPrecios({
                         borderColor: "#fecaca",
                         color: "#dc2626",
                       }
-                    : { background: G[50], borderColor: G[100], color: G[300] }
+                    : {
+                        background: G[50],
+                        borderColor: G[100],
+                        color: G[300],
+                      }
                 }
               >
                 {toggling === p.id ? (
@@ -192,8 +214,9 @@ export default function PlatoPrecios({
                 <label className="text-xs font-dm text-stone-400">
                   Vigente desde
                 </label>
+                {/* Usamos type="date" para obtener YYYY-MM-DD directamente */}
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={precioForm.fechaInicio}
                   onChange={(e) =>
                     setPrecioForm((f) => ({
@@ -227,9 +250,11 @@ export default function PlatoPrecios({
               </button>
               <button
                 onClick={handleCrear}
+                disabled={saving}
                 style={{ background: G[900] }}
-                className="px-4 py-1.5 rounded-xl text-xs font-dm font-bold text-white hover:opacity-90 transition-all"
+                className="flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-dm font-bold text-white hover:opacity-90 disabled:opacity-50 transition-all"
               >
+                {saving && <Loader2 size={10} className="animate-spin" />}
                 Guardar precio
               </button>
             </div>

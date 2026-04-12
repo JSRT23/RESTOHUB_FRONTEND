@@ -1,7 +1,12 @@
-// src/features/restaurantes/graphql/operations.js
+// src/features/menu/components/admin/graphql/operations.js
+// Queries y mutations para ADMIN_CENTRAL
+// - Restaurantes: CRUD completo
+// - Gerente: registro auth + empleado staff
+// - Menu: vista de solo lectura del menú de un restaurante
 import { gql } from "@apollo/client";
 
-// ── Queries ────────────────────────────────────────────────────────────────
+// ── Queries — Restaurantes ─────────────────────────────────────────────────
+
 export const GET_RESTAURANTES = gql`
   query GetRestaurantes($activo: Boolean) {
     restaurantes(activo: $activo) {
@@ -26,42 +31,41 @@ export const GET_RESTAURANTE = gql`
       direccion
       moneda
       activo
+      fechaCreacion
     }
   }
 `;
 
+// Menú del restaurante — usa la estructura REAL del gateway (MenuRestauranteType)
+// restauranteId, nombre, ciudad, pais, moneda son campos planos
+// categorias[categoriaId, nombre, orden, platos[platoId, nombre, descripcion, imagen, precio, moneda]]
 export const GET_MENU_RESTAURANTE = gql`
   query GetMenuRestaurante($restauranteId: ID!) {
     menuRestaurante(restauranteId: $restauranteId) {
-      restaurante {
-        id
-        nombre
-        moneda
-      }
+      restauranteId
+      nombre
+      ciudad
+      pais
+      moneda
       categorias {
-        categoria {
-          id
+        categoriaId
+        nombre
+        orden
+        platos {
+          platoId
           nombre
           descripcion
-        }
-        platos {
-          plato {
-            id
-            nombre
-            descripcion
-            activo
-          }
-          precio {
-            precio
-            vigente_desde
-          }
+          imagen
+          precio
+          moneda
         }
       }
     }
   }
 `;
 
-// Gerente activo del restaurante — usa StaffQuery.gerente_restaurante
+// Gerente activo del restaurante — usa gerenteRestaurante del StaffQuery
+// Devuelve el primer EmpleadoType con rol gerente activo en ese restaurante
 export const GET_GERENTE_RESTAURANTE = gql`
   query GetGerenteRestaurante($restauranteId: ID!) {
     gerenteRestaurante(restauranteId: $restauranteId) {
@@ -78,7 +82,8 @@ export const GET_GERENTE_RESTAURANTE = gql`
   }
 `;
 
-// ── Mutations restaurante ──────────────────────────────────────────────────
+// ── Mutations — Restaurante (admin_central) ────────────────────────────────
+
 export const CREAR_RESTAURANTE = gql`
   mutation CrearRestaurante(
     $nombre: String!
@@ -158,7 +163,9 @@ export const DESACTIVAR_RESTAURANTE = gql`
   }
 `;
 
-// ── Mutations auth — crear usuario gerente ────────────────────────────────
+// ── Mutations — Auth: crear usuario gerente ────────────────────────────────
+// rol hardcodeado como "gerente_local" — el admin no puede elegir otro rol aquí
+
 export const REGISTRAR_GERENTE = gql`
   mutation RegistrarGerente(
     $email: String!
@@ -188,10 +195,10 @@ export const REGISTRAR_GERENTE = gql`
   }
 `;
 
-// ── Mutations staff — crear empleado gerente ──────────────────────────────
-// Usa CrearEmpleado del StaffMutation (ya existe en el gateway)
-// Campos exactos del staff_service: nombre, apellido, documento,
-// email, rol, pais (código 2 letras), restaurante (UUID)
+// ── Mutations — Staff: crear empleado gerente ──────────────────────────────
+// El campo "restaurante" recibe el UUID del menu_service
+// El staff_service lo mapea internamente al RestauranteLocal correspondiente
+
 export const CREAR_EMPLEADO_STAFF = gql`
   mutation CrearEmpleadoStaff(
     $nombre: String!
@@ -228,7 +235,8 @@ export const CREAR_EMPLEADO_STAFF = gql`
   }
 `;
 
-// ── Mutations empleado — activar/desactivar (admin_central) ───────────────
+// ── Mutations — Staff: activar/desactivar empleado (solo admin_central) ───
+
 export const ACTIVAR_EMPLEADO = gql`
   mutation ActivarEmpleado($empleadoId: ID!) {
     activarEmpleado(empleadoId: $empleadoId) {

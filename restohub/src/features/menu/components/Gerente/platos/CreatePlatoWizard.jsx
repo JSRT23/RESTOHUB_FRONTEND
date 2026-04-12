@@ -1,27 +1,32 @@
-// src/features/gerente/menu/platos/CreatePlatoWizard.jsx
-// Wizard de 3 pasos: Info → Precio → Confirmar
-// Los pasos son componentes externos para evitar el bug de foco perdido.
+// src/features/menu/components/Gerente/platos/CreatePlatoWizard.jsx
+//
+// FIX: usa GET_INGREDIENTES_DISPONIBLES (disponibles=restauranteId) para que
+// el wizard muestre ingredientes globales + propios del restaurante.
+// FIX: normaliza fechaInicio a formato ISO date-only (YYYY-MM-DD) antes
+// de enviarlo al backend, ya que el input datetime-local retorna "YYYY-MM-DDTHH:mm".
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { ArrowLeft, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import Swal from "sweetalert2";
-
 import { StepIndicator } from "../../../../../shared/components/ui";
 import {
   GET_CATEGORIAS_GERENTE,
-  GET_INGREDIENTES_GERENTE,
+  GET_INGREDIENTES_DISPONIBLES,
   CREAR_PLATO,
   AGREGAR_INGREDIENTE_PLATO,
   CREAR_PRECIO_PLATO,
 } from "../graphql/operations";
-
 import WizardStepInfo from "./wizard/WizardStepInfo";
 import WizardStepPrecio from "./wizard/WizardStepPrecio";
 import WizardStepConfirmar from "./wizard/WizardStepConfirmar";
 import { G, fmt } from "./platoUtils";
 
 const STEPS = ["Info básica", "Precio", "Confirmar"];
+
+// Normaliza "2026-04-15T08:00" → "2026-04-15"
+// Si ya es solo fecha, la retorna igual.
+const toDateOnly = (v) => (v ? v.split("T")[0] : v);
 
 export default function CreatePlatoWizard({
   onClose,
@@ -43,8 +48,11 @@ export default function CreatePlatoWizard({
   const { data: cData } = useQuery(GET_CATEGORIAS_GERENTE, {
     variables: { activo: true },
   });
-  const { data: iData } = useQuery(GET_INGREDIENTES_GERENTE, {
-    variables: { activo: true },
+
+  // FIX: "disponibles" trae globales + propios del restaurante
+  const { data: iData } = useQuery(GET_INGREDIENTES_DISPONIBLES, {
+    variables: { disponibles: restauranteId, activo: true },
+    skip: !restauranteId,
   });
 
   const [crearPlato] = useMutation(CREAR_PLATO, {
@@ -57,25 +65,25 @@ export default function CreatePlatoWizard({
 
   const categorias = cData?.categorias ?? [];
   const ingredientes = iData?.ingredientes ?? [];
-
   const canNext0 = form.nombre.trim() && form.descripcion.trim();
 
   const handleFinalizar = async () => {
     setCreating(true);
     try {
-      // 1. Crear plato
+      // 1. Crear el plato
       const { data: d1 } = await crearPlato({
         variables: {
           nombre: form.nombre,
           descripcion: form.descripcion,
           categoriaId: form.categoriaId || null,
           imagen: form.imagen || null,
+          restauranteId,
         },
       });
       if (!d1.crearPlato.ok) throw new Error(d1.crearPlato.error);
       const platoId = d1.crearPlato.plato?.id;
 
-      // 2. Ingredientes (en paralelo)
+      // 2. Agregar ingredientes en paralelo
       if (platoId && ings.length > 0) {
         await Promise.all(
           ings.map((i) =>
@@ -90,16 +98,20 @@ export default function CreatePlatoWizard({
         );
       }
 
-      // 3. Precio (solo si tiene valor Y fecha)
+      // 3. Crear precio — FIX: normalizar fecha a YYYY-MM-DD
       if (platoId && precio.valor && precio.fechaInicio) {
-        await crearPrecio({
+        const { data: d3 } = await crearPrecio({
           variables: {
             platoId,
             restauranteId,
             precio: parseFloat(precio.valor),
-            fechaInicio: precio.fechaInicio,
+            fechaInicio: toDateOnly(precio.fechaInicio),
           },
         });
+        if (!d3?.crearPrecioPlato?.ok) {
+          // El plato ya fue creado, avisamos del precio pero no revertimos
+          console.warn("Precio no guardado:", d3?.crearPrecioPlato?.error);
+        }
       }
 
       await Swal.fire({
@@ -107,10 +119,11 @@ export default function CreatePlatoWizard({
         icon: "success",
         draggable: true,
         title: "¡Plato creado!",
-        html: `<span style="font-family:'DM Sans';color:#78716c">
-          <b>${form.nombre}</b> — ${ings.length} ingrediente(s)
-          ${precio.valor && precio.fechaInicio ? ` · ${fmt(parseFloat(precio.valor), moneda)}` : " · Sin precio aún"}
-        </span>`,
+        html: `<span style="font-family:'DM Sans';color:#78716c"><b>${form.nombre}</b> — ${ings.length} ingrediente(s)${
+          precio.valor && precio.fechaInicio
+            ? ` · ${fmt(parseFloat(precio.valor), moneda)}`
+            : " · Sin precio aún"
+        }</span>`,
         confirmButtonColor: G[900],
         timer: 3000,
         timerProgressBar: true,
@@ -132,7 +145,6 @@ export default function CreatePlatoWizard({
   return (
     <div className="space-y-6">
       <StepIndicator steps={STEPS} current={step} />
-
       <div
         className="bg-white rounded-2xl border border-stone-200 p-6"
         style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
@@ -164,8 +176,6 @@ export default function CreatePlatoWizard({
           />
         )}
       </div>
-
-      {/* Navegación */}
       <div className="flex items-center justify-between">
         <button
           onClick={() => (step === 0 ? onClose() : setStep((s) => s - 1))}
@@ -174,7 +184,6 @@ export default function CreatePlatoWizard({
           <ArrowLeft size={14} />
           {step === 0 ? "Cancelar" : "Atrás"}
         </button>
-
         {step < 2 ? (
           <button
             onClick={() => setStep((s) => s + 1)}

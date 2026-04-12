@@ -1,5 +1,8 @@
 // src/features/gerente/menu/platos/wizard/WizardStepPrecio.jsx
 // Paso 1: asignar precio inicial (opcional)
+//
+// FIX: usa type="date" en lugar de datetime-local para que el valor
+// sea YYYY-MM-DD directamente y no necesite normalización adicional.
 
 import { DollarSign } from "lucide-react";
 import { G, fmt, inputCls, fi, fb } from "../platoUtils";
@@ -42,8 +45,9 @@ export default function WizardStepPrecio({ precio, setPrecio, moneda }) {
           <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
             Vigente desde
           </label>
+          {/* FIX: type="date" retorna YYYY-MM-DD directamente */}
           <input
-            type="datetime-local"
+            type="date"
             value={precio.fechaInicio}
             onChange={(e) =>
               setPrecio((p) => ({ ...p, fechaInicio: e.target.value }))

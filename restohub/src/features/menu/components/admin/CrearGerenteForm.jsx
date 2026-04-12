@@ -22,10 +22,7 @@ import {
   Building2,
   ShieldCheck,
 } from "lucide-react";
-import {
-  REGISTRAR_GERENTE,
-  CREAR_EMPLEADO_STAFF,
-} from "../../graphql/operations";
+import { REGISTRAR_GERENTE, CREAR_EMPLEADO_STAFF } from "./graphql/operations";
 
 // ── Paleta ────────────────────────────────────────────────────────────────
 const G = {

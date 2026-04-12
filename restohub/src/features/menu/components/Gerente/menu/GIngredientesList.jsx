@@ -1,7 +1,4 @@
-// src/features/gerente/menu/GIngredientesList.jsx
-// Gestión de ingredientes para el gerente_local.
-// Puede: crear nuevos, editar nombre y descripción (NO unidadMedida), activar/desactivar.
-// No puede: eliminar, cambiar unidad de medida (generaría conflicto con inventario).
+// src/features/menu/components/Gerente/menu/GIngredientesList.jsx
 import { useState } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import {
@@ -12,8 +9,6 @@ import {
   ToggleLeft,
   ToggleRight,
   Loader2,
-  CheckCircle2,
-  XCircle,
   X,
 } from "lucide-react";
 import Swal from "sweetalert2";
@@ -30,6 +25,7 @@ import {
   Skeleton,
   EmptyState,
 } from "../../../../../shared/components/ui";
+import { useAuth } from "../../../../../app/auth/AuthContext";
 
 const G = {
   50: "#DAF1DE",
@@ -38,7 +34,6 @@ const G = {
   500: "#163832",
   900: "#051F20",
 };
-
 const UNIDADES = [
   { value: "kg", label: "Kilogramo (kg)" },
   { value: "g", label: "Gramo (g)" },
@@ -47,7 +42,6 @@ const UNIDADES = [
   { value: "und", label: "Unidad (und)" },
   { value: "por", label: "Porción (por)" },
 ];
-
 const fi = (e) => {
   e.target.style.borderColor = "transparent";
   e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
@@ -59,15 +53,13 @@ const fb = (e) => {
 const inputCls =
   "w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none transition-all shadow-sm";
 
-// ── Modal crear / editar ──────────────────────────────────────────────────
-function IngredienteModal({ ingrediente, onClose, onSaved }) {
+function IngredienteModal({ ingrediente, onClose, onSaved, restauranteId }) {
   const editando = !!ingrediente;
   const [form, setForm] = useState({
     nombre: ingrediente?.nombre || "",
     unidadMedida: ingrediente?.unidadMedida || "und",
     descripcion: ingrediente?.descripcion || "",
   });
-
   const [crear, { loading: lc }] = useMutation(CREAR_INGREDIENTE, {
     refetchQueries: ["GetIngredientesGerente"],
   });
@@ -97,11 +89,13 @@ function IngredienteModal({ ingrediente, onClose, onSaved }) {
       });
       res = data?.actualizarIngrediente;
     } else {
+      // CRÍTICO: pasa restauranteId para que el ingrediente quede asociado a este restaurante
       const { data } = await crear({
         variables: {
           nombre: form.nombre.trim(),
           unidadMedida: form.unidadMedida,
           descripcion: form.descripcion || null,
+          restauranteId,
         },
       });
       res = data?.crearIngrediente;
@@ -160,9 +154,7 @@ function IngredienteModal({ ingrediente, onClose, onSaved }) {
             <X size={14} />
           </button>
         </div>
-
         <div className="p-5 space-y-4">
-          {/* Nombre */}
           <div className="space-y-1.5">
             <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
               Nombre <span className="text-red-400">*</span>
@@ -170,15 +162,13 @@ function IngredienteModal({ ingrediente, onClose, onSaved }) {
             <input
               value={form.nombre}
               onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              placeholder="Ej: Carne Angus, Tomate, Harina..."
+              placeholder="Ej: Carne Angus, Tomate..."
               autoFocus
               className={inputCls}
               onFocus={fi}
               onBlur={fb}
             />
           </div>
-
-          {/* Unidad de medida — solo al crear */}
           {!editando && (
             <div className="space-y-1.5">
               <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
@@ -200,12 +190,10 @@ function IngredienteModal({ ingrediente, onClose, onSaved }) {
                 ))}
               </select>
               <p className="text-[11px] font-dm text-stone-400 pl-1">
-                ⚠ No podrás cambiar la unidad después de crear el ingrediente.
+                ⚠ No podrás cambiar la unidad después de crear.
               </p>
             </div>
           )}
-
-          {/* Si editando, mostrar unidad como info */}
           {editando && (
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-stone-50 border border-stone-200">
               <FlaskConical size={12} className="text-stone-400 shrink-0" />
@@ -222,8 +210,6 @@ function IngredienteModal({ ingrediente, onClose, onSaved }) {
               </span>
             </div>
           )}
-
-          {/* Descripción */}
           <div className="space-y-1.5">
             <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
               Descripción{" "}
@@ -236,15 +222,14 @@ function IngredienteModal({ ingrediente, onClose, onSaved }) {
               onChange={(e) =>
                 setForm({ ...form, descripcion: e.target.value })
               }
-              placeholder="Descripción breve o notas..."
               rows={2}
+              placeholder="Descripción breve..."
               className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none transition-all resize-none shadow-sm"
               onFocus={fi}
               onBlur={fb}
             />
           </div>
         </div>
-
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-stone-100 bg-stone-50">
           <button
             onClick={onClose}
@@ -267,11 +252,9 @@ function IngredienteModal({ ingrediente, onClose, onSaved }) {
   );
 }
 
-// ── Fila de ingrediente ────────────────────────────────────────────────────
 function IngredienteRow({ ing, onEdit, onToggle, toggling }) {
   return (
     <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-stone-50/60 transition-colors group">
-      {/* Icono */}
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
         style={{ background: ing.activo ? G[50] : "#f3f4f6" }}
@@ -281,8 +264,6 @@ function IngredienteRow({ ing, onEdit, onToggle, toggling }) {
           style={{ color: ing.activo ? G[300] : "#9ca3af" }}
         />
       </div>
-
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-dm font-semibold text-stone-800 truncate">
@@ -298,8 +279,6 @@ function IngredienteRow({ ing, onEdit, onToggle, toggling }) {
           </p>
         )}
       </div>
-
-      {/* Badge estado */}
       <span
         className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide shrink-0"
         style={
@@ -318,8 +297,6 @@ function IngredienteRow({ ing, onEdit, onToggle, toggling }) {
       >
         {ing.activo ? "ACTIVO" : "INACTIVO"}
       </span>
-
-      {/* Acciones */}
       <div className="flex items-center gap-1.5 shrink-0">
         <button
           onClick={() => onEdit(ing)}
@@ -354,14 +331,19 @@ function IngredienteRow({ ing, onEdit, onToggle, toggling }) {
   );
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
 export default function GIngredientesList() {
+  const { user } = useAuth();
+  const restauranteId = user?.restauranteId;
+
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState("todos");
-  const [modal, setModal] = useState(null); // null | "nuevo" | {ingrediente}
+  const [modal, setModal] = useState(null);
   const [toggling, setToggling] = useState(null);
 
+  // CRÍTICO: pasa restauranteId para ver solo ingredientes de este restaurante
   const { data, loading, refetch } = useQuery(GET_INGREDIENTES_GERENTE, {
+    variables: { restauranteId },
+    skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
   const [activar] = useMutation(ACTIVAR_INGREDIENTE, {
@@ -374,7 +356,6 @@ export default function GIngredientesList() {
   const todos = data?.ingredientes ?? [];
   const activos = todos.filter((i) => i.activo).length;
   const inactivos = todos.filter((i) => !i.activo).length;
-
   const filtered = todos
     .filter((i) => {
       const q = search.toLowerCase();
@@ -395,7 +376,7 @@ export default function GIngredientesList() {
         icon: "warning",
         draggable: true,
         title: "¿Desactivar ingrediente?",
-        html: `<span style="font-family:'DM Sans';color:#78716c">Los platos que usan <b>${ing.nombre}</b> quedarán sin este ingrediente en la receta visible.</span>`,
+        html: `<span style="font-family:'DM Sans';color:#78716c">Los platos que usan <b>${ing.nombre}</b> quedarán sin este ingrediente.</span>`,
         showCancelButton: true,
         confirmButtonColor: "#dc2626",
         cancelButtonColor: "#e2e8f0",
@@ -427,9 +408,13 @@ export default function GIngredientesList() {
     setToggling(null);
   };
 
-  const handleSaved = () => {
-    setModal(null);
-    refetch();
+  const fi = (e) => {
+    e.target.style.borderColor = "transparent";
+    e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
+  };
+  const fb = (e) => {
+    e.target.style.borderColor = "#e2e8f0";
+    e.target.style.boxShadow = "none";
   };
 
   return (
@@ -437,7 +422,7 @@ export default function GIngredientesList() {
       <PageHeader
         eyebrow="Gerente · Menú"
         title="Ingredientes"
-        description="Gestiona los ingredientes de tu restaurante. La unidad de medida no se puede cambiar tras crearlo."
+        description="Ingredientes de tu restaurante. La unidad de medida no se puede cambiar tras crearlo."
         action={
           <Button onClick={() => setModal("nuevo")} variant="primary" size="md">
             <Plus size={15} /> Nuevo ingrediente
@@ -445,7 +430,6 @@ export default function GIngredientesList() {
         }
       />
 
-      {/* Stats */}
       {!loading && todos.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">
           {[
@@ -482,7 +466,6 @@ export default function GIngredientesList() {
         </div>
       )}
 
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative max-w-sm flex-1">
           <Search
@@ -512,7 +495,6 @@ export default function GIngredientesList() {
         </div>
       </div>
 
-      {/* Lista */}
       {loading ? (
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
           {[...Array(5)].map((_, i) => (
@@ -520,14 +502,10 @@ export default function GIngredientesList() {
               key={i}
               className={`flex items-center gap-4 px-5 py-4 ${i < 4 ? "border-b border-stone-100" : ""}`}
             >
-              <Skeleton className="w-9 h-9 rounded-xl" />
+              <div className="w-9 h-9 rounded-xl bg-stone-100 animate-pulse" />
               <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-1/3" />
-                <Skeleton className="h-3 w-1/2" />
+                <div className="h-4 w-1/3 bg-stone-100 rounded animate-pulse" />
               </div>
-              <Skeleton className="h-6 w-20 rounded-full" />
-              <Skeleton className="w-8 h-8 rounded-xl" />
-              <Skeleton className="w-8 h-8 rounded-xl" />
             </div>
           ))}
         </div>
@@ -557,7 +535,6 @@ export default function GIngredientesList() {
           className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
         >
-          {/* Header tabla */}
           <div className="flex items-center gap-4 px-5 py-3 border-b border-stone-100 bg-stone-50/50">
             <div className="w-9 shrink-0" />
             <p className="flex-1 text-[10px] font-dm font-bold text-stone-400 uppercase tracking-wider">
@@ -598,8 +575,12 @@ export default function GIngredientesList() {
       {modal && (
         <IngredienteModal
           ingrediente={modal === "nuevo" ? null : modal}
+          restauranteId={restauranteId}
           onClose={() => setModal(null)}
-          onSaved={handleSaved}
+          onSaved={() => {
+            setModal(null);
+            refetch();
+          }}
         />
       )}
     </div>

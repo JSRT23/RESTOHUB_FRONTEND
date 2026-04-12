@@ -23,7 +23,7 @@ import {
   StepIndicator,
   Breadcrumb,
 } from "../../../../shared/components/ui";
-import { CREAR_RESTAURANTE } from "../../graphql/operations";
+import { CREAR_RESTAURANTE } from "./graphql/operations";
 import CrearGerenteForm from "./CrearGerenteForm";
 
 const G = {

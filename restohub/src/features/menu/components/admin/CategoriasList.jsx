@@ -1,4 +1,4 @@
-// src/features/menu/components/CategoriasList.jsx
+// src/features/menu/components/admin/CategoriasList.jsx
 import { useState } from "react";
 import Swal from "sweetalert2";
 import { useQuery, useMutation } from "@apollo/client/react";
@@ -23,8 +23,9 @@ import {
   GET_CATEGORIAS,
   CREAR_CATEGORIA,
   ACTUALIZAR_CATEGORIA,
+  ACTIVAR_CATEGORIA,
   DESACTIVAR_CATEGORIA,
-} from "../../graphql/categorias.operations";
+} from "./graphql/categorias.operations";
 
 const G = {
   50: "#DAF1DE",
@@ -283,6 +284,7 @@ function CategoriaRow({ cat, onEdit, onToggle, toggling }) {
         >
           <Pencil size={12} />
         </button>
+        {/* FIX: toggle real — usa ACTIVAR_CATEGORIA o DESACTIVAR_CATEGORIA según estado */}
         <button
           onClick={() => onToggle(cat)}
           disabled={toggling === cat.id}
@@ -320,6 +322,8 @@ export default function CategoriasList() {
   const { data, loading, refetch } = useQuery(GET_CATEGORIAS, {
     fetchPolicy: "cache-and-network",
   });
+  // FIX: ambas mutations disponibles — antes solo había desactivar
+  const [activar] = useMutation(ACTIVAR_CATEGORIA);
   const [desactivar] = useMutation(DESACTIVAR_CATEGORIA);
 
   const todas = data?.categorias || [];
@@ -357,6 +361,7 @@ export default function CategoriasList() {
     setToggling(cat.id);
     try {
       if (cat.activo) {
+        // FIX: usa DESACTIVAR_CATEGORIA real
         const { data } = await desactivar({ variables: { id: cat.id } });
         if (!data?.desactivarCategoria?.ok) {
           Swal.fire({
@@ -382,17 +387,31 @@ export default function CategoriasList() {
           });
         }
       } else {
-        // Reactivar — no hay mutation de activar en el backend, usamos actualizar sin cambios
-        // o simplemente refetch si el backend lo maneja de otra forma
-        Swal.fire({
-          background: "#fff",
-          icon: "info",
-          iconColor: G[300],
-          draggable: true,
-          title: "Sin mutation de activar",
-          text: "El backend solo tiene desactivarCategoria. Para reactivar, edita la categoría desde el panel de administración del backend.",
-          confirmButtonColor: G[900],
-        });
+        // FIX: ahora sí existe ACTIVAR_CATEGORIA — se puede reactivar desde el frontend
+        const { data } = await activar({ variables: { id: cat.id } });
+        if (!data?.activarCategoria?.ok) {
+          Swal.fire({
+            background: "#fff",
+            icon: "error",
+            iconColor: "#dc2626",
+            draggable: true,
+            title: "Error al activar",
+            text: data?.activarCategoria?.error || "No se pudo activar.",
+            confirmButtonColor: G[900],
+          });
+        } else {
+          Swal.fire({
+            background: "#fff",
+            icon: "success",
+            iconColor: G[300],
+            draggable: true,
+            title: "Categoría activada",
+            html: `<span style="font-family:'DM Sans',sans-serif;color:#78716c"><b>${cat.nombre}</b> fue activada.</span>`,
+            confirmButtonColor: G[900],
+            timer: 1800,
+            timerProgressBar: true,
+          });
+        }
       }
     } catch (e) {
       Swal.fire({

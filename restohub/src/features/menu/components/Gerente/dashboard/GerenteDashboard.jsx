@@ -161,10 +161,16 @@ export default function GerenteDashboard() {
     variables: { id: restauranteId },
     skip: !restauranteId,
   });
+  // Filtra platos e ingredientes solo de este restaurante
   const { data: pData } = useQuery(GET_PLATOS_GERENTE, {
+    variables: { restauranteId },
+    skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
-  const { data: iData } = useQuery(GET_INGREDIENTES_GERENTE);
+  const { data: iData } = useQuery(GET_INGREDIENTES_GERENTE, {
+    variables: { restauranteId },
+    skip: !restauranteId,
+  });
   const { data: cData } = useQuery(GET_CATEGORIAS_GERENTE);
 
   const r = rData?.restaurante;

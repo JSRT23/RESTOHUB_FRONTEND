@@ -1,25 +1,31 @@
-// src/features/menu/graphql/mutations.js
-// Solo mutations del GERENTE — ingredientes, platos, precios
+// src/features/menu/components/admin/graphql/mutations.js
+// Mutations del ADMIN_CENTRAL para ingredientes, platos y precios.
+// El admin puede crear ingredientes/platos globales (restauranteId=null)
+// o scoped a un restaurante específico pasando restauranteId.
 // Las mutations de restaurante están en operations.js
 // Las mutations de categorías están en categorias.operations.js
 import { gql } from "@apollo/client";
 
-// ── INGREDIENTE (gerente — locales por restaurante) ────────────────────────
-export const CREATE_INGREDIENTE = gql`
+// ── INGREDIENTE ────────────────────────────────────────────────────────────
+
+export const CREAR_INGREDIENTE = gql`
   mutation CrearIngrediente(
     $nombre: String!
     $unidadMedida: String!
     $descripcion: String
+    $restauranteId: ID
   ) {
     crearIngrediente(
       nombre: $nombre
       unidadMedida: $unidadMedida
       descripcion: $descripcion
+      restauranteId: $restauranteId
     ) {
       ok
       error
       ingrediente {
         id
+        restauranteId
         nombre
         unidadMedida
         descripcion
@@ -29,23 +35,20 @@ export const CREATE_INGREDIENTE = gql`
   }
 `;
 
+// actualizarIngrediente solo acepta nombre y descripcion.
+// La unidadMedida NO es modificable una vez creado el ingrediente.
 export const ACTUALIZAR_INGREDIENTE = gql`
   mutation ActualizarIngrediente(
     $id: ID!
     $nombre: String
-    $unidadMedida: String
     $descripcion: String
   ) {
-    actualizarIngrediente(
-      id: $id
-      nombre: $nombre
-      unidadMedida: $unidadMedida
-      descripcion: $descripcion
-    ) {
+    actualizarIngrediente(id: $id, nombre: $nombre, descripcion: $descripcion) {
       ok
       error
       ingrediente {
         id
+        restauranteId
         nombre
         unidadMedida
         descripcion
@@ -73,24 +76,28 @@ export const DESACTIVAR_INGREDIENTE = gql`
   }
 `;
 
-// ── PLATO (gerente — crea desde cero con categorías globales) ─────────────
-export const CREATE_PLATO = gql`
+// ── PLATO ──────────────────────────────────────────────────────────────────
+
+export const CREAR_PLATO = gql`
   mutation CrearPlato(
     $nombre: String!
     $descripcion: String!
     $categoriaId: ID
     $imagen: String
+    $restauranteId: ID
   ) {
     crearPlato(
       nombre: $nombre
       descripcion: $descripcion
       categoriaId: $categoriaId
       imagen: $imagen
+      restauranteId: $restauranteId
     ) {
       ok
       error
       plato {
         id
+        restauranteId
         nombre
         descripcion
         activo
@@ -118,6 +125,7 @@ export const ACTUALIZAR_PLATO = gql`
       error
       plato {
         id
+        restauranteId
         nombre
         descripcion
         categoriaId
@@ -171,8 +179,9 @@ export const QUITAR_INGREDIENTE_PLATO = gql`
   }
 `;
 
-// ── PRECIO (gerente — asigna precio en su restaurante) ────────────────────
-export const CREATE_PRECIO = gql`
+// ── PRECIO ─────────────────────────────────────────────────────────────────
+
+export const CREAR_PRECIO_PLATO = gql`
   mutation CrearPrecioPlato(
     $platoId: ID!
     $restauranteId: ID!
@@ -194,6 +203,7 @@ export const CREATE_PRECIO = gql`
         precio
         moneda
         estaVigente
+        activo
       }
     }
   }

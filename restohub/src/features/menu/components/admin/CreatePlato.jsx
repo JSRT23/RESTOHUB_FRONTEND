@@ -16,11 +16,8 @@ import {
   FlaskConical,
   Loader2,
 } from "lucide-react";
-import {
-  CREATE_PLATO,
-  AGREGAR_INGREDIENTE_PLATO,
-} from "../../graphql/mutations";
-import { GET_CATEGORIAS, GET_INGREDIENTES } from "../../graphql/queries";
+import { CREATE_PLATO, AGREGAR_INGREDIENTE_PLATO } from "./graphql/mutations";
+import { GET_CATEGORIAS, GET_INGREDIENTES } from "./graphql/queries";
 import {
   Button,
   Input,
