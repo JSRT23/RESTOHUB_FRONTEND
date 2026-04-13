@@ -1,13 +1,21 @@
-// src/features/gerente/menu/platos/wizard/WizardStepPrecio.jsx
-// Paso 1: asignar precio inicial (opcional)
-//
-// FIX: usa type="date" en lugar de datetime-local para que el valor
-// sea YYYY-MM-DD directamente y no necesite normalización adicional.
+// src/features/menu/components/Gerente/platos/wizard/WizardStepPrecio.jsx
 
 import { DollarSign } from "lucide-react";
 import { G, fmt, inputCls, fi, fb } from "../platoUtils";
 
+// Devuelve "YYYY-MM-DD" de hoy en hora local
+const hoyLocal = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 export default function WizardStepPrecio({ precio, setPrecio, moneda }) {
+  // Si la fecha no está seteada todavía, pre-rellenar con hoy
+  const fechaValue = precio.fechaInicio || hoyLocal();
+
   return (
     <div className="space-y-5">
       <div>
@@ -45,10 +53,10 @@ export default function WizardStepPrecio({ precio, setPrecio, moneda }) {
           <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
             Vigente desde
           </label>
-          {/* FIX: type="date" retorna YYYY-MM-DD directamente */}
           <input
             type="date"
-            value={precio.fechaInicio}
+            value={fechaValue}
+            min={hoyLocal()}
             onChange={(e) =>
               setPrecio((p) => ({ ...p, fechaInicio: e.target.value }))
             }
@@ -76,6 +84,11 @@ export default function WizardStepPrecio({ precio, setPrecio, moneda }) {
             >
               {fmt(parseFloat(precio.valor || 0), moneda)}
             </p>
+            {fechaValue === hoyLocal() && (
+              <p className="text-[10px] font-dm text-stone-400 mt-0.5">
+                vigente hoy
+              </p>
+            )}
           </div>
         </div>
       )}

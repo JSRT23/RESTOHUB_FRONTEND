@@ -1,9 +1,4 @@
 // src/features/menu/components/Gerente/platos/CreatePlatoWizard.jsx
-//
-// FIX: usa GET_INGREDIENTES_DISPONIBLES (disponibles=restauranteId) para que
-// el wizard muestre ingredientes globales + propios del restaurante.
-// FIX: normaliza fechaInicio a formato ISO date-only (YYYY-MM-DD) antes
-// de enviarlo al backend, ya que el input datetime-local retorna "YYYY-MM-DDTHH:mm".
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
@@ -24,9 +19,31 @@ import { G, fmt } from "./platoUtils";
 
 const STEPS = ["Info básica", "Precio", "Confirmar"];
 
-// Normaliza "2026-04-15T08:00" → "2026-04-15"
-// Si ya es solo fecha, la retorna igual.
-const toDateOnly = (v) => (v ? v.split("T")[0] : v);
+// Devuelve "YYYY-MM-DD" de hoy en hora local
+const hoyLocal = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+// Construye el datetime ISO que se manda al backend:
+// - Si la fecha elegida es hoy → now() + 2 minutos
+// - Si es un día futuro        → YYYY-MM-DDT12:00:00
+const buildFechaInicio = (fechaDate) => {
+  const hoy = hoyLocal();
+  if (!fechaDate || fechaDate === hoy) {
+    const ahora = new Date();
+    ahora.setMinutes(ahora.getMinutes() + 2);
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())}` +
+      `T${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:00`
+    );
+  }
+  return `${fechaDate}T12:00:00`;
+};
 
 export default function CreatePlatoWizard({
   onClose,
@@ -42,14 +59,14 @@ export default function CreatePlatoWizard({
     imagen: "",
   });
   const [ings, setIngs] = useState([]);
-  const [precio, setPrecio] = useState({ valor: "", fechaInicio: "" });
+  // FIX: fecha pre-rellenada con hoy para que el wizard no rechace al confirmar
+  const [precio, setPrecio] = useState({ valor: "", fechaInicio: hoyLocal() });
   const [creating, setCreating] = useState(false);
 
   const { data: cData } = useQuery(GET_CATEGORIAS_GERENTE, {
     variables: { activo: true },
   });
 
-  // FIX: "disponibles" trae globales + propios del restaurante
   const { data: iData } = useQuery(GET_INGREDIENTES_DISPONIBLES, {
     variables: { disponibles: restauranteId, activo: true },
     skip: !restauranteId,
@@ -98,18 +115,17 @@ export default function CreatePlatoWizard({
         );
       }
 
-      // 3. Crear precio — FIX: normalizar fecha a YYYY-MM-DD
+      // 3. Crear precio con hora inteligente
       if (platoId && precio.valor && precio.fechaInicio) {
         const { data: d3 } = await crearPrecio({
           variables: {
             platoId,
             restauranteId,
             precio: parseFloat(precio.valor),
-            fechaInicio: toDateOnly(precio.fechaInicio),
+            fechaInicio: buildFechaInicio(precio.fechaInicio),
           },
         });
         if (!d3?.crearPrecioPlato?.ok) {
-          // El plato ya fue creado, avisamos del precio pero no revertimos
           console.warn("Precio no guardado:", d3?.crearPrecioPlato?.error);
         }
       }
