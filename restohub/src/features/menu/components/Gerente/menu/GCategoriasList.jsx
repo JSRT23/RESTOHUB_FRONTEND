@@ -1,10 +1,11 @@
-// src/features/components/gerente/menu/GCategoriasList.jsx
-// El gerente solo puede VER las categorías globales.
-// Las crea y gestiona únicamente el admin_central.
-// Esta vista le permite saber qué categorías hay para asignarlas a sus platos.
+// src/features/menu/components/Gerente/menu/GCategoriasList.jsx
+// FIX: GET_PLATOS_GERENTE requiere restauranteId como ID! (obligatorio).
+// Sin restauranteId la query devuelve platos de todos los restaurantes,
+// y el conteo "Mis platos en esta cat." siempre salía en 0 aunque hubiera platos.
 import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
 import { Tag, Search, Info, Lock } from "lucide-react";
+import { useAuth } from "../../../../../app/auth/AuthContext";
 import {
   GET_CATEGORIAS_GERENTE,
   GET_PLATOS_GERENTE,
@@ -32,7 +33,6 @@ const fb = (e) => {
   e.target.style.boxShadow = "none";
 };
 
-// ── CategoriaCard ──────────────────────────────────────────────────────────
 function CategoriaCard({ cat, platosCount }) {
   return (
     <div
@@ -48,7 +48,6 @@ function CategoriaCard({ cat, platosCount }) {
         }}
       />
       <div className="p-5 space-y-4">
-        {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3">
             <div
@@ -91,7 +90,7 @@ function CategoriaCard({ cat, platosCount }) {
           </span>
         </div>
 
-        {/* Platos en esta categoría */}
+        {/* FIX: platosCount ahora refleja solo platos de este restaurante en esta categoría */}
         <div className="px-3 py-2.5 rounded-xl bg-stone-50 border border-stone-100 flex items-center justify-between">
           <p className="text-[10px] font-dm text-stone-400 uppercase tracking-wider">
             Mis platos en esta cat.
@@ -107,7 +106,6 @@ function CategoriaCard({ cat, platosCount }) {
           </p>
         </div>
 
-        {/* Aviso solo lectura */}
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-xl border"
           style={{ background: "#fafafa", borderColor: "#e5e7eb" }}
@@ -122,20 +120,28 @@ function CategoriaCard({ cat, platosCount }) {
   );
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
 export default function GCategoriasList() {
+  const { user } = useAuth();
+  const restauranteId = user?.restauranteId;
+
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState("todas");
 
   const { data: cData, loading } = useQuery(GET_CATEGORIAS_GERENTE, {
     fetchPolicy: "cache-and-network",
   });
-  const { data: pData } = useQuery(GET_PLATOS_GERENTE);
+
+  // FIX: restauranteId es ID! — pasa siempre para obtener solo los platos
+  // de este restaurante. Sin él el conteo por categoría era siempre 0.
+  const { data: pData } = useQuery(GET_PLATOS_GERENTE, {
+    variables: { restauranteId },
+    skip: !restauranteId,
+  });
 
   const categorias = cData?.categorias ?? [];
   const platos = pData?.platos ?? [];
 
-  // Contar platos por categoría
+  // Cuenta platos de ESTE restaurante que pertenecen a cada categoría
   const platosPorCat = (catId) =>
     platos.filter((p) => p.categoriaId === catId).length;
 
@@ -163,7 +169,6 @@ export default function GCategoriasList() {
         description="Categorías globales del sistema. Solo lectura — el admin central las gestiona."
       />
 
-      {/* Banner informativo */}
       <div
         className="flex items-start gap-3 px-4 py-3.5 rounded-2xl border"
         style={{ background: `${G[50]}99`, borderColor: G[100] }}
@@ -178,12 +183,11 @@ export default function GCategoriasList() {
           </p>
           <p className="text-xs font-dm text-stone-500 mt-0.5">
             Puedes asignarlas a tus platos al crearlos o editarlos. Si necesitas
-            una nueva categoría, contacta al administrador.
+            una nueva, contacta al administrador.
           </p>
         </div>
       </div>
 
-      {/* Stats */}
       {!loading && categorias.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">
           {[
@@ -220,7 +224,6 @@ export default function GCategoriasList() {
         </div>
       )}
 
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative max-w-sm flex-1">
           <Search
@@ -250,7 +253,6 @@ export default function GCategoriasList() {
         </div>
       </div>
 
-      {/* Grid */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (

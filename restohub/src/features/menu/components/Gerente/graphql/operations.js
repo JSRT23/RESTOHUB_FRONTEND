@@ -1,11 +1,7 @@
 // src/features/menu/components/Gerente/graphql/operations.js
-// Queries y mutations del GERENTE_LOCAL.
-// Todas las operaciones están scoped al restauranteId del JWT del gerente.
-// El componente debe pasar siempre restauranteId — nunca omitirlo.
 import { gql } from "@apollo/client";
 
-// ── Restaurante propio ─────────────────────────────────────────────────────
-
+// ── Restaurante propio ────────────────────────────────────────────────────
 export const GET_MI_RESTAURANTE = gql`
   query GetMiRestaurante($id: ID!) {
     restaurante(id: $id) {
@@ -21,8 +17,6 @@ export const GET_MI_RESTAURANTE = gql`
 `;
 
 // ── Categorías globales (solo lectura) ────────────────────────────────────
-// El gerente no puede crear ni editar categorías — solo asignarlas a sus platos.
-
 export const GET_CATEGORIAS_GERENTE = gql`
   query GetCategoriasGerente($activo: Boolean) {
     categorias(activo: $activo) {
@@ -34,11 +28,8 @@ export const GET_CATEGORIAS_GERENTE = gql`
   }
 `;
 
-// ── Ingredientes del restaurante ──────────────────────────────────────────
-// restauranteId es REQUERIDO — filtra solo los ingredientes de este restaurante.
-// Sin restauranteId devolverías ingredientes globales mezclados con los locales,
-// lo que rompería el scope del gerente.
-
+// ── Ingredientes del restaurante (lista/gestión) ──────────────────────────
+// restauranteId filtra SOLO los ingredientes de este restaurante.
 export const GET_INGREDIENTES_GERENTE = gql`
   query GetIngredientesGerente($restauranteId: ID!, $activo: Boolean) {
     ingredientes(restauranteId: $restauranteId, activo: $activo) {
@@ -52,10 +43,9 @@ export const GET_INGREDIENTES_GERENTE = gql`
   }
 `;
 
-// Ingredientes disponibles para asignar a un plato (wizard y detalle de plato).
-// Usa "disponibles" para traer globales + propios del restaurante.
-// disponibles es REQUERIDO — siempre se pasa el restauranteId del gerente.
-
+// ── Ingredientes disponibles para asignar a un plato ─────────────────────
+// "disponibles=UUID" → globales + propios del restaurante.
+// Usar en wizard y PlatoDetailModal.
 export const GET_INGREDIENTES_DISPONIBLES = gql`
   query GetIngredientesDisponibles($disponibles: ID!, $activo: Boolean) {
     ingredientes(disponibles: $disponibles, activo: $activo) {
@@ -68,8 +58,6 @@ export const GET_INGREDIENTES_DISPONIBLES = gql`
     }
   }
 `;
-
-// ── Mutations — Ingredientes ───────────────────────────────────────────────
 
 export const CREAR_INGREDIENTE = gql`
   mutation CrearIngrediente(
@@ -98,8 +86,6 @@ export const CREAR_INGREDIENTE = gql`
   }
 `;
 
-// actualizarIngrediente solo acepta nombre y descripcion.
-// La unidadMedida NO es modificable una vez creado el ingrediente.
 export const ACTUALIZAR_INGREDIENTE = gql`
   mutation ActualizarIngrediente(
     $id: ID!
@@ -138,9 +124,9 @@ export const DESACTIVAR_INGREDIENTE = gql`
   }
 `;
 
-// ── Queries — Platos del restaurante ──────────────────────────────────────
-
-// Lista de platos del restaurante — restauranteId es REQUERIDO.
+// ── Platos del restaurante ────────────────────────────────────────────────
+// restauranteId es REQUERIDO (ID!) — solo platos de este restaurante.
+// Los precios devueltos incluyen restauranteId para poder filtrarlos en JS.
 export const GET_PLATOS_GERENTE = gql`
   query GetPlatosGerente(
     $restauranteId: ID!
@@ -181,6 +167,9 @@ export const GET_PLATOS_GERENTE = gql`
   }
 `;
 
+// ── Detalle completo de un plato ──────────────────────────────────────────
+// Para el modal de detalle. Los precios incluyen restauranteId para
+// que PlatoDetailModal filtre solo los de su restaurante.
 export const GET_PLATO_DETALLE = gql`
   query GetPlatoDetalle($id: ID!) {
     plato(id: $id) {
@@ -214,8 +203,6 @@ export const GET_PLATO_DETALLE = gql`
     }
   }
 `;
-
-// ── Mutations — Platos ─────────────────────────────────────────────────────
 
 export const CREAR_PLATO = gql`
   mutation CrearPlato(
@@ -318,8 +305,6 @@ export const QUITAR_INGREDIENTE_PLATO = gql`
   }
 `;
 
-// ── Mutations — Precios ────────────────────────────────────────────────────
-
 export const CREAR_PRECIO_PLATO = gql`
   mutation CrearPrecioPlato(
     $platoId: ID!
@@ -339,6 +324,7 @@ export const CREAR_PRECIO_PLATO = gql`
       error
       precioPlato {
         id
+        restauranteId
         precio
         moneda
         estaVigente

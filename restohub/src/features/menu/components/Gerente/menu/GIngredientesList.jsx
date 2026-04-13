@@ -22,7 +22,6 @@ import {
 import {
   PageHeader,
   Button,
-  Skeleton,
   EmptyState,
 } from "../../../../../shared/components/ui";
 import { useAuth } from "../../../../../app/auth/AuthContext";
@@ -79,48 +78,51 @@ function IngredienteModal({ ingrediente, onClose, onSaved, restauranteId }) {
       return;
     }
     let res;
-    if (editando) {
-      const { data } = await actualizar({
-        variables: {
-          id: ingrediente.id,
-          nombre: form.nombre.trim(),
-          descripcion: form.descripcion || null,
-        },
+    try {
+      if (editando) {
+        const { data } = await actualizar({
+          variables: {
+            id: ingrediente.id,
+            nombre: form.nombre.trim(),
+            descripcion: form.descripcion || null,
+          },
+        });
+        res = data?.actualizarIngrediente;
+      } else {
+        // Scope de restaurante asegurado
+        const { data } = await crear({
+          variables: {
+            nombre: form.nombre.trim(),
+            unidadMedida: form.unidadMedida,
+            descripcion: form.descripcion || null,
+            restauranteId,
+          },
+        });
+        res = data?.crearIngrediente;
+      }
+
+      if (!res?.ok) throw new Error(res?.error || "Error desconocido");
+
+      Swal.fire({
+        background: "#fff",
+        icon: "success",
+        draggable: true,
+        title: editando ? "¡Ingrediente actualizado!" : "¡Ingrediente creado!",
+        html: `<span style="font-family:'DM Sans';color:#78716c"><b>${form.nombre}</b> ${editando ? "fue actualizado" : "fue creado"}.</span>`,
+        confirmButtonColor: G[900],
+        timer: 1800,
+        timerProgressBar: true,
       });
-      res = data?.actualizarIngrediente;
-    } else {
-      // CRÍTICO: pasa restauranteId para que el ingrediente quede asociado a este restaurante
-      const { data } = await crear({
-        variables: {
-          nombre: form.nombre.trim(),
-          unidadMedida: form.unidadMedida,
-          descripcion: form.descripcion || null,
-          restauranteId,
-        },
-      });
-      res = data?.crearIngrediente;
-    }
-    if (!res?.ok) {
+      onSaved();
+    } catch (error) {
       Swal.fire({
         background: "#fff",
         icon: "error",
         title: "Error",
-        text: res?.error,
+        text: error.message,
         confirmButtonColor: G[900],
       });
-      return;
     }
-    Swal.fire({
-      background: "#fff",
-      icon: "success",
-      draggable: true,
-      title: editando ? "¡Ingrediente actualizado!" : "¡Ingrediente creado!",
-      html: `<span style="font-family:'DM Sans';color:#78716c"><b>${form.nombre}</b> ${editando ? "fue actualizado" : "fue creado"}.</span>`,
-      confirmButtonColor: G[900],
-      timer: 1800,
-      timerProgressBar: true,
-    });
-    onSaved();
   };
 
   return (
@@ -340,12 +342,12 @@ export default function GIngredientesList() {
   const [modal, setModal] = useState(null);
   const [toggling, setToggling] = useState(null);
 
-  // CRÍTICO: pasa restauranteId para ver solo ingredientes de este restaurante
   const { data, loading, refetch } = useQuery(GET_INGREDIENTES_GERENTE, {
     variables: { restauranteId },
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
+
   const [activar] = useMutation(ACTIVAR_INGREDIENTE, {
     refetchQueries: ["GetIngredientesGerente"],
   });

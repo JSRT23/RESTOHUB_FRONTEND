@@ -1,4 +1,8 @@
 // src/features/menu/components/Gerente/platos/GPlatosList.jsx
+// FIXES:
+// 1. "Sin precio" en la lista: precios incluye precios de TODOS los restaurantes.
+//    Se filtra pr.restauranteId === restauranteId ANTES del find(vigente).
+// 2. GET_PLATOS_GERENTE usa restauranteId como ID! (obligatorio).
 import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
 import { UtensilsCrossed, Plus, Search, Eye, ImageOff } from "lucide-react";
@@ -29,7 +33,6 @@ export default function GPlatosList() {
   const [modoCrear, setModoCrear] = useState(false);
   const [platoSelecto, setPlatoSelecto] = useState(null);
 
-  // ── CRÍTICO: pasa restauranteId para filtrar solo los platos de este restaurante
   const { data: pData, loading } = useQuery(GET_PLATOS_GERENTE, {
     variables: { restauranteId },
     skip: !restauranteId,
@@ -44,9 +47,13 @@ export default function GPlatosList() {
   const platos = pData?.platos ?? [];
   const cats = cData?.categorias ?? [];
   const moneda = rData?.restaurante?.moneda || "COP";
+
   const activos = platos.filter((p) => p.activo).length;
+  // FIX: filtra precios por restauranteId antes de contar vigentes
   const conPrecio = platos.filter((p) =>
-    p.precios?.some((pr) => pr.estaVigente && pr.activo),
+    p.precios
+      ?.filter((pr) => pr.restauranteId === restauranteId)
+      .some((pr) => pr.estaVigente && pr.activo),
   ).length;
 
   const fi = (e) => {
@@ -243,9 +250,17 @@ export default function GPlatosList() {
             </span>
           </div>
           {filtered.map((p) => {
-            const vigente = p.precios?.find(
+            // FIX CRÍTICO: filtra primero por restauranteId del gerente,
+            // luego busca el precio vigente. Sin este filtro aparece "Sin precio"
+            // aunque el plato sí tenga precio, porque el precio vigente encontrado
+            // pertenece a otro restaurante.
+            const preciosDelRestaurante =
+              p.precios?.filter((pr) => pr.restauranteId === restauranteId) ??
+              [];
+            const vigente = preciosDelRestaurante.find(
               (pr) => pr.estaVigente && pr.activo,
             );
+
             return (
               <div
                 key={p.id}
@@ -294,7 +309,7 @@ export default function GPlatosList() {
                       className="text-sm font-bold font-dm"
                       style={{ color: G[300] }}
                     >
-                      {fmt(vigente.precio, vigente.moneda)}
+                      {fmt(vigente.precio, vigente.moneda || moneda)}
                     </p>
                   ) : (
                     <span className="text-[11px] font-dm text-stone-400 italic">

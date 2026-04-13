@@ -1,15 +1,11 @@
-// src/features/gerente/menu/platos/PlatoDetailModal.jsx
-// Modal que muestra el detalle completo de un plato:
-// header, edición inline, ingredientes y precios.
-//
-// FIX: usa GET_INGREDIENTES_DISPONIBLES (disponibles=restauranteId) en lugar
-// de GET_INGREDIENTES_GERENTE sin filtro, para que el gerente vea globales
-// + los propios de su restaurante al agregar ingredientes.
-
+// src/features/menu/components/Gerente/platos/PlatoDetailModal.jsx
+// FIXES:
+// 1. Los precios en el modal mostraban precios de TODOS los restaurantes.
+//    Se filtra plato.precios por restauranteId antes de pasar a PlatoPrecios.
+// 2. El precio vigente del header también se filtra por restauranteId.
 import { useState } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { Pencil, ToggleLeft, ToggleRight, ImageOff } from "lucide-react";
-
 import { Skeleton } from "../../../../../shared/components/ui";
 import {
   GET_PLATO_DETALLE,
@@ -17,7 +13,6 @@ import {
   ACTIVAR_PLATO,
   DESACTIVAR_PLATO,
 } from "../graphql/operations";
-
 import PlatoEditForm from "./detail/PlatoEditForm";
 import PlatoIngredientes from "./detail/PlatoIngredientes";
 import PlatoPrecios from "./detail/PlatoPrecios";
@@ -33,7 +28,7 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
     fetchPolicy: "cache-and-network",
   });
 
-  // FIX: "disponibles" trae globales + propios del restaurante
+  // Ingredientes disponibles: globales + propios del restaurante
   const { data: iData } = useQuery(GET_INGREDIENTES_DISPONIBLES, {
     variables: { disponibles: restauranteId, activo: true },
     skip: !restauranteId,
@@ -60,12 +55,19 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
   if (!plato) return null;
 
   const todosIngredientes = iData?.ingredientes ?? [];
-  // Filtrar los que ya están en el plato para no ofrecerlos de nuevo
   const disponibles = todosIngredientes.filter(
     (i) => !plato.ingredientes?.some((s) => s.ingredienteId === i.id),
   );
 
-  const vigente = plato.precios?.find((p) => p.estaVigente && p.activo);
+  // FIX CRÍTICO: filtra precios solo de este restaurante.
+  // Sin este filtro el modal mostraba precios de todos los restaurantes
+  // que tienen ese plato asignado (ej: ARS 35.000 de Argentina + COP de Colombia).
+  const preciosDelRestaurante = (plato.precios ?? []).filter(
+    (p) => p.restauranteId === restauranteId,
+  );
+
+  // El precio vigente del header también filtra por restaurante
+  const vigente = preciosDelRestaurante.find((p) => p.estaVigente && p.activo);
 
   const handleTogglePlato = () => {
     const mutation = plato.activo ? desactivarPlato : activarPlato;
@@ -86,7 +88,6 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
     <div className="space-y-5">
       {/* ── Header ── */}
       <div className="flex items-start gap-4">
-        {/* Imagen / placeholder */}
         <div className="w-16 h-16 rounded-2xl bg-stone-100 border border-stone-200 flex items-center justify-center shrink-0 overflow-hidden">
           {plato.imagen ? (
             <img
@@ -100,7 +101,6 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
           )}
         </div>
 
-        {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2 flex-wrap">
             <h2
@@ -130,16 +130,15 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
               className="text-lg font-bold mt-2"
               style={{ fontFamily: "'Playfair Display', serif", color: G[500] }}
             >
-              {fmt(vigente.precio, vigente.moneda)}
+              {fmt(vigente.precio, vigente.moneda || moneda)}
             </p>
           ) : (
             <p className="text-xs font-dm text-stone-400 italic mt-2">
-              Sin precio vigente
+              Sin precio vigente para este restaurante
             </p>
           )}
         </div>
 
-        {/* Acciones header */}
         <div className="flex flex-col gap-2 shrink-0">
           <button
             onClick={abrirEdicion}
@@ -201,7 +200,7 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
         </span>
       </div>
 
-      {/* ── Edición inline ── */}
+      {/* Edición inline */}
       {editando && editForm && (
         <PlatoEditForm
           platoId={platoId}
@@ -211,18 +210,18 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
         />
       )}
 
-      {/* ── Ingredientes ── */}
+      {/* Ingredientes */}
       <PlatoIngredientes
         platoId={platoId}
         ingredientes={plato.ingredientes ?? []}
         disponibles={disponibles}
       />
 
-      {/* ── Precios ── */}
+      {/* FIX: pasa solo los precios de este restaurante, no todos */}
       <PlatoPrecios
         platoId={platoId}
         restauranteId={restauranteId}
-        precios={plato.precios ?? []}
+        precios={preciosDelRestaurante}
         moneda={moneda}
       />
     </div>

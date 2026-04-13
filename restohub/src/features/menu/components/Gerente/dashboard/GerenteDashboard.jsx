@@ -1,4 +1,6 @@
-// src/features/gerente/dashboard/GerenteDashboard.jsx
+// src/features/menu/components/Gerente/dashboard/GerenteDashboard.jsx
+// FIX: conPrecio filtra precios por restauranteId antes de verificar vigencia.
+//      Sin esto el KPI "Con precio vigente" podía contar precios de otros restaurantes.
 import { useQuery } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -12,9 +14,6 @@ import {
   CheckCircle2,
   XCircle,
   DollarSign,
-  TrendingUp,
-  Package,
-  BookOpen,
 } from "lucide-react";
 import { useAuth } from "../../../../../app/auth/AuthContext";
 import { Skeleton } from "../../../../../shared/components/ui";
@@ -66,7 +65,6 @@ function getInitials(nombre = "") {
     : nombre.slice(0, 2).toUpperCase();
 }
 
-// ── KPI Card ───────────────────────────────────────────────────────────────
 function KpiCard({ icon: Icon, label, value, sub, accent, onClick }) {
   return (
     <button
@@ -108,9 +106,12 @@ function KpiCard({ icon: Icon, label, value, sub, accent, onClick }) {
   );
 }
 
-// ── Plato Row rápido ───────────────────────────────────────────────────────
-function PlatoRow({ plato, moneda }) {
-  const precio = plato.precios?.find((p) => p.estaVigente && p.activo);
+function PlatoRow({ plato, moneda, restauranteId }) {
+  // FIX: filtra precios por restauranteId antes de buscar el vigente
+  const preciosDelRestaurante =
+    plato.precios?.filter((p) => p.restauranteId === restauranteId) ?? [];
+  const precio = preciosDelRestaurante.find((p) => p.estaVigente && p.activo);
+
   return (
     <div className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-stone-50 transition-colors">
       <div className="w-8 h-8 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-center shrink-0">
@@ -129,7 +130,8 @@ function PlatoRow({ plato, moneda }) {
       <div className="text-right shrink-0">
         {precio ? (
           <p className="text-sm font-dm font-bold" style={{ color: G[300] }}>
-            {Number(precio.precio).toLocaleString("es-CO")} {moneda}
+            {Number(precio.precio).toLocaleString("es-CO")}{" "}
+            {precio.moneda || moneda}
           </p>
         ) : (
           <span className="text-[10px] font-dm text-stone-300 italic">
@@ -151,7 +153,6 @@ function PlatoRow({ plato, moneda }) {
   );
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
 export default function GerenteDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -161,7 +162,6 @@ export default function GerenteDashboard() {
     variables: { id: restauranteId },
     skip: !restauranteId,
   });
-  // Filtra platos e ingredientes solo de este restaurante
   const { data: pData } = useQuery(GET_PLATOS_GERENTE, {
     variables: { restauranteId },
     skip: !restauranteId,
@@ -178,9 +178,14 @@ export default function GerenteDashboard() {
   const ings = iData?.ingredientes ?? [];
   const cats = cData?.categorias ?? [];
   const activos = platos.filter((p) => p.activo).length;
+
+  // FIX: filtra precios por restauranteId antes de contar vigentes
   const conPrecio = platos.filter((p) =>
-    p.precios?.some((pr) => pr.estaVigente && pr.activo),
+    p.precios
+      ?.filter((pr) => pr.restauranteId === restauranteId)
+      .some((pr) => pr.estaVigente && pr.activo),
   ).length;
+
   const ingsActivos = ings.filter((i) => i.activo).length;
 
   if (rLoading)
@@ -197,54 +202,49 @@ export default function GerenteDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* ── Header saludo ─────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <div
-              className="w-4 h-0.5 rounded-full"
-              style={{ background: G[300] }}
-            />
-            <span
-              className="text-[10px] font-dm font-bold tracking-[0.18em] uppercase"
-              style={{ color: G[300] }}
-            >
-              Panel del gerente
-            </span>
-          </div>
-          <h1
-            className="text-2xl md:text-3xl font-bold text-stone-900 leading-tight"
-            style={{ fontFamily: "'Playfair Display', serif" }}
+      {/* Saludo */}
+      <div>
+        <div className="flex items-center gap-2 mb-1.5">
+          <div
+            className="w-4 h-0.5 rounded-full"
+            style={{ background: G[300] }}
+          />
+          <span
+            className="text-[10px] font-dm font-bold tracking-[0.18em] uppercase"
+            style={{ color: G[300] }}
           >
-            Bienvenido, {user?.nombre?.split(" ")[0]}
-          </h1>
-          <p className="text-stone-400 text-sm mt-1 font-dm">
-            Vista general de tu restaurante y estado del menú
-          </p>
+            Panel del gerente
+          </span>
         </div>
+        <h1
+          className="text-2xl md:text-3xl font-bold text-stone-900 leading-tight"
+          style={{ fontFamily: "'Playfair Display', serif" }}
+        >
+          Bienvenido, {user?.nombre?.split(" ")[0]}
+        </h1>
+        <p className="text-stone-400 text-sm mt-1 font-dm">
+          Vista general de tu restaurante y estado del menú
+        </p>
       </div>
 
-      {/* ── Hero restaurante ───────────────────────────────────────────── */}
+      {/* Hero restaurante */}
       {r && (
         <div
           className="rounded-2xl overflow-hidden"
           style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}
         >
-          {/* Cover */}
           <div
             className="relative h-36 flex items-center px-8 gap-6"
             style={{
               background: `linear-gradient(135deg, ${G[900]} 0%, ${G[500]} 100%)`,
             }}
           >
-            {/* Patrón decorativo */}
             <div
               className="absolute inset-0 opacity-10"
               style={{
                 backgroundImage: `radial-gradient(circle at 80% 50%, ${G[50]} 0%, transparent 60%)`,
               }}
             />
-            {/* Iniciales */}
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shrink-0 relative"
               style={{
@@ -303,7 +303,6 @@ export default function GerenteDashboard() {
             </div>
           </div>
 
-          {/* Info bar */}
           <div className="bg-white border-t border-stone-100 px-8 py-3 flex items-center gap-6 flex-wrap">
             {[
               { icon: MapPin, label: r.ciudad || "—" },
@@ -318,7 +317,7 @@ export default function GerenteDashboard() {
                 <span className="text-xs font-dm text-stone-500">{label}</span>
               </div>
             ))}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto">
               <span
                 className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide"
                 style={
@@ -342,7 +341,7 @@ export default function GerenteDashboard() {
         </div>
       )}
 
-      {/* ── KPIs ──────────────────────────────────────────────────────── */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           icon={UtensilsCrossed}
@@ -375,7 +374,7 @@ export default function GerenteDashboard() {
         />
       </div>
 
-      {/* ── Contenido 2 columnas ──────────────────────────────────────── */}
+      {/* 2 columnas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Últimos platos */}
         <div
@@ -408,7 +407,7 @@ export default function GerenteDashboard() {
             </div>
             <button
               onClick={() => navigate("/gerente/platos")}
-              className="flex items-center gap-1.5 text-xs font-dm font-semibold transition-all"
+              className="flex items-center gap-1.5 text-xs font-dm font-semibold"
               style={{ color: G[300] }}
             >
               Ver todos <ArrowRight size={11} />
@@ -420,7 +419,7 @@ export default function GerenteDashboard() {
                 <UtensilsCrossed size={20} className="text-stone-200" />
                 <p className="text-stone-400 text-sm font-dm">Sin platos aún</p>
                 <button
-                  onClick={() => navigate("/gerente/platos/nuevo")}
+                  onClick={() => navigate("/gerente/platos")}
                   className="text-xs font-dm font-semibold px-3 py-1.5 rounded-lg transition-all"
                   style={{ color: G[300], background: G[50] }}
                 >
@@ -431,7 +430,12 @@ export default function GerenteDashboard() {
               platos
                 .slice(0, 6)
                 .map((p) => (
-                  <PlatoRow key={p.id} plato={p} moneda={r?.moneda || "COP"} />
+                  <PlatoRow
+                    key={p.id}
+                    plato={p}
+                    moneda={r?.moneda || "COP"}
+                    restauranteId={restauranteId}
+                  />
                 ))
             )}
           </div>
@@ -439,7 +443,6 @@ export default function GerenteDashboard() {
 
         {/* Ingredientes + Categorías */}
         <div className="space-y-4">
-          {/* Ingredientes resumen */}
           <div
             className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
             style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
@@ -505,7 +508,6 @@ export default function GerenteDashboard() {
             </div>
           </div>
 
-          {/* Categorías resumen */}
           <div
             className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
             style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
