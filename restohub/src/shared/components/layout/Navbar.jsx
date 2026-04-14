@@ -1,6 +1,7 @@
 // src/shared/components/layout/Navbar.jsx
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Layers } from "lucide-react";
 import {
   UtensilsCrossed,
   Package,
@@ -20,6 +21,8 @@ import {
   LogOut,
   UserCircle,
   ShieldCheck,
+  Clock,
+  DollarSign,
 } from "lucide-react";
 import { useAuth } from "../../../app/auth/AuthContext";
 
@@ -112,6 +115,7 @@ const NAV_CONFIG = {
 
   gerente_local: [
     { label: "Dashboard", href: "/gerente", icon: LayoutDashboard },
+    // ── Menú ───────────────────────────────────────────────────────────
     {
       label: "Menú",
       icon: UtensilsCrossed,
@@ -136,8 +140,68 @@ const NAV_CONFIG = {
         },
       ],
     },
-    { label: "Inventario", href: "/gerente/inventario", icon: Package },
-    { label: "Mi equipo", href: "/gerente/staff", icon: Users },
+    // ── Inventario ───────────────────────────────────────────────────────────
+    {
+      label: "Inventario",
+      icon: Package,
+      children: [
+        {
+          label: "Dashboard",
+          href: "/gerente/inventario",
+          icon: LayoutDashboard,
+          desc: "Vista general",
+        },
+        {
+          label: "Proveedores",
+          href: "/gerente/proveedores",
+          icon: Truck,
+          desc: "Crear y gestionar",
+        },
+        {
+          label: "Órdenes",
+          href: "/gerente/ordenes",
+          icon: ShoppingCart,
+          desc: "Compras al proveedor",
+        },
+        {
+          label: "Stock",
+          href: "/gerente/stock",
+          icon: Layers,
+          desc: "Niveles actuales",
+        },
+        {
+          label: "Lotes",
+          href: "/gerente/lotes",
+          icon: Archive,
+          desc: "Trazabilidad",
+        },
+      ],
+    },
+    // ── Staff ───────────────────────────────────────────────────────────
+    {
+      label: "Mi equipo",
+      icon: Users,
+      children: [
+        {
+          label: "Empleados",
+          href: "/gerente/staff/empleados",
+          icon: UserCircle,
+          desc: "Contratar y gestionar",
+        },
+        {
+          label: "Turnos",
+          href: "/gerente/staff/turnos",
+          icon: Clock,
+          desc: "Planificar horarios",
+        },
+        {
+          label: "Nómina",
+          href: "/gerente/staff/nomina",
+          icon: DollarSign,
+          desc: "Horas y períodos",
+        },
+      ],
+    },
   ],
 };
 

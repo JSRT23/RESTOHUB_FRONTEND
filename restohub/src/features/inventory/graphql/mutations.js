@@ -10,6 +10,10 @@ export const CREAR_PROVEEDOR = gql`
     $telefono: String
     $email: String
     $monedaPreferida: String
+    $alcance: String
+    $paisDestino: String
+    $ciudadDestino: String
+    $restauranteIdDestino: ID
   ) {
     crearProveedor(
       nombre: $nombre
@@ -18,6 +22,10 @@ export const CREAR_PROVEEDOR = gql`
       telefono: $telefono
       email: $email
       monedaPreferida: $monedaPreferida
+      alcance: $alcance
+      paisDestino: $paisDestino
+      ciudadDestino: $ciudadDestino
+      restauranteIdDestino: $restauranteIdDestino
     ) {
       ok
       error
@@ -25,7 +33,55 @@ export const CREAR_PROVEEDOR = gql`
         id
         nombre
         pais
+        ciudad
+        telefono
+        email
         monedaPreferida
+        alcance
+        paisDestino
+        ciudadDestino
+        creadoPorRestauranteId
+        activo
+      }
+    }
+  }
+`;
+
+export const ACTUALIZAR_PROVEEDOR = gql`
+  mutation ActualizarProveedor(
+    $id: ID!
+    $nombre: String
+    $pais: String
+    $ciudad: String
+    $telefono: String
+    $email: String
+    $monedaPreferida: String
+    $activo: Boolean
+  ) {
+    actualizarProveedor(
+      id: $id
+      nombre: $nombre
+      pais: $pais
+      ciudad: $ciudad
+      telefono: $telefono
+      email: $email
+      monedaPreferida: $monedaPreferida
+      activo: $activo
+    ) {
+      ok
+      error
+      proveedor {
+        id
+        nombre
+        pais
+        ciudad
+        telefono
+        email
+        monedaPreferida
+        alcance
+        paisDestino
+        ciudadDestino
+        creadoPorRestauranteId
         activo
       }
     }

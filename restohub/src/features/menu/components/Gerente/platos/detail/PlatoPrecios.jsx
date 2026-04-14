@@ -27,7 +27,7 @@ const buildFechaInicio = (fechaDate) => {
   const hoy = hoyLocal();
   if (!fechaDate || fechaDate === hoy) {
     const ahora = new Date();
-    ahora.setMinutes(ahora.getMinutes() + 2);
+    ahora.setMinutes(ahora.getMinutes() + 1);
     const pad = (n) => String(n).padStart(2, "0");
     return (
       `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())}` +

@@ -3,8 +3,18 @@ import { gql } from "@apollo/client";
 
 // ── PROVEEDORES ───────────────────────────────────────────────────────────
 export const GET_PROVEEDORES = gql`
-  query GetProveedores($activo: Boolean, $pais: String) {
-    proveedores(activo: $activo, pais: $pais) {
+  query GetProveedores(
+    $activo: Boolean
+    $pais: String
+    $ciudad: String
+    $alcance: String
+  ) {
+    proveedores(
+      activo: $activo
+      pais: $pais
+      ciudad: $ciudad
+      alcance: $alcance
+    ) {
       id
       nombre
       pais
@@ -12,6 +22,10 @@ export const GET_PROVEEDORES = gql`
       telefono
       email
       monedaPreferida
+      alcance
+      paisDestino
+      ciudadDestino
+      creadoPorRestauranteId
       activo
       fechaCreacion
       fechaActualizacion
@@ -147,6 +161,7 @@ export const GET_LOTES = gql`
     lotes(estado: $estado, almacenId: $almacenId, porVencer: $porVencer) {
       id
       ingredienteId
+      ingredienteNombre
       almacen
       almacenNombre
       proveedor

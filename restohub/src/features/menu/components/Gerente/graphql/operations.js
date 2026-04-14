@@ -29,7 +29,6 @@ export const GET_CATEGORIAS_GERENTE = gql`
 `;
 
 // ── Ingredientes del restaurante (lista/gestión) ──────────────────────────
-// restauranteId filtra SOLO los ingredientes de este restaurante.
 export const GET_INGREDIENTES_GERENTE = gql`
   query GetIngredientesGerente($restauranteId: ID!, $activo: Boolean) {
     ingredientes(restauranteId: $restauranteId, activo: $activo) {
@@ -45,7 +44,6 @@ export const GET_INGREDIENTES_GERENTE = gql`
 
 // ── Ingredientes disponibles para asignar a un plato ─────────────────────
 // "disponibles=UUID" → globales + propios del restaurante.
-// Usar en wizard y PlatoDetailModal.
 export const GET_INGREDIENTES_DISPONIBLES = gql`
   query GetIngredientesDisponibles($disponibles: ID!, $activo: Boolean) {
     ingredientes(disponibles: $disponibles, activo: $activo) {
@@ -124,9 +122,10 @@ export const DESACTIVAR_INGREDIENTE = gql`
   }
 `;
 
-// ── Platos del restaurante ────────────────────────────────────────────────
-// restauranteId es REQUERIDO (ID!) — solo platos de este restaurante.
-// Los precios devueltos incluyen restauranteId para poder filtrarlos en JS.
+// ── Platos del restaurante (lista) ───────────────────────────────────────
+// Usa restauranteId — el backend devuelve campos básicos sin ingredientes
+// ni precios. Los precios se obtienen por separado con GET_PRECIOS_RESTAURANTE
+// y se cruzan en JS por platoId.
 export const GET_PLATOS_GERENTE = gql`
   query GetPlatosGerente(
     $restauranteId: ID!
@@ -147,29 +146,31 @@ export const GET_PLATOS_GERENTE = gql`
       imagen
       activo
       fechaCreacion
-      ingredientes {
-        id
-        ingredienteId
-        ingredienteNombre
-        unidadMedida
-        cantidad
-      }
-      precios {
-        id
-        restauranteId
-        precio
-        moneda
-        fechaInicio
-        activo
-        estaVigente
-      }
+    }
+  }
+`;
+
+// ── Todos los precios del restaurante ────────────────────────────────────
+// Devuelve platoId → se cruza con platos en JS para obtener precio vigente.
+// Se usa en GPlatosList, GerenteDashboard y refetchQueries de mutaciones de precio.
+export const GET_PRECIOS_RESTAURANTE = gql`
+  query GetPreciosRestaurante($restauranteId: ID!) {
+    precios(restauranteId: $restauranteId, activo: true) {
+      id
+      platoId
+      restauranteId
+      precio
+      moneda
+      fechaInicio
+      fechaFin
+      activo
+      estaVigente
     }
   }
 `;
 
 // ── Detalle completo de un plato ──────────────────────────────────────────
-// Para el modal de detalle. Los precios incluyen restauranteId para
-// que PlatoDetailModal filtre solo los de su restaurante.
+// plato(id) devuelve PlatoSerializer completo — con ingredientes y precios.
 export const GET_PLATO_DETALLE = gql`
   query GetPlatoDetalle($id: ID!) {
     plato(id: $id) {
@@ -324,6 +325,7 @@ export const CREAR_PRECIO_PLATO = gql`
       error
       precioPlato {
         id
+        platoId
         restauranteId
         precio
         moneda

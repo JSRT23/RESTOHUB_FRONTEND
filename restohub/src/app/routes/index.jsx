@@ -10,11 +10,32 @@ import RestaurantesList from "../../features/menu/components/admin/RestauranteLi
 import CreateRestauranteWizard from "../../features/menu/components/admin/CreateRestauranteWizard";
 import RestauranteDetail from "../../features/menu/components/admin/RestauranteDetail";
 
+// Admin Central — Inventario
+import AInventarioDashboard from "../../features/inventory/components/admin/AInventarioDashboard";
+import AProveedoresList from "../../features/inventory/components/admin/AProveedoresList";
+
+// Admin Central — Staff
+import AdminStaffList from "../../features/staff/components/admin/AdminStaffList";
+
 // ── Gerente Local ──────────────────────────────────────────────────────────
+// Menu principal de Gerente Local
 import GerenteDashboard from "../../features/menu/components/Gerente/dashboard/GerenteDashboard";
 import GIngredientesList from "../../features/menu/components/Gerente/menu/GIngredientesList";
 import GCategoriasList from "../../features/menu/components/Gerente/menu/GCategoriasList";
 import GPlatosList from "../../features/menu/components/Gerente/platos/GPlatosList";
+
+// Inventario del Gerente Local (WIP)
+import InventarioDashboard from "../../features/inventory/components/Gerente/InventarioDashboard";
+import GProveedoresList from "../../features/inventory/components/Gerente/GProveedoresList";
+import GOrdenesCompra from "../../features/inventory/components/Gerente/GOrdenesCompra";
+import GStockList from "../../features/inventory/components/Gerente/GStockList";
+import GLotesList from "../../features/inventory/components/Gerente/GLotesList";
+
+// Staff del Gerente Local (WIP)
+import GStaffLayout from "../../features/staff/components/Gerente/GStaffLayout";
+import GEmpleadosList from "../../features/staff/components/Gerente/GEmpleadosList";
+import GTurnosList from "../../features/staff/components/Gerente/GTurnosList";
+import GNomina from "../../features/staff/components/Gerente/GNomina";
 
 const WIP = ({ title }) => (
   <div className="flex flex-col items-center justify-center py-24 gap-3">
@@ -91,10 +112,24 @@ const router = createBrowserRouter([
       },
 
       // ── Admin Central — Inventario ───────────────────────────────────
-      { path: "inventario", element: <WIP title="Dashboard inventario" /> },
-      { path: "inventario/stock", element: <WIP title="Stock" /> },
+      {
+        path: "inventario",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <AInventarioDashboard />
+          </RoleRoute>
+        ),
+      },
+      { path: "inventario/stock", element: <WIP title="Stock global" /> },
       { path: "inventario/almacenes", element: <WIP title="Almacenes" /> },
-      { path: "inventario/proveedores", element: <WIP title="Proveedores" /> },
+      {
+        path: "inventario/proveedores",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <AProveedoresList />
+          </RoleRoute>
+        ),
+      },
       { path: "inventario/lotes", element: <WIP title="Lotes" /> },
       {
         path: "inventario/ordenes",
@@ -119,7 +154,7 @@ const router = createBrowserRouter([
         path: "admin/staff",
         element: (
           <RoleRoute roles={["admin_central"]}>
-            <WIP title="Staff global" />
+            <AdminStaffList />
           </RoleRoute>
         ),
       },
@@ -165,7 +200,7 @@ const router = createBrowserRouter([
         path: "gerente/inventario",
         element: (
           <RoleRoute roles={["gerente_local"]}>
-            <WIP title="Mi inventario" />
+            <InventarioDashboard />
           </RoleRoute>
         ),
       },
@@ -173,7 +208,15 @@ const router = createBrowserRouter([
         path: "gerente/proveedores",
         element: (
           <RoleRoute roles={["gerente_local"]}>
-            <WIP title="Mis proveedores" />
+            <GProveedoresList />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "gerente/ordenes",
+        element: (
+          <RoleRoute roles={["gerente_local"]}>
+            <GOrdenesCompra />
           </RoleRoute>
         ),
       },
@@ -181,7 +224,15 @@ const router = createBrowserRouter([
         path: "gerente/stock",
         element: (
           <RoleRoute roles={["gerente_local"]}>
-            <WIP title="Mi stock" />
+            <GStockList />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "gerente/lotes",
+        element: (
+          <RoleRoute roles={["gerente_local"]}>
+            <GLotesList />
           </RoleRoute>
         ),
       },
@@ -191,9 +242,15 @@ const router = createBrowserRouter([
         path: "gerente/staff",
         element: (
           <RoleRoute roles={["gerente_local"]}>
-            <WIP title="Mi equipo" />
+            <GStaffLayout />
           </RoleRoute>
         ),
+        children: [
+          { index: true, element: <Navigate to="empleados" replace /> },
+          { path: "empleados", element: <GEmpleadosList /> },
+          { path: "turnos", element: <GTurnosList /> },
+          { path: "nomina", element: <GNomina /> },
+        ],
       },
 
       // ── Auxiliares ───────────────────────────────────────────────────

@@ -1,13 +1,10 @@
 // src/features/menu/components/Gerente/platos/GPlatosList.jsx
-// FIXES:
-// 1. "Sin precio" en la lista: precios incluye precios de TODOS los restaurantes.
-//    Se filtra pr.restauranteId === restauranteId ANTES del find(vigente).
-// 2. GET_PLATOS_GERENTE usa restauranteId como ID! (obligatorio).
 import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
 import { UtensilsCrossed, Plus, Search, Eye, ImageOff } from "lucide-react";
 import {
   GET_PLATOS_GERENTE,
+  GET_PRECIOS_RESTAURANTE,
   GET_CATEGORIAS_GERENTE,
   GET_MI_RESTAURANTE,
 } from "../graphql/operations";
@@ -38,6 +35,12 @@ export default function GPlatosList() {
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
+  // Query separada de precios — el endpoint platos(restauranteId) no los incluye
+  const { data: preciosData } = useQuery(GET_PRECIOS_RESTAURANTE, {
+    variables: { restauranteId },
+    skip: !restauranteId,
+    fetchPolicy: "cache-and-network",
+  });
   const { data: cData } = useQuery(GET_CATEGORIAS_GERENTE);
   const { data: rData } = useQuery(GET_MI_RESTAURANTE, {
     variables: { id: restauranteId },
@@ -48,13 +51,16 @@ export default function GPlatosList() {
   const cats = cData?.categorias ?? [];
   const moneda = rData?.restaurante?.moneda || "COP";
 
+  // Índice platoId → precio vigente activo
+  const precioVigenteIdx = {};
+  for (const p of preciosData?.precios ?? []) {
+    if (p.estaVigente && p.activo) {
+      precioVigenteIdx[p.platoId] = p;
+    }
+  }
+
   const activos = platos.filter((p) => p.activo).length;
-  // FIX: filtra precios por restauranteId antes de contar vigentes
-  const conPrecio = platos.filter((p) =>
-    p.precios
-      ?.filter((pr) => pr.restauranteId === restauranteId)
-      .some((pr) => pr.estaVigente && pr.activo),
-  ).length;
+  const conPrecio = platos.filter((p) => !!precioVigenteIdx[p.id]).length;
 
   const fi = (e) => {
     e.target.style.borderColor = "transparent";
@@ -250,17 +256,7 @@ export default function GPlatosList() {
             </span>
           </div>
           {filtered.map((p) => {
-            // FIX CRÍTICO: filtra primero por restauranteId del gerente,
-            // luego busca el precio vigente. Sin este filtro aparece "Sin precio"
-            // aunque el plato sí tenga precio, porque el precio vigente encontrado
-            // pertenece a otro restaurante.
-            const preciosDelRestaurante =
-              p.precios?.filter((pr) => pr.restauranteId === restauranteId) ??
-              [];
-            const vigente = preciosDelRestaurante.find(
-              (pr) => pr.estaVigente && pr.activo,
-            );
-
+            const vigente = precioVigenteIdx[p.id];
             return (
               <div
                 key={p.id}

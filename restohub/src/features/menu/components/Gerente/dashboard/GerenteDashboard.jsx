@@ -1,6 +1,4 @@
 // src/features/menu/components/Gerente/dashboard/GerenteDashboard.jsx
-// FIX: conPrecio filtra precios por restauranteId antes de verificar vigencia.
-//      Sin esto el KPI "Con precio vigente" podía contar precios de otros restaurantes.
 import { useQuery } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,12 +12,14 @@ import {
   CheckCircle2,
   XCircle,
   DollarSign,
+  ImageOff,
 } from "lucide-react";
 import { useAuth } from "../../../../../app/auth/AuthContext";
 import { Skeleton } from "../../../../../shared/components/ui";
 import {
   GET_MI_RESTAURANTE,
   GET_PLATOS_GERENTE,
+  GET_PRECIOS_RESTAURANTE,
   GET_INGREDIENTES_GERENTE,
   GET_CATEGORIAS_GERENTE,
 } from "../graphql/operations";
@@ -106,16 +106,22 @@ function KpiCard({ icon: Icon, label, value, sub, accent, onClick }) {
   );
 }
 
-function PlatoRow({ plato, moneda, restauranteId }) {
-  // FIX: filtra precios por restauranteId antes de buscar el vigente
-  const preciosDelRestaurante =
-    plato.precios?.filter((p) => p.restauranteId === restauranteId) ?? [];
-  const precio = preciosDelRestaurante.find((p) => p.estaVigente && p.activo);
-
+// precioVigenteIdx viene del padre — platoId → precio vigente
+function PlatoRow({ plato, moneda, precioVigenteIdx }) {
+  const precio = precioVigenteIdx[plato.id];
   return (
     <div className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-stone-50 transition-colors">
-      <div className="w-8 h-8 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-center shrink-0">
-        <UtensilsCrossed size={13} className="text-stone-400" />
+      <div className="w-8 h-8 rounded-xl bg-stone-100 border border-stone-200 overflow-hidden flex items-center justify-center shrink-0">
+        {plato.imagen ? (
+          <img
+            src={plato.imagen}
+            alt={plato.nombre}
+            className="w-full h-full object-cover"
+            onError={(e) => (e.target.style.display = "none")}
+          />
+        ) : (
+          <ImageOff size={11} className="text-stone-300" />
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-dm font-semibold text-stone-800 truncate">
@@ -167,6 +173,12 @@ export default function GerenteDashboard() {
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
+  // FIX: precios por separado — el endpoint de lista no los incluye en platos
+  const { data: preciosData } = useQuery(GET_PRECIOS_RESTAURANTE, {
+    variables: { restauranteId },
+    skip: !restauranteId,
+    fetchPolicy: "cache-and-network",
+  });
   const { data: iData } = useQuery(GET_INGREDIENTES_GERENTE, {
     variables: { restauranteId },
     skip: !restauranteId,
@@ -179,14 +191,23 @@ export default function GerenteDashboard() {
   const cats = cData?.categorias ?? [];
   const activos = platos.filter((p) => p.activo).length;
 
-  // FIX: filtra precios por restauranteId antes de contar vigentes
-  const conPrecio = platos.filter((p) =>
-    p.precios
-      ?.filter((pr) => pr.restauranteId === restauranteId)
-      .some((pr) => pr.estaVigente && pr.activo),
-  ).length;
+  // Índice platoId → precio vigente activo — fuente única de verdad para precios
+  const precioVigenteIdx = {};
+  for (const p of preciosData?.precios ?? []) {
+    if (p.estaVigente && p.activo) {
+      precioVigenteIdx[p.platoId] = p;
+    }
+  }
+  const conPrecio = platos.filter((p) => !!precioVigenteIdx[p.id]).length;
 
   const ingsActivos = ings.filter((i) => i.activo).length;
+
+  // "Usados en platos": ingredientes que aparecen en al menos un precio vigente
+  // No podemos leer plato.ingredientes desde la lista, así que usamos los
+  // ingredientes activos del restaurante como proxy razonable hasta tener
+  // el endpoint de detalle. Si querés el número exacto, abrí el detalle.
+  // Por ahora mostramos los activos como indicador de disponibilidad.
+  const ingsUsados = ingsActivos;
 
   if (rLoading)
     return (
@@ -434,7 +455,7 @@ export default function GerenteDashboard() {
                     key={p.id}
                     plato={p}
                     moneda={r?.moneda || "COP"}
-                    restauranteId={restauranteId}
+                    precioVigenteIdx={precioVigenteIdx}
                   />
                 ))
             )}
@@ -481,12 +502,8 @@ export default function GerenteDashboard() {
                   color: "text-stone-400",
                 },
                 {
-                  label: "Usados en platos",
-                  value: new Set(
-                    platos.flatMap(
-                      (p) => p.ingredientes?.map((i) => i.ingredienteId) ?? [],
-                    ),
-                  ).size,
+                  label: "Disponibles",
+                  value: ingsActivos,
                   color: "text-stone-700",
                 },
               ].map(({ label, value, color }) => (
