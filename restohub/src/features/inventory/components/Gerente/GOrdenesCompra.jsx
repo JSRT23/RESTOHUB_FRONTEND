@@ -16,6 +16,7 @@
 //   { path: "gerente/ordenes", element: <RoleRoute roles={["gerente_local"]}><GOrdenesCompra /></RoleRoute> }
 
 import { useState } from "react";
+import { gql } from "@apollo/client";
 import { useQuery, useMutation } from "@apollo/client/react";
 import {
   ShoppingCart,
@@ -418,16 +419,18 @@ function ModalDetalle({ open, onClose, ordenId }) {
   const [mostrarRecepcion, setMostrarRecepcion] = useState(false);
 
   const [enviar, { loading: enviando }] = useMutation(ENVIAR_ORDEN_COMPRA, {
-    refetchQueries: ["GetOrdenesCompra"],
+    refetchQueries: ["GetOrdenesCompra", "GetOrdenCompra"],
   });
   const [cancelar, { loading: cancelando }] = useMutation(
     CANCELAR_ORDEN_COMPRA,
-    { refetchQueries: ["GetOrdenesCompra"] },
+    { refetchQueries: ["GetOrdenesCompra", "GetOrdenCompra"] },
   );
 
   if (!open) return null;
   const orden = data?.ordenCompra;
-  const cfg = orden ? (ESTADOS[orden.estado] ?? ESTADOS.BORRADOR) : null;
+  const cfg = orden
+    ? (ESTADOS[orden.estado?.toUpperCase()] ?? ESTADOS.BORRADOR)
+    : null;
   const CIcon = cfg?.icon ?? Clock;
 
   const handleEnviar = async () => {
@@ -649,6 +652,38 @@ function ModalDetalle({ open, onClose, ordenId }) {
   );
 }
 
+// ── Mutation del gerente: sin restauranteId (el gateway lo inyecta del JWT) ─
+// NO usar CREAR_ORDEN_COMPRA de mutations.js — tiene $restauranteId: ID! como
+// requerido y Apollo rechaza la mutation localmente si no se pasa ese campo.
+const CREAR_ORDEN_COMPRA_GERENTE = gql`
+  mutation CrearOrdenCompraGerente(
+    $proveedorId: ID!
+    $moneda: String!
+    $detalles: [DetalleOrdenInput!]!
+    $fechaEntregaEstimada: String
+    $notas: String
+  ) {
+    crearOrdenCompra(
+      proveedorId: $proveedorId
+      moneda: $moneda
+      detalles: $detalles
+      fechaEntregaEstimada: $fechaEntregaEstimada
+      notas: $notas
+    ) {
+      ok
+      error
+      orden {
+        id
+        estado
+        totalEstimado
+        moneda
+        proveedorNombre
+        fechaCreacion
+      }
+    }
+  }
+`;
+
 // ── Wizard de creación ────────────────────────────────────────────────────
 function CreateOrdenWizard({
   restauranteId,
@@ -680,7 +715,7 @@ function CreateOrdenWizard({
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
-  const [crearOrden, { loading }] = useMutation(CREAR_ORDEN_COMPRA, {
+  const [crearOrden, { loading }] = useMutation(CREAR_ORDEN_COMPRA_GERENTE, {
     refetchQueries: ["GetOrdenesCompra"],
   });
 

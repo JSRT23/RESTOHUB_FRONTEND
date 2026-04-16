@@ -211,7 +211,10 @@ function ModalCrear({ open, onClose, restauranteId, empleados }) {
             >
               <option value="">— Selecciona un empleado —</option>
               {empleados
-                .filter((e) => e.activo)
+                .filter(
+                  (e) =>
+                    e.activo && !["gerente", "gerente_local"].includes(e.rol),
+                )
                 .map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.nombre} {e.apellido} · {e.rolDisplay || e.rol}
@@ -427,7 +430,11 @@ export default function GTurnosList() {
   });
 
   const turnos = data?.turnos ?? [];
-  const empleados = empData?.empleados ?? [];
+  // Excluir gerentes — no se les programa turnos desde esta vista
+  const ROLES_EXCLUIDOS = ["gerente", "gerente_local"];
+  const empleados = (empData?.empleados ?? []).filter(
+    (e) => !ROLES_EXCLUIDOS.includes(e.rol),
+  );
 
   const filtrados = turnos.filter((t) => {
     if (!busqueda.trim()) return true;

@@ -16,6 +16,7 @@ import AProveedoresList from "../../features/inventory/components/admin/AProveed
 
 // Admin Central — Staff
 import AdminStaffList from "../../features/staff/components/admin/AdminStaffList";
+import AdminUsuariosList from "../../features/staff/components/Admin/AdminUsuariosList";
 
 // ── Gerente Local ──────────────────────────────────────────────────────────
 // Menu principal de Gerente Local
@@ -146,7 +147,7 @@ const router = createBrowserRouter([
         path: "admin/usuarios",
         element: (
           <RoleRoute roles={["admin_central"]}>
-            <WIP title="Usuarios" />
+            <AdminUsuariosList />
           </RoleRoute>
         ),
       },

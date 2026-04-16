@@ -267,13 +267,37 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
 
     setLoading(true);
     const nombreCompleto = `${nombre.trim()} ${apellido.trim()}`;
-    let empleadoIdCreado = null;
-
     try {
-      // ── Paso 1: crear perfil en staff_service primero ───────────────────
-      // Necesitamos el empleado.id antes de llamar a auth_service,
-      // porque auth_service exige empleadoId para roles operativos.
-      const { data: d1 } = await crearStaff({
+      // ── Paso 1: crear cuenta en auth_service ────────────────────────────
+      // Flujo correcto según API (paso 16 de la doc): auth va PRIMERO.
+      // El serializer ya NO exige empleado_id en el registro — fue corregido.
+      // El gerente fuerza su propio restaurante_id en RegistroView del backend.
+      const { data: d1 } = await registrarAuth({
+        variables: {
+          email: email.trim(),
+          nombre: nombreCompleto,
+          password,
+          passwordConfirm,
+          rol,
+          restauranteId,
+        },
+      });
+
+      const auth = d1?.registrarUsuario;
+      if (!auth?.ok) {
+        Swal.fire({
+          background: "#fff",
+          icon: "error",
+          title: "Error al crear cuenta",
+          text: auth?.error || "No se pudo crear el acceso para el empleado.",
+          confirmButtonColor: G[900],
+        });
+        setLoading(false);
+        return;
+      }
+
+      // ── Paso 2: crear perfil en staff_service ───────────────────────────
+      const { data: d2 } = await crearStaff({
         variables: {
           nombre: nombre.trim(),
           apellido: apellido.trim(),
@@ -287,46 +311,17 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
         },
       });
 
-      const staff = d1?.crearEmpleado;
+      const staff = d2?.crearEmpleado;
       if (!staff?.ok) {
-        Swal.fire({
-          background: "#fff",
-          icon: "error",
-          title: "Error al registrar empleado",
-          text: staff?.errores?.[0] ?? "No se pudo crear el perfil en staff.",
-          confirmButtonColor: G[900],
-        });
-        setLoading(false);
-        return;
-      }
-
-      empleadoIdCreado = staff.empleado?.id;
-
-      // ── Paso 2: crear cuenta en auth_service (sin empleadoId, igual que gerente) ─
-      const { data: d2 } = await registrarAuth({
-        variables: {
-          email: email.trim(),
-          nombre: nombreCompleto,
-          password,
-          passwordConfirm,
-          rol,
-          restauranteId,
-        },
-      });
-
-      const auth = d2?.registrarUsuario;
-      if (!auth?.ok) {
-        // Staff OK pero auth falló — avisamos, el perfil existe pero no puede iniciar sesión.
-        // El admin puede crear la cuenta manualmente más adelante.
+        // Auth OK pero staff falló — puede iniciar sesión pero sin perfil completo
         Swal.fire({
           background: "#fff",
           icon: "warning",
-          title: "Perfil creado, cuenta pendiente",
+          title: "Cuenta creada con advertencia",
           html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.6">
-            <p><b style="color:#163832">${nombreCompleto}</b> fue registrado en el equipo,
-            pero no se pudo crear su cuenta de acceso:</p>
-            <p style="font-size:12px;color:#9ca3af;margin-top:6px">${auth?.error ?? "Error desconocido en auth_service"}</p>
-            <p style="font-size:12px;color:#9ca3af;margin-top:4px">El empleado aparecerá en la lista pero no podrá iniciar sesión hasta que se cree su cuenta.</p>
+            <p><b style="color:#163832">${nombreCompleto}</b> ya puede iniciar sesión,
+            pero hubo un problema al registrar su perfil de staff:</p>
+            <p style="font-size:12px;color:#9ca3af;margin-top:6px">${staff?.errores?.[0] ?? "Error desconocido"}</p>
           </div>`,
           confirmButtonColor: G[900],
         });

@@ -1,14 +1,12 @@
 // src/features/inventory/components/gerente/InventarioDashboard.jsx
 //
-// Dashboard principal de inventario para el gerente local.
-// Muestra: almacén central del restaurante, KPIs de stock, proveedores activos
-// y órdenes de compra pendientes. Punto de entrada desde el navbar → Inventario.
-//
-// Rutas que alimenta este módulo (paso a paso):
-//   /gerente/inventario          ← esta página
-//   /gerente/proveedores         ← próximo paso
-//   /gerente/ordenes             ← siguiente
-//   /gerente/stock               ← luego
+// Dashboard de inventario para gerente_local.
+// Fixes respecto a la versión anterior:
+//  · GET_STOCK ahora espera almacenId (obtenido del almacén principal)
+//  · GET_ALERTAS usa estado: "PENDIENTE" (mayúsculas, según el API)
+//  · Stock se carga en cascada: primero almacén → luego stock con su id
+//  · Órdenes usa estado uppercase para los conteos
+//  · Accesos rápidos incluyen todos los módulos ya implementados
 
 import { useQuery } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
@@ -20,12 +18,12 @@ import {
   Package,
   ArrowRight,
   CheckCircle2,
-  Clock,
   TrendingDown,
-  Box,
+  Archive,
   ChevronRight,
   BarChart3,
-  Layers,
+  SlidersHorizontal,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "../../../../app/auth/AuthContext";
 import { Skeleton } from "../../../../shared/components/ui";
@@ -38,7 +36,7 @@ import {
 } from "../../graphql/queries";
 import { GET_MI_RESTAURANTE } from "../../../menu/components/Gerente/graphql/operations";
 
-// ── Paleta del sistema ─────────────────────────────────────────────────────
+// ── Paleta ────────────────────────────────────────────────────────────────
 const G = {
   50: "#DAF1DE",
   100: "#8EB69B",
@@ -47,38 +45,40 @@ const G = {
   900: "#051F20",
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function fmt(num, moneda = "") {
-  if (num == null) return "—";
-  const f = new Intl.NumberFormat("es-CO", {
-    minimumFractionDigits: 0,
+// ── Helpers ───────────────────────────────────────────────────────────────
+function fmt(n) {
+  if (n == null) return "—";
+  return new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(n);
+}
+function fmtMoney(n, moneda = "COP") {
+  if (n == null) return "—";
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: moneda,
     maximumFractionDigits: 0,
-  }).format(num);
-  return moneda ? `${moneda} ${f}` : f;
+  }).format(n);
+}
+function fmtDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("es-CO", {
+    day: "2-digit",
+    month: "short",
+  });
 }
 
-function getAlmacenNombre(almacenRaw, restauranteNombre) {
-  // El almacén se crea automáticamente vía RabbitMQ con nombre "Almacen Central".
-  // Lo mostramos como "Almacén Central — <nombre del restaurante>".
-  if (!almacenRaw) return "—";
-  const base = almacenRaw.nombre || "Almacén Central";
-  if (restauranteNombre) return `${base} — ${restauranteNombre}`;
-  return base;
-}
-
-// ── Sub-componentes ────────────────────────────────────────────────────────
-
+// ── KpiCard ───────────────────────────────────────────────────────────────
 function KpiCard({ icon: Icon, label, value, sub, accent, critical, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="group w-full text-left bg-white rounded-2xl border border-stone-200 p-5 hover:-translate-y-0.5 transition-all duration-200"
+      disabled={!onClick}
+      className={`group w-full text-left bg-white rounded-2xl border border-stone-200 p-5 transition-all duration-200 ${onClick ? "hover:-translate-y-0.5 cursor-pointer" : "cursor-default"}`}
       style={{
         boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-        borderTop: accent
-          ? `2px solid ${G[300]}`
-          : critical
-            ? "2px solid #ef4444"
+        borderTop: critical
+          ? "2px solid #ef4444"
+          : accent
+            ? `2px solid ${G[300]}`
             : undefined,
       }}
     >
@@ -115,12 +115,14 @@ function KpiCard({ icon: Icon, label, value, sub, accent, critical, onClick }) {
   );
 }
 
-function AlmacenCard({ almacen, restauranteNombre, loading }) {
+// ── AlmacenCard ───────────────────────────────────────────────────────────
+function AlmacenCard({ almacen, restauranteNombre, stockCritico, loading }) {
   if (loading) return <Skeleton className="h-28 rounded-2xl" />;
+
   if (!almacen)
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex items-center gap-4">
-        <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
+        <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
           <AlertTriangle size={18} />
         </div>
         <div>
@@ -128,22 +130,22 @@ function AlmacenCard({ almacen, restauranteNombre, loading }) {
             Sin almacén registrado
           </p>
           <p className="text-xs font-dm text-amber-600 mt-0.5">
-            El almacén se crea automáticamente al crear el restaurante. Si no
-            aparece, aguarda unos segundos y recarga.
+            El almacén se crea automáticamente al crear el restaurante vía
+            RabbitMQ. Si no aparece, espera unos segundos y recarga la página.
           </p>
         </div>
       </div>
     );
 
-  const nombre = getAlmacenNombre(almacen, restauranteNombre);
-  const pct =
-    almacen.totalIngredientes > 0
-      ? Math.round(
-          ((almacen.totalIngredientes - almacen.ingredientesBajoMinimo) /
-            almacen.totalIngredientes) *
-            100,
-        )
-      : 100;
+  // Nombre: "Almacén Central — <nombre restaurante>"
+  const nombre = restauranteNombre
+    ? `${almacen.nombre} — ${restauranteNombre}`
+    : almacen.nombre;
+
+  const total = almacen.totalIngredientes ?? 0;
+  const bajoMin = almacen.ingredientesBajoMinimo ?? 0;
+  const pct = total > 0 ? Math.round(((total - bajoMin) / total) * 100) : 100;
+  const barColor = pct > 70 ? G[50] : pct > 40 ? "#fde68a" : "#fca5a5";
 
   return (
     <div
@@ -166,30 +168,26 @@ function AlmacenCard({ almacen, restauranteNombre, loading }) {
         <p className="text-base font-dm font-bold text-white truncate">
           {nombre}
         </p>
-        <div className="flex items-center gap-4 mt-2">
+        <div className="flex items-center gap-4 mt-1.5">
           <span className="text-xs font-dm text-white/60">
-            <span className="text-white font-semibold">
-              {almacen.totalIngredientes ?? 0}
-            </span>{" "}
+            <span className="text-white font-semibold">{total}</span>{" "}
             ingredientes
           </span>
-          {almacen.ingredientesBajoMinimo > 0 && (
+          {bajoMin > 0 && (
             <span className="text-xs font-dm text-red-300">
-              <span className="font-semibold">
-                {almacen.ingredientesBajoMinimo}
-              </span>{" "}
-              bajo mínimo
+              <span className="font-semibold">{bajoMin}</span> bajo mínimo
+            </span>
+          )}
+          {stockCritico > 0 && (
+            <span className="text-xs font-dm text-amber-300">
+              <span className="font-semibold">{stockCritico}</span> críticos
             </span>
           )}
         </div>
-        {/* barra de salud del stock */}
-        <div className="mt-2.5 h-1.5 rounded-full bg-white/10 overflow-hidden w-full">
+        <div className="mt-2.5 h-1.5 rounded-full bg-white/10 overflow-hidden">
           <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${pct}%`,
-              background: pct > 70 ? G[50] : pct > 40 ? "#fde68a" : "#fca5a5",
-            }}
+            className="h-full rounded-full transition-all duration-700"
+            style={{ width: `${pct}%`, background: barColor }}
           />
         </div>
       </div>
@@ -197,50 +195,53 @@ function AlmacenCard({ almacen, restauranteNombre, loading }) {
         <p className="text-2xl font-dm font-bold" style={{ color: G[50] }}>
           {pct}%
         </p>
-        <p className="text-[10px] font-dm text-white/50">Capacidad</p>
+        <p className="text-[10px] font-dm text-white/50">salud</p>
       </div>
     </div>
   );
 }
 
-function AccesoCard({ icon: Icon, title, desc, href, badge, badgeColor }) {
+// ── AccesoCard ────────────────────────────────────────────────────────────
+function AccesoCard({
+  icon: Icon,
+  title,
+  desc,
+  href,
+  badge,
+  badgeColor = "green",
+}) {
   const navigate = useNavigate();
+  const colors = {
+    green: { bg: G[50], text: G[300] },
+    red: { bg: "#fee2e2", text: "#dc2626" },
+    amber: { bg: "#fef3c7", text: "#d97706" },
+    blue: { bg: "#eff6ff", text: "#3b82f6" },
+  };
+  const bc = colors[badgeColor] ?? colors.green;
+
   return (
     <button
       onClick={() => navigate(href)}
-      className="group w-full text-left bg-white rounded-2xl border border-stone-200 p-5 hover:border-stone-300 hover:-translate-y-0.5 transition-all duration-200"
+      className="group w-full text-left bg-white rounded-2xl border border-stone-200 p-4 hover:border-stone-300 hover:-translate-y-0.5 transition-all duration-200"
       style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
             style={{ background: G[50], color: G[300] }}
           >
-            <Icon size={18} />
+            <Icon size={16} />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <p className="text-sm font-dm font-semibold text-stone-800">
                 {title}
               </p>
-              {badge != null && (
+              {badge != null && badge > 0 && (
                 <span
                   className="px-2 py-0.5 rounded-full text-[10px] font-dm font-bold"
-                  style={{
-                    background:
-                      badgeColor === "red"
-                        ? "#fee2e2"
-                        : badgeColor === "amber"
-                          ? "#fef3c7"
-                          : G[50],
-                    color:
-                      badgeColor === "red"
-                        ? "#dc2626"
-                        : badgeColor === "amber"
-                          ? "#d97706"
-                          : G[300],
-                  }}
+                  style={{ background: bc.bg, color: bc.text }}
                 >
                   {badge}
                 </span>
@@ -250,7 +251,7 @@ function AccesoCard({ icon: Icon, title, desc, href, badge, badgeColor }) {
           </div>
         </div>
         <ArrowRight
-          size={15}
+          size={14}
           className="text-stone-300 group-hover:text-stone-500 group-hover:translate-x-0.5 transition-all"
         />
       </div>
@@ -258,20 +259,19 @@ function AccesoCard({ icon: Icon, title, desc, href, badge, badgeColor }) {
   );
 }
 
+// ── AlertaRow ─────────────────────────────────────────────────────────────
 function AlertaRow({ alerta }) {
-  const tipoLabel = {
-    bajo_minimo: "Bajo mínimo",
-    agotado: "Agotado",
-    por_vencer: "Por vencer",
-    vencido: "Vencido",
+  const TIPO = {
+    bajo_minimo: { label: "Bajo mínimo", bg: "#fef3c7", text: "#d97706" },
+    agotado: { label: "Agotado", bg: "#fee2e2", text: "#dc2626" },
+    por_vencer: { label: "Por vencer", bg: "#fef3c7", text: "#d97706" },
+    vencido: { label: "Vencido", bg: "#fee2e2", text: "#dc2626" },
   };
-  const colors = {
-    bajo_minimo: { bg: "#fef3c7", text: "#d97706" },
-    agotado: { bg: "#fee2e2", text: "#dc2626" },
-    por_vencer: { bg: "#fef3c7", text: "#d97706" },
-    vencido: { bg: "#fee2e2", text: "#dc2626" },
+  const c = TIPO[alerta.tipoAlerta] ?? {
+    label: alerta.tipoAlerta,
+    bg: G[50],
+    text: G[300],
   };
-  const c = colors[alerta.tipoAlerta] ?? { bg: G[50], text: G[300] };
 
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-stone-100 last:border-0">
@@ -279,7 +279,7 @@ function AlertaRow({ alerta }) {
         className="px-2 py-0.5 rounded-full text-[10px] font-dm font-semibold shrink-0"
         style={{ background: c.bg, color: c.text }}
       >
-        {tipoLabel[alerta.tipoAlerta] ?? alerta.tipoAlerta}
+        {c.label}
       </span>
       <p className="text-xs font-dm text-stone-700 flex-1 truncate">
         {alerta.nombreIngrediente}
@@ -291,77 +291,90 @@ function AlertaRow({ alerta }) {
   );
 }
 
-// ── Componente principal ───────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────
 export default function InventarioDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const restauranteId = user?.restauranteId;
 
-  // ── Datos ──────────────────────────────────────────────────────────────
+  // 1. Restaurante
   const { data: rData } = useQuery(GET_MI_RESTAURANTE, {
     variables: { id: restauranteId },
     skip: !restauranteId,
   });
 
+  // 2. Almacén principal (RabbitMQ lo crea al crear el restaurante)
   const { data: aData, loading: aLoading } = useQuery(GET_ALMACENES, {
     variables: { restauranteId },
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
 
+  const almacenPrincipal = aData?.almacenes?.[0] ?? null;
+
+  // 3. Stock — espera el almacenId del paso anterior (cascada correcta)
   const { data: sData, loading: sLoading } = useQuery(GET_STOCK, {
-    variables: {},
-    skip: !restauranteId,
+    variables: { almacenId: almacenPrincipal?.id },
+    skip: !almacenPrincipal?.id,
     fetchPolicy: "cache-and-network",
   });
 
+  // 4. Proveedores activos
   const { data: pData, loading: pLoading } = useQuery(GET_PROVEEDORES, {
     variables: { activo: true },
     fetchPolicy: "cache-and-network",
   });
 
+  // 5. Órdenes del restaurante
   const { data: oData, loading: oLoading } = useQuery(GET_ORDENES_COMPRA, {
     variables: { restauranteId },
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
 
+  // 6. Alertas activas (estado PENDIENTE — uppercase según API)
   const { data: alData } = useQuery(GET_ALERTAS, {
-    variables: { restauranteId, estado: "activa" },
+    variables: { restauranteId, estado: "PENDIENTE" },
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
 
-  // ── Derivados ──────────────────────────────────────────────────────────
+  // ── Derivados ─────────────────────────────────────────────────────────
   const restaurante = rData?.restaurante;
-  const almacenes = aData?.almacenes ?? [];
-  // El almacén principal es el primero (creado por RabbitMQ al crear el restaurante)
-  const almacenPrincipal = almacenes[0] ?? null;
-
   const stock = sData?.stock ?? [];
+  const proveedores = pData?.proveedores ?? [];
+  const ordenes = oData?.ordenesCompra ?? [];
+  const alertas = alData?.alertasStock ?? [];
+
+  // Stock
   const stockCritico = stock.filter(
     (s) => s.necesitaReposicion || s.estaAgotado,
   ).length;
   const stockAgotado = stock.filter((s) => s.estaAgotado).length;
 
-  const proveedores = pData?.proveedores ?? [];
-
-  const ordenes = oData?.ordenesCompra ?? [];
-  const ordenesPendientes = ordenes.filter(
-    (o) => o.estado === "borrador" || o.estado === "enviada",
+  // Órdenes — estados uppercase
+  const ordenesPendientes = ordenes.filter((o) =>
+    ["BORRADOR", "PENDIENTE", "ENVIADA"].includes(o.estado?.toUpperCase()),
   ).length;
-  const ordenesEnviadas = ordenes.filter((o) => o.estado === "enviada").length;
+  const ordenesEnviadas = ordenes.filter(
+    (o) => o.estado?.toUpperCase() === "ENVIADA",
+  ).length;
+  const ordenesRecientes = [...ordenes]
+    .sort((a, b) => new Date(b.fechaCreacion) - new Date(a.fechaCreacion))
+    .slice(0, 5);
 
-  const alertas = alData?.alertasStock ?? [];
+  // Alertas — críticas primero
   const alertasCriticas = alertas.filter(
     (a) => a.tipoAlerta === "agotado" || a.tipoAlerta === "vencido",
   );
   const alertasWarn = alertas.filter(
     (a) => a.tipoAlerta === "bajo_minimo" || a.tipoAlerta === "por_vencer",
   );
+  const alertasOrdenadas = [...alertasCriticas, ...alertasWarn];
 
   const loading = aLoading || sLoading || pLoading || oLoading;
 
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-7">
       {/* ── Encabezado ──────────────────────────────────────────────────── */}
@@ -377,19 +390,22 @@ export default function InventarioDashboard() {
             Vista general del almacén, stock y compras de tu restaurante
           </p>
         </div>
-        <div
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-dm font-semibold"
-          style={{ background: G[50], color: G[300] }}
-        >
-          <BarChart3 size={12} />
-          {restaurante?.nombre ?? "Mi restaurante"}
-        </div>
+        {restaurante && (
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-dm font-semibold"
+            style={{ background: G[50], color: G[300] }}
+          >
+            <BarChart3 size={12} />
+            {restaurante.nombre}
+          </div>
+        )}
       </div>
 
       {/* ── Almacén principal ────────────────────────────────────────────── */}
       <AlmacenCard
         almacen={almacenPrincipal}
         restauranteNombre={restaurante?.nombre}
+        stockCritico={stockCritico}
         loading={aLoading}
       />
 
@@ -399,8 +415,11 @@ export default function InventarioDashboard() {
           icon={Package}
           label="Ingredientes en stock"
           value={loading ? "—" : fmt(stock.length)}
-          sub={`${stockAgotado > 0 ? stockAgotado + " agotados" : "Todos disponibles"}`}
+          sub={
+            stockAgotado > 0 ? `${stockAgotado} agotados` : "Todos disponibles"
+          }
           accent
+          onClick={() => navigate("/gerente/stock")}
         />
         <KpiCard
           icon={TrendingDown}
@@ -421,15 +440,19 @@ export default function InventarioDashboard() {
         />
         <KpiCard
           icon={ShoppingCart}
-          label="Órdenes pendientes"
+          label="Órdenes en curso"
           value={loading ? "—" : fmt(ordenesPendientes)}
-          sub={`${ordenesEnviadas} enviadas al proveedor`}
+          sub={
+            ordenesEnviadas > 0
+              ? `${ordenesEnviadas} enviadas al proveedor`
+              : "Sin envíos pendientes"
+          }
           critical={ordenesEnviadas > 0}
           onClick={() => navigate("/gerente/ordenes")}
         />
       </div>
 
-      {/* ── Grid inferior: Alertas + Accesos rápidos ─────────────────────── */}
+      {/* ── Grid inferior ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Alertas activas */}
         <div
@@ -442,14 +465,10 @@ export default function InventarioDashboard() {
                 className="w-7 h-7 rounded-lg flex items-center justify-center"
                 style={{
                   background: alertasCriticas.length > 0 ? "#fee2e2" : G[50],
+                  color: alertasCriticas.length > 0 ? "#dc2626" : G[300],
                 }}
               >
-                <AlertTriangle
-                  size={13}
-                  style={{
-                    color: alertasCriticas.length > 0 ? "#dc2626" : G[300],
-                  }}
-                />
+                <AlertTriangle size={13} />
               </div>
               <p className="text-sm font-dm font-semibold text-stone-800">
                 Alertas activas
@@ -486,8 +505,7 @@ export default function InventarioDashboard() {
             </div>
           ) : (
             <div>
-              {/* Críticas primero */}
-              {[...alertasCriticas, ...alertasWarn].slice(0, 6).map((a) => (
+              {alertasOrdenadas.slice(0, 6).map((a) => (
                 <AlertaRow key={a.id} alerta={a} />
               ))}
               {alertas.length > 6 && (
@@ -502,42 +520,42 @@ export default function InventarioDashboard() {
         {/* Accesos rápidos */}
         <div className="space-y-3">
           <p className="text-xs font-dm font-semibold text-stone-400 uppercase tracking-wider px-1">
-            Gestión de inventario
+            Módulos de inventario
           </p>
           <AccesoCard
             icon={Truck}
             title="Proveedores"
-            desc="Crear y gestionar relaciones con proveedores"
+            desc="Gestiona tus proveedores locales y ve los globales"
             href="/gerente/proveedores"
-            badge={proveedores.length > 0 ? proveedores.length : null}
+            badge={proveedores.length}
           />
           <AccesoCard
             icon={ShoppingCart}
             title="Órdenes de compra"
-            desc="Crear, enviar y recibir órdenes"
+            desc="Crear, enviar y recibir órdenes de mercancía"
             href="/gerente/ordenes"
-            badge={ordenesPendientes > 0 ? ordenesPendientes : null}
-            badgeColor={ordenesEnviadas > 0 ? "amber" : undefined}
+            badge={ordenesEnviadas}
+            badgeColor={ordenesEnviadas > 0 ? "amber" : "green"}
           />
           <AccesoCard
-            icon={Layers}
+            icon={SlidersHorizontal}
             title="Stock"
-            desc="Niveles actuales y movimientos"
+            desc="Niveles actuales, ajustes y movimientos"
             href="/gerente/stock"
-            badge={stockCritico > 0 ? stockCritico : null}
-            badgeColor={stockCritico > 0 ? "red" : undefined}
+            badge={stockCritico}
+            badgeColor={stockCritico > 0 ? "red" : "green"}
           />
           <AccesoCard
-            icon={Box}
+            icon={Archive}
             title="Lotes"
-            desc="Trazabilidad y fechas de vencimiento"
+            desc="Trazabilidad, vencimientos y retiros"
             href="/gerente/lotes"
           />
         </div>
       </div>
 
       {/* ── Órdenes recientes ────────────────────────────────────────────── */}
-      {ordenes.length > 0 && (
+      {ordenesRecientes.length > 0 && (
         <div
           className="bg-white rounded-2xl border border-stone-200 p-5"
           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
@@ -548,7 +566,7 @@ export default function InventarioDashboard() {
                 className="w-7 h-7 rounded-lg flex items-center justify-center"
                 style={{ background: G[50] }}
               >
-                <Clock size={13} style={{ color: G[300] }} />
+                <ShoppingCart size={13} style={{ color: G[300] }} />
               </div>
               <p className="text-sm font-dm font-semibold text-stone-800">
                 Órdenes recientes
@@ -567,29 +585,28 @@ export default function InventarioDashboard() {
             <table className="w-full text-xs font-dm">
               <thead>
                 <tr className="border-b border-stone-100">
-                  <th className="text-left py-2 text-stone-400 font-semibold">
-                    Proveedor
-                  </th>
-                  <th className="text-left py-2 text-stone-400 font-semibold">
-                    Estado
-                  </th>
-                  <th className="text-right py-2 text-stone-400 font-semibold">
-                    Total
-                  </th>
-                  <th className="text-right py-2 text-stone-400 font-semibold">
-                    Fecha
-                  </th>
+                  {["Proveedor", "Estado", "Total", "Fecha"].map((h) => (
+                    <th
+                      key={h}
+                      className={`py-2 text-stone-400 font-semibold ${h === "Total" || h === "Fecha" ? "text-right" : "text-left"}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {ordenes.slice(0, 5).map((o) => {
-                  const estadoStyle = {
-                    borrador: { bg: "#f1f5f9", text: "#64748b" },
-                    enviada: { bg: "#fef3c7", text: "#d97706" },
-                    recibida: { bg: G[50], text: G[300] },
-                    cancelada: { bg: "#fee2e2", text: "#dc2626" },
+                {ordenesRecientes.map((o) => {
+                  const ESTADO_STYLE = {
+                    BORRADOR: { bg: "#f1f5f9", text: "#64748b" },
+                    PENDIENTE: { bg: "#fef3c7", text: "#d97706" },
+                    ENVIADA: { bg: "#eff6ff", text: "#3b82f6" },
+                    RECIBIDA: { bg: G[50], text: G[300] },
+                    CANCELADA: { bg: "#fee2e2", text: "#dc2626" },
                   };
-                  const s = estadoStyle[o.estado] ?? estadoStyle.borrador;
+                  const s =
+                    ESTADO_STYLE[o.estado?.toUpperCase()] ??
+                    ESTADO_STYLE.BORRADOR;
                   return (
                     <tr
                       key={o.id}
@@ -603,19 +620,14 @@ export default function InventarioDashboard() {
                           className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
                           style={{ background: s.bg, color: s.text }}
                         >
-                          {o.estado}
+                          {o.estado?.toLowerCase()}
                         </span>
                       </td>
                       <td className="py-2.5 text-right text-stone-600">
-                        {fmt(o.totalEstimado, o.moneda)}
+                        {fmtMoney(o.totalEstimado, o.moneda)}
                       </td>
                       <td className="py-2.5 text-right text-stone-400">
-                        {o.fechaCreacion
-                          ? new Date(o.fechaCreacion).toLocaleDateString(
-                              "es-CO",
-                              { day: "2-digit", month: "short" },
-                            )
-                          : "—"}
+                        {fmtDate(o.fechaCreacion)}
                       </td>
                     </tr>
                   );
