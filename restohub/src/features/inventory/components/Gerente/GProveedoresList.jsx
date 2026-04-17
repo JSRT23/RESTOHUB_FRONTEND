@@ -822,6 +822,7 @@ export default function GProveedoresList() {
       )}
 
       <ProveedorModal
+        key={modalProv === "nuevo" ? "nuevo" : (modalProv?.id ?? "nuevo")}
         open={!!modalProv}
         onClose={() => setModalProv(null)}
         proveedor={modalProv === "nuevo" ? null : modalProv}

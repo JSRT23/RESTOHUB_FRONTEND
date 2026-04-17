@@ -1,7 +1,6 @@
 // src/shared/components/layout/Navbar.jsx
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Layers } from "lucide-react";
 import {
   UtensilsCrossed,
   Package,
@@ -23,6 +22,13 @@ import {
   ShieldCheck,
   Clock,
   DollarSign,
+  Layers,
+  Star,
+  ClipboardList,
+  ChefHat,
+  Banknote,
+  Bike,
+  MapPin,
 } from "lucide-react";
 import { useAuth } from "../../../app/auth/AuthContext";
 
@@ -35,16 +41,39 @@ const G = {
   900: "#051F20",
 };
 
-// Normaliza el rol: "gerente" → "gerente_local" (auth_service puede devolver ambos)
 function normalizeRol(rol) {
   if (rol === "gerente") return "gerente_local";
   return rol;
 }
 
 const NAV_CONFIG = {
+  // ── Admin Central ─────────────────────────────────────────────────────────
   admin_central: [
     { label: "Restaurantes", href: "/restaurantes", icon: Building2 },
-    { label: "Categorías", href: "/menu/categorias", icon: Tag },
+    {
+      label: "Menú",
+      icon: UtensilsCrossed,
+      children: [
+        {
+          label: "Categorías",
+          href: "/menu/categorias",
+          icon: Tag,
+          desc: "Global",
+        },
+        {
+          label: "Platos",
+          href: "/menu/platos",
+          icon: UtensilsCrossed,
+          desc: "Catálogo completo",
+        },
+        {
+          label: "Ingredientes",
+          href: "/menu/ingredientes",
+          icon: FlaskConical,
+          desc: "Global y por restaurante",
+        },
+      ],
+    },
     {
       label: "Inventario",
       icon: Package,
@@ -54,6 +83,12 @@ const NAV_CONFIG = {
           href: "/inventario",
           icon: LayoutDashboard,
           desc: "Vista general",
+        },
+        {
+          label: "Proveedores",
+          href: "/inventario/proveedores",
+          icon: Truck,
+          desc: "Gestión global",
         },
         {
           label: "Stock",
@@ -66,12 +101,6 @@ const NAV_CONFIG = {
           href: "/inventario/almacenes",
           icon: Warehouse,
           desc: "Espacios",
-        },
-        {
-          label: "Proveedores",
-          href: "/inventario/proveedores",
-          icon: Truck,
-          desc: "Gestión",
         },
         {
           label: "Lotes",
@@ -89,7 +118,7 @@ const NAV_CONFIG = {
           label: "Alertas",
           href: "/inventario/alertas",
           icon: Bell,
-          desc: "Alertas",
+          desc: "Stock bajo",
         },
       ],
     },
@@ -101,21 +130,27 @@ const NAV_CONFIG = {
           label: "Usuarios",
           href: "/admin/usuarios",
           icon: Users,
-          desc: "Todos los usuarios",
+          desc: "Cuentas y sincronía",
         },
         {
           label: "Staff",
           href: "/admin/staff",
           icon: UserCircle,
-          desc: "Personal y turnos",
+          desc: "Personal global",
+        },
+        {
+          label: "Loyalty",
+          href: "/admin/loyalty",
+          icon: Star,
+          desc: "Promociones y cupones",
         },
       ],
     },
   ],
 
+  // ── Gerente Local ─────────────────────────────────────────────────────────
   gerente_local: [
     { label: "Dashboard", href: "/gerente", icon: LayoutDashboard },
-    // ── Menú ───────────────────────────────────────────────────────────
     {
       label: "Menú",
       icon: UtensilsCrossed,
@@ -140,7 +175,6 @@ const NAV_CONFIG = {
         },
       ],
     },
-    // ── Inventario ───────────────────────────────────────────────────────────
     {
       label: "Inventario",
       icon: Package,
@@ -177,7 +211,6 @@ const NAV_CONFIG = {
         },
       ],
     },
-    // ── Staff ───────────────────────────────────────────────────────────
     {
       label: "Mi equipo",
       icon: Users,
@@ -202,13 +235,49 @@ const NAV_CONFIG = {
         },
       ],
     },
+    { label: "Loyalty", href: "/gerente/loyalty", icon: Star },
+  ],
+
+  // ── Supervisor ────────────────────────────────────────────────────────────
+  supervisor: [
+    { label: "Pedidos", href: "/supervisor/pedidos", icon: ClipboardList },
+    { label: "Staff", href: "/supervisor/staff", icon: Users },
+    { label: "Inventario", href: "/supervisor/stock", icon: Package },
+  ],
+
+  // ── Mesero ────────────────────────────────────────────────────────────────
+  mesero: [
+    { label: "Nuevo pedido", href: "/mesero", icon: UtensilsCrossed },
+    { label: "Mis pedidos", href: "/mesero/pedidos", icon: ClipboardList },
+    { label: "Mi turno", href: "/mesero/turno", icon: Clock },
+  ],
+
+  // ── Cocinero ──────────────────────────────────────────────────────────────
+  cocinero: [
+    { label: "Comandas", href: "/cocina", icon: ChefHat },
+    { label: "Mis pedidos", href: "/cocina/pedidos", icon: ClipboardList },
+    { label: "Mi turno", href: "/cocina/turno", icon: Clock },
+  ],
+
+  // ── Cajero ────────────────────────────────────────────────────────────────
+  cajero: [
+    { label: "Cobrar", href: "/caja", icon: Banknote },
+    { label: "Pedidos del día", href: "/caja/pedidos", icon: ClipboardList },
+    { label: "Mi turno", href: "/caja/turno", icon: Clock },
+  ],
+
+  // ── Repartidor ────────────────────────────────────────────────────────────
+  repartidor: [
+    { label: "Mis entregas", href: "/entregas", icon: Bike },
+    { label: "En camino", href: "/entregas/en-camino", icon: MapPin },
+    { label: "Mi turno", href: "/entregas/turno", icon: Clock },
   ],
 };
 
 const ROL_LABEL = {
   admin_central: "Admin Central",
   gerente_local: "Gerente Local",
-  gerente: "Gerente Local", // alias por si el backend devuelve "gerente"
+  gerente: "Gerente Local",
   supervisor: "Supervisor",
   cocinero: "Cocinero",
   mesero: "Mesero",
@@ -233,12 +302,10 @@ function DropdownMenu({ item, onClose }) {
               to={child.href}
               onClick={onClose}
               style={
-                active
-                  ? { background: G[50], borderLeft: `2px solid ${G[300]}` }
-                  : {}
+                active ? { background: G[50], borderLeftColor: G[300] } : {}
               }
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group
-                ${active ? "" : "hover:bg-stone-50 border-l-2 border-transparent"}`}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group border-l-2
+                ${active ? "" : "border-transparent hover:bg-stone-50"}`}
             >
               <div
                 style={active ? { background: G[50], color: G[300] } : {}}
@@ -283,7 +350,8 @@ function NavItem({ item }) {
   }, []);
 
   const isActive = item.href
-    ? location.pathname === item.href || location.pathname.startsWith(item.href)
+    ? location.pathname === item.href ||
+      (item.href !== "/" && location.pathname.startsWith(item.href))
     : item.children?.some((c) => location.pathname.startsWith(c.href));
 
   if (item.href) {
@@ -531,7 +599,6 @@ export default function Navbar() {
     navigate("/login");
   };
 
-  // Normaliza "gerente" → "gerente_local" por si el auth_service devuelve el alias corto
   const rol = normalizeRol(user?.rol);
   const navItems = NAV_CONFIG[rol] || NAV_CONFIG.admin_central;
 

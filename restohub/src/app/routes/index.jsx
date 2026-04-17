@@ -4,40 +4,67 @@ import { PrivateRoute, RoleRoute, RoleBasedRedirect } from "./guards";
 import MainLayout from "../../shared/components/layout/MainLayout";
 import LoginPage from "../../features/auth/components/LoginPage";
 
-// ── Admin Central ──────────────────────────────────────────────────────────
+// ── Admin Central — Restaurantes ──────────────────────────────────────────
 import CategoriasList from "../../features/menu/components/admin/CategoriasList";
 import RestaurantesList from "../../features/menu/components/admin/RestauranteList";
 import CreateRestauranteWizard from "../../features/menu/components/admin/CreateRestauranteWizard";
 import RestauranteDetail from "../../features/menu/components/admin/RestauranteDetail";
 
+// Admin Central — Menu
+import PlatosList from "../../features/menu/components/admin/PlatosList";
+import PlatoDetail from "../../features/menu/components/admin/PlatoDetail";
+import CreatePlato from "../../features/menu/components/admin/CreatePlato";
+import IngredientesList from "../../features/menu/components/admin/IngredientesList";
+
 // Admin Central — Inventario
 import AInventarioDashboard from "../../features/inventory/components/admin/AInventarioDashboard";
 import AProveedoresList from "../../features/inventory/components/admin/AProveedoresList";
+import AStockGlobal from "../../features/inventory/components/admin/AStockGlobal";
+import AAlmacenesList from "../../features/inventory/components/admin/AAlmacenesList";
 
 // Admin Central — Staff
 import AdminStaffList from "../../features/staff/components/admin/AdminStaffList";
-import AdminUsuariosList from "../../features/staff/components/Admin/AdminUsuariosList";
+import AdminUsuariosList from "../../features/staff/components/admin/AdminUsuariosList";
 
-// ── Gerente Local ──────────────────────────────────────────────────────────
-// Menu principal de Gerente Local
+// ── Gerente Local ─────────────────────────────────────────────────────────
 import GerenteDashboard from "../../features/menu/components/Gerente/dashboard/GerenteDashboard";
 import GIngredientesList from "../../features/menu/components/Gerente/menu/GIngredientesList";
 import GCategoriasList from "../../features/menu/components/Gerente/menu/GCategoriasList";
 import GPlatosList from "../../features/menu/components/Gerente/platos/GPlatosList";
 
-// Inventario del Gerente Local (WIP)
+// Inventario Gerente
 import InventarioDashboard from "../../features/inventory/components/Gerente/InventarioDashboard";
 import GProveedoresList from "../../features/inventory/components/Gerente/GProveedoresList";
 import GOrdenesCompra from "../../features/inventory/components/Gerente/GOrdenesCompra";
 import GStockList from "../../features/inventory/components/Gerente/GStockList";
 import GLotesList from "../../features/inventory/components/Gerente/GLotesList";
 
-// Staff del Gerente Local (WIP)
+// Staff Gerente
 import GStaffLayout from "../../features/staff/components/Gerente/GStaffLayout";
 import GEmpleadosList from "../../features/staff/components/Gerente/GEmpleadosList";
 import GTurnosList from "../../features/staff/components/Gerente/GTurnosList";
 import GNomina from "../../features/staff/components/Gerente/GNomina";
 
+// Loyalty Gerente
+import GLoyalty from "../../features/loyalty/components/Gerente/GLoyalty";
+
+// ── Mesero ────────────────────────────────────────────────────────────────
+import MMeseroLayout from "../../features/orders/components/Mesero/MMeseroLayout";
+import MNuevoPedido from "../../features/orders/components/Mesero/MNuevoPedido";
+import MMisPedidos from "../../features/orders/components/Mesero/MMisPedidos";
+import MMiTurno from "../../features/staff/components/Mesero/MMiTurno";
+
+// ── Cocinero ──────────────────────────────────────────────────────────────
+import CCocineroLayout from "../../features/orders/components/Cocinero/CCocineroLayout";
+import CComandas from "../../features/orders/components/Cocinero/CComandas";
+import CStockList from "../../features/inventory/components/Cocinero/CStockList";
+import CMiTurno from "../../features/staff/components/Cocinero/CMiTurno";
+import SSupervisorLayout from "../../features/staff/components/Supervisor/SSupervisorLayout";
+import SPedidosList from "../../features/orders/components/Supervisor/SPedidosList";
+import SStaffList from "../../features/staff/components/Supervisor/SStaffList";
+import SStockList from "../../features/inventory/components/Supervisor/SStockList";
+
+// ── Placeholders ──────────────────────────────────────────────────────────
 const WIP = ({ title }) => (
   <div className="flex flex-col items-center justify-center py-24 gap-3">
     <div className="w-12 h-12 rounded-2xl bg-white border border-stone-200 flex items-center justify-center text-stone-300 text-xl">
@@ -68,7 +95,6 @@ const router = createBrowserRouter([
       </PrivateRoute>
     ),
     children: [
-      // ── Redirect inteligente por rol ─────────────────────────────────
       { index: true, element: <RoleBasedRedirect /> },
 
       // ── Admin Central — Restaurantes ─────────────────────────────────
@@ -106,10 +132,37 @@ const router = createBrowserRouter([
           </RoleRoute>
         ),
       },
-      { path: "menu/platos", element: <WIP title="Platos (admin)" /> },
+      {
+        path: "menu/platos",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <PlatosList />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "menu/platos/nuevo",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <CreatePlato />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "menu/platos/:id",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <PlatoDetail />
+          </RoleRoute>
+        ),
+      },
       {
         path: "menu/ingredientes",
-        element: <WIP title="Ingredientes (admin)" />,
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <IngredientesList />
+          </RoleRoute>
+        ),
       },
 
       // ── Admin Central — Inventario ───────────────────────────────────
@@ -121,8 +174,6 @@ const router = createBrowserRouter([
           </RoleRoute>
         ),
       },
-      { path: "inventario/stock", element: <WIP title="Stock global" /> },
-      { path: "inventario/almacenes", element: <WIP title="Almacenes" /> },
       {
         path: "inventario/proveedores",
         element: (
@@ -131,16 +182,32 @@ const router = createBrowserRouter([
           </RoleRoute>
         ),
       },
-      { path: "inventario/lotes", element: <WIP title="Lotes" /> },
+      {
+        path: "inventario/stock",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <AStockGlobal />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "inventario/almacenes",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <AAlmacenesList />
+          </RoleRoute>
+        ),
+      },
       {
         path: "inventario/ordenes",
         element: (
           <RoleRoute roles={["admin_central", "gerente_local"]}>
-            <WIP title="Órdenes de compra" />
+            <WIP title="Órdenes de compra (admin)" />
           </RoleRoute>
         ),
       },
       { path: "inventario/alertas", element: <WIP title="Alertas de stock" /> },
+      { path: "inventario/lotes", element: <WIP title="Lotes (global)" /> },
 
       // ── Admin Central — Gestión ──────────────────────────────────────
       {
@@ -156,6 +223,14 @@ const router = createBrowserRouter([
         element: (
           <RoleRoute roles={["admin_central"]}>
             <AdminStaffList />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "admin/loyalty",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <WIP title="Loyalty — Promociones y cupones" />
           </RoleRoute>
         ),
       },
@@ -196,7 +271,7 @@ const router = createBrowserRouter([
         ),
       },
 
-      // ── Gerente Local — Inventario (WIP) ─────────────────────────────
+      // ── Gerente Local — Inventario ───────────────────────────────────
       {
         path: "gerente/inventario",
         element: (
@@ -238,7 +313,7 @@ const router = createBrowserRouter([
         ),
       },
 
-      // ── Gerente Local — Staff (WIP) ──────────────────────────────────
+      // ── Gerente Local — Staff ────────────────────────────────────────
       {
         path: "gerente/staff",
         element: (
@@ -252,6 +327,77 @@ const router = createBrowserRouter([
           { path: "turnos", element: <GTurnosList /> },
           { path: "nomina", element: <GNomina /> },
         ],
+      },
+
+      // ── Gerente Local — Loyalty ──────────────────────────────────────
+      {
+        path: "gerente/loyalty",
+        element: (
+          <RoleRoute roles={["gerente_local"]}>
+            <GLoyalty />
+          </RoleRoute>
+        ),
+      },
+
+      // ── Supervisor ───────────────────────────────────────────────────
+      {
+        path: "supervisor",
+        element: (
+          <RoleRoute roles={["supervisor"]}>
+            <SSupervisorLayout />
+          </RoleRoute>
+        ),
+        children: [
+          { index: true, element: <Navigate to="pedidos" replace /> },
+          { path: "pedidos", element: <SPedidosList /> },
+          { path: "staff", element: <SStaffList /> },
+          { path: "stock", element: <SStockList /> },
+        ],
+      },
+
+      // ── Mesero ───────────────────────────────────────────────────────
+      {
+        path: "mesero",
+        element: (
+          <RoleRoute roles={["mesero"]}>
+            <MMeseroLayout />
+          </RoleRoute>
+        ),
+        children: [
+          { index: true, element: <MNuevoPedido /> },
+          { path: "pedidos", element: <MMisPedidos /> },
+          { path: "turno", element: <MMiTurno /> },
+        ],
+      },
+      // ── Cocinero ─────────────────────────────────────────────────────
+      {
+        path: "cocina",
+        element: (
+          <RoleRoute roles={["cocinero"]}>
+            <CCocineroLayout />
+          </RoleRoute>
+        ),
+        children: [
+          { index: true, element: <CComandas /> },
+          { path: "stock", element: <CStockList /> },
+          { path: "turno", element: <CMiTurno /> },
+        ],
+      },
+      {
+        path: "caja",
+        element: (
+          <RoleRoute roles={["cajero"]}>
+            <WIP title="Cajero — Cobro y puntos" />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "entregas",
+        element: (
+          <RoleRoute roles={["repartidor"]}>
+            <WIP title="Repartidor — Mis entregas" />
+          </RoleRoute>
+        ),
       },
 
       // ── Auxiliares ───────────────────────────────────────────────────

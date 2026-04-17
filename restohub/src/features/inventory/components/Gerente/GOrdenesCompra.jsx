@@ -446,15 +446,29 @@ function ModalDetalle({ open, onClose, ordenId }) {
       cancelButtonText: "Cancelar",
     });
     if (!isConfirmed) return;
-    const { data: res } = await enviar({ variables: { id: ordenId } });
-    if (!res?.enviarOrdenCompra?.ok)
+    try {
+      const { data: res } = await enviar({ variables: { id: ordenId } });
+      if (!res?.enviarOrdenCompra?.ok)
+        throw new Error(res?.enviarOrdenCompra?.error ?? "Error desconocido");
+      Swal.fire({
+        background: "#fff",
+        icon: "success",
+        title: "¡Orden enviada!",
+        html: `<span style="font-family:'DM Sans';color:#78716c">La orden cambió a estado <b>ENVIADA</b>.</span>`,
+        confirmButtonColor: G[900],
+        timer: 1800,
+        timerProgressBar: true,
+      });
+      onClose();
+    } catch (err) {
       Swal.fire({
         background: "#fff",
         icon: "error",
-        title: "Error",
-        text: res?.enviarOrdenCompra?.error,
+        title: "Error al enviar",
+        text: err.message,
         confirmButtonColor: G[900],
       });
+    }
   };
 
   const handleCancelar = async () => {
@@ -470,8 +484,29 @@ function ModalDetalle({ open, onClose, ordenId }) {
       cancelButtonText: "Volver",
     });
     if (!isConfirmed) return;
-    await cancelar({ variables: { id: ordenId } });
-    onClose();
+    try {
+      const { data: res } = await cancelar({ variables: { id: ordenId } });
+      if (!res?.cancelarOrdenCompra?.ok)
+        throw new Error(res?.cancelarOrdenCompra?.error ?? "Error desconocido");
+      Swal.fire({
+        background: "#fff",
+        icon: "success",
+        title: "Orden cancelada",
+        html: `<span style="font-family:'DM Sans';color:#78716c">La orden fue cancelada correctamente.</span>`,
+        confirmButtonColor: G[900],
+        timer: 1800,
+        timerProgressBar: true,
+      });
+      onClose();
+    } catch (err) {
+      Swal.fire({
+        background: "#fff",
+        icon: "error",
+        title: "Error al cancelar",
+        text: err.message,
+        confirmButtonColor: G[900],
+      });
+    }
   };
 
   return (

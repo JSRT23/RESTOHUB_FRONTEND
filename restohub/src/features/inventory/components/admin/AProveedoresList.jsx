@@ -871,6 +871,7 @@ export default function AProveedoresList() {
       )}
 
       <ProveedorModal
+        key={modal === "nuevo" ? "nuevo" : (modal?.id ?? "nuevo")}
         open={!!modal}
         onClose={() => setModal(null)}
         proveedor={modal === "nuevo" ? null : modal}

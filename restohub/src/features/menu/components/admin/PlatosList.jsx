@@ -1,5 +1,10 @@
-// restohub/src/features/menu/components/PlatosList.jsx
-import { useState } from "react";
+// src/features/menu/components/admin/PlatosList.jsx
+// Admin Central — catálogo de platos.
+// Ve globales + de cualquier restaurante.
+// Acciones: activar/desactivar, ver detalle (PlatoDetail existente).
+// Crear nuevo plato → /menu/platos/nuevo (ruta a CreatePlato.jsx existente).
+
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -13,27 +18,47 @@ import {
   ToggleLeft,
   ToggleRight,
   ImageOff,
+  Globe,
+  Building2,
+  Loader2,
 } from "lucide-react";
 import Swal from "sweetalert2";
-import { GET_PLATOS, GET_CATEGORIAS } from "../../graphql/queries";
-import { ACTIVAR_PLATO, DESACTIVAR_PLATO } from "../../graphql/mutations";
+import { GET_PLATOS } from "./graphql/queries";
+import { GET_RESTAURANTES } from "./graphql/operations";
+import { GET_CATEGORIAS } from "./graphql/categorias.operations";
+import { ACTIVAR_PLATO, DESACTIVAR_PLATO } from "./graphql/mutations";
 import {
   Badge,
   Button,
   PageHeader,
   EmptyState,
   Skeleton,
-  StatCard,
 } from "../../../../shared/components/ui";
 
-// ── PlatoRow ───────────────────────────────────────────────────────────────
-function PlatoRow({ plato, onToggle, onView, toggling }) {
+// ── Paleta ─────────────────────────────────────────────────────────────────
+const A = {
+  accent: "#D97706",
+  accentLight: "#FEF3C7",
+  900: "#1C1917",
+};
+
+function getInitials(n = "") {
+  const w = n.trim().split(/\s+/);
+  return w.length >= 2
+    ? (w[0][0] + w[1][0]).toUpperCase()
+    : n.slice(0, 2).toUpperCase();
+}
+
+// ── Fila de plato ──────────────────────────────────────────────────────────
+function PlatoRow({ plato, onToggle, onView, toggling, restaurantesMap }) {
+  const esGlobal = !plato.restauranteId;
+  const restaurante = plato.restauranteId
+    ? restaurantesMap[plato.restauranteId]
+    : null;
+
   return (
-    <div
-      className="group flex items-center gap-4 px-4 py-3.5 rounded-xl border border-stone-200 bg-white
-                    hover:border-stone-300 hover:bg-stone-50 transition-all duration-150"
-    >
-      {/* Imagen */}
+    <div className="group flex items-center gap-4 px-4 py-3.5 rounded-xl border border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50 transition-all duration-150">
+      {/* Imagen o iniciales */}
       <div className="w-11 h-11 rounded-xl bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center">
         {plato.imagen ? (
           <img
@@ -42,7 +67,9 @@ function PlatoRow({ plato, onToggle, onView, toggling }) {
             className="w-full h-full object-cover"
           />
         ) : (
-          <ImageOff size={14} className="text-stone-300" />
+          <span className="font-playfair text-xs font-bold text-stone-400">
+            {getInitials(plato.nombre)}
+          </span>
         )}
       </div>
 
@@ -54,8 +81,7 @@ function PlatoRow({ plato, onToggle, onView, toggling }) {
           </p>
           {plato.categoriaNombre && (
             <Badge variant="muted" size="xs">
-              <Tag size={8} />
-              {plato.categoriaNombre}
+              <Tag size={8} /> {plato.categoriaNombre}
             </Badge>
           )}
         </div>
@@ -64,13 +90,33 @@ function PlatoRow({ plato, onToggle, onView, toggling }) {
         </p>
       </div>
 
+      {/* Scope */}
+      <span
+        className="hidden md:inline-flex items-center gap-1 text-[10px] font-dm font-semibold px-2 py-1 rounded-full shrink-0"
+        style={
+          esGlobal
+            ? { background: "#eff6ff", color: "#3b82f6" }
+            : { background: "#f0fdf4", color: "#16a34a" }
+        }
+      >
+        {esGlobal ? (
+          <>
+            <Globe size={9} /> Global
+          </>
+        ) : (
+          <>
+            <Building2 size={9} /> {restaurante?.nombre ?? "Restaurante"}
+          </>
+        )}
+      </span>
+
       {/* Estado */}
-      <Badge variant={plato.activo ? "green" : "red"} size="xs">
+      <Badge variant={plato.activo ? "green" : "default"} size="xs">
         {plato.activo ? <CheckCircle2 size={9} /> : <XCircle size={9} />}
         {plato.activo ? "Activo" : "Inactivo"}
       </Badge>
 
-      {/* Fecha */}
+      {/* Fecha creación */}
       <span className="hidden lg:block text-[11px] font-dm text-stone-400 shrink-0">
         {plato.fechaCreacion
           ? new Date(plato.fechaCreacion).toLocaleDateString("es-CO", {
@@ -81,23 +127,33 @@ function PlatoRow({ plato, onToggle, onView, toggling }) {
           : "—"}
       </span>
 
-      {/* Actions */}
+      {/* Acciones */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="ghost" size="sm" onClick={() => onView(plato.id)}>
-          <Eye size={13} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          loading={toggling === plato.id}
-          onClick={() => onToggle(plato)}
+        <button
+          onClick={() => onView(plato.id)}
+          className="w-8 h-8 rounded-lg bg-stone-50 hover:bg-stone-100 flex items-center justify-center transition-colors"
+          title="Ver detalle"
         >
-          {plato.activo ? (
-            <ToggleRight size={15} className="text-emerald-500" />
+          <Eye size={13} className="text-stone-500" />
+        </button>
+        <button
+          onClick={() => onToggle(plato)}
+          disabled={toggling === plato.id}
+          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 ${
+            plato.activo
+              ? "bg-red-50 hover:bg-red-100"
+              : "bg-stone-50 hover:bg-stone-100"
+          }`}
+          title={plato.activo ? "Desactivar" : "Activar"}
+        >
+          {toggling === plato.id ? (
+            <Loader2 size={12} className="animate-spin text-stone-400" />
+          ) : plato.activo ? (
+            <ToggleRight size={15} className="text-red-500" />
           ) : (
             <ToggleLeft size={15} className="text-stone-400" />
           )}
-        </Button>
+        </button>
       </div>
     </div>
   );
@@ -107,12 +163,17 @@ function PlatoRow({ plato, onToggle, onView, toggling }) {
 export default function PlatosList() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [filterActivo, setFilterActivo] = useState("all");
-  const [filterCat, setFilterCat] = useState("all");
+  const [filtroScope, setFiltroScope] = useState("all");
+  const [filtroActivo, setFiltroActivo] = useState("all");
+  const [filtroCat, setFiltroCat] = useState("all");
   const [toggling, setToggling] = useState(null);
 
-  const { data, loading } = useQuery(GET_PLATOS);
+  const { data, loading } = useQuery(GET_PLATOS, {
+    fetchPolicy: "cache-and-network",
+  });
   const { data: catData } = useQuery(GET_CATEGORIAS);
+  const { data: restData } = useQuery(GET_RESTAURANTES);
+
   const [activarPlato] = useMutation(ACTIVAR_PLATO, {
     refetchQueries: ["GetPlatos"],
   });
@@ -122,87 +183,108 @@ export default function PlatosList() {
 
   const platos = data?.platos ?? [];
   const categorias = catData?.categorias ?? [];
+  const restaurantes = restData?.restaurantes ?? [];
+
+  const restaurantesMap = useMemo(() => {
+    const m = {};
+    restaurantes.forEach((r) => (m[r.id] = r));
+    return m;
+  }, [restaurantes]);
+
+  const globales = platos.filter((p) => !p.restauranteId).length;
   const activos = platos.filter((p) => p.activo).length;
 
-  const filtered = platos.filter((p) => {
-    const matchSearch =
-      p.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      (p.descripcion || "").toLowerCase().includes(search.toLowerCase());
-    const matchActivo =
-      filterActivo === "all" ||
-      (filterActivo === "activo" && p.activo) ||
-      (filterActivo === "inactivo" && !p.activo);
-    const matchCat = filterCat === "all" || p.categoriaId === filterCat;
-    return matchSearch && matchActivo && matchCat;
-  });
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return platos.filter((p) => {
+      if (
+        q &&
+        !p.nombre.toLowerCase().includes(q) &&
+        !(p.descripcion ?? "").toLowerCase().includes(q)
+      )
+        return false;
+      if (filtroScope === "global" && p.restauranteId) return false;
+      if (filtroScope === "restaurante" && !p.restauranteId) return false;
+      if (filtroActivo === "activo" && !p.activo) return false;
+      if (filtroActivo === "inactivo" && p.activo) return false;
+      if (filtroCat !== "all" && p.categoriaId !== filtroCat) return false;
+      return true;
+    });
+  }, [platos, search, filtroScope, filtroActivo, filtroCat]);
 
   const handleToggle = async (plato) => {
+    const { isConfirmed } = await Swal.fire({
+      background: "#fff",
+      title: plato.activo ? "¿Desactivar plato?" : "¿Activar plato?",
+      html: `<span style="font-family:'DM Sans';color:#78716c">Cambiarás el estado de <b>${plato.nombre}</b>.</span>`,
+      icon: plato.activo ? "warning" : "question",
+      showCancelButton: true,
+      confirmButtonColor: plato.activo ? "#ef4444" : A[900],
+      cancelButtonColor: "#e5e7eb",
+      confirmButtonText: plato.activo ? "Desactivar" : "Activar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!isConfirmed) return;
     setToggling(plato.id);
     try {
       const mutation = plato.activo ? desactivarPlato : activarPlato;
-      const { data } = await mutation({ variables: { id: plato.id } });
-      const result = plato.activo ? data.desactivarPlato : data.activarPlato;
-      if (!result.ok) throw new Error(result.error);
-    } catch (e) {
+      const { data: res } = await mutation({ variables: { id: plato.id } });
+      const result = plato.activo ? res?.desactivarPlato : res?.activarPlato;
+      if (!result?.ok) throw new Error(result?.error ?? "Error");
+    } catch (err) {
       Swal.fire({
-        background: "#ffffff",
-        color: "#1C1917",
+        background: "#fff",
         icon: "error",
-        iconColor: "#ef4444",
         title: "Error",
-        text: e.message,
-        confirmButtonColor: "#F59E0B",
+        text: err.message,
+        confirmButtonColor: A[900],
       });
     } finally {
       setToggling(null);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6 font-dm">
-        <Skeleton className="h-10 w-64" />
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="h-16" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 font-dm">
-      {/* Header */}
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Menu Service"
+        eyebrow="Menú"
         title="Platos"
-        description="Catálogo global de platos de la cadena."
+        description="Catálogo global — globales para toda la cadena o específicos por restaurante."
         action={
           <div className="flex items-center gap-3">
-            <StatCard
-              label="Total"
-              value={platos.length}
-              icon={UtensilsCrossed}
-            />
-            <StatCard
-              label="Activos"
-              value={activos}
-              icon={CheckCircle2}
-              accent
-            />
-            <Button onClick={() => navigate("/menu/platos/new")}>
-              <Plus size={14} strokeWidth={2.5} />
-              Nuevo plato
+            <div className="hidden sm:flex items-center gap-3 text-xs font-dm text-stone-500">
+              <span>
+                <span className="font-bold text-blue-600">{globales}</span>{" "}
+                globales
+              </span>
+              <span className="text-stone-300">·</span>
+              <span>
+                <span className="font-bold" style={{ color: A.accent }}>
+                  {activos}
+                </span>{" "}
+                activos
+              </span>
+            </div>
+            <Button onClick={() => navigate("/menu/platos/nuevo")}>
+              <Plus size={14} /> Nuevo plato
             </Button>
           </div>
         }
       />
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {/* Search */}
-        <div className="flex items-center gap-2.5 flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-100 transition-all">
+      {/* Controles */}
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+        {/* Búsqueda */}
+        <div
+          className="flex items-center gap-2.5 flex-1 min-w-[200px] px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 transition-all"
+          style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
+          onFocusCapture={(e) =>
+            (e.currentTarget.style.boxShadow = `0 0 0 2px ${A.accent}`)
+          }
+          onBlurCapture={(e) =>
+            (e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)")
+          }
+        >
           <Search size={13} className="text-stone-300 shrink-0" />
           <input
             value={search}
@@ -213,39 +295,18 @@ export default function PlatosList() {
           {search && (
             <button
               onClick={() => setSearch("")}
-              className="text-stone-300 hover:text-stone-500 transition text-xs"
+              className="text-stone-300 hover:text-stone-500 text-xs"
             >
               ✕
             </button>
           )}
         </div>
 
-        {/* Estado pills */}
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-white border border-stone-200">
-          {[
-            { v: "all", l: "Todos" },
-            { v: "activo", l: "Activos" },
-            { v: "inactivo", l: "Inactivos" },
-          ].map(({ v, l }) => (
-            <button
-              key={v}
-              onClick={() => setFilterActivo(v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-dm font-medium transition-all ${
-                filterActivo === v
-                  ? "bg-amber-500 text-white shadow-sm"
-                  : "text-stone-400 hover:text-stone-700"
-              }`}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-
         {/* Categoría */}
         <select
-          value={filterCat}
-          onChange={(e) => setFilterCat(e.target.value)}
-          className="px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-600 outline-none appearance-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+          value={filtroCat}
+          onChange={(e) => setFiltroCat(e.target.value)}
+          className="px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-600 outline-none appearance-none cursor-pointer"
         >
           <option value="all">Todas las categorías</option>
           {categorias.map((c) => (
@@ -254,36 +315,102 @@ export default function PlatosList() {
             </option>
           ))}
         </select>
+
+        {/* Scope */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-white border border-stone-200">
+          {[
+            { v: "all", l: "Todos" },
+            { v: "global", l: "Globales" },
+            { v: "restaurante", l: "Por restaurante" },
+          ].map(({ v, l }) => (
+            <button
+              key={v}
+              onClick={() => setFiltroScope(v)}
+              className="px-3 py-1.5 rounded-lg text-xs font-dm font-semibold transition-all"
+              style={
+                filtroScope === v
+                  ? { background: A[900], color: "#fff" }
+                  : { color: "#78716c" }
+              }
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {/* Estado */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-white border border-stone-200">
+          {[
+            { v: "all", l: "Todos" },
+            { v: "activo", l: "Activos" },
+            { v: "inactivo", l: "Inactivos" },
+          ].map(({ v, l }) => (
+            <button
+              key={v}
+              onClick={() => setFiltroActivo(v)}
+              className="px-3 py-1.5 rounded-lg text-xs font-dm font-semibold transition-all"
+              style={
+                filtroActivo === v
+                  ? { background: A.accent, color: "#fff" }
+                  : { color: "#78716c" }
+              }
+            >
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* Contador */}
+      {!loading && (
+        <p className="text-xs font-dm text-stone-400 -mt-2">
+          {filtered.length} plato{filtered.length !== 1 ? "s" : ""}
+          {search && ` — "${search}"`}
+        </p>
+      )}
+
       {/* Lista */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-16 rounded-xl" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={UtensilsCrossed}
-          title="No hay platos"
-          description="Crea el primer plato del catálogo."
+          title={search ? "Sin resultados" : "Sin platos"}
+          description={
+            search
+              ? `No hay platos que coincidan con "${search}".`
+              : "Crea el primer plato del catálogo global."
+          }
           action={
-            <Button onClick={() => navigate("/menu/platos/new")}>
-              <Plus size={14} />
-              Nuevo plato
-            </Button>
+            !search && (
+              <Button onClick={() => navigate("/menu/platos/nuevo")}>
+                <Plus size={14} /> Nuevo plato
+              </Button>
+            )
           }
         />
       ) : (
         <div className="space-y-2">
-          {/* Table header */}
-          <div className="grid grid-cols-[44px_1fr_auto_auto_auto] gap-4 px-4 py-2">
-            <span />
-            <span className="text-[10px] font-dm font-semibold uppercase tracking-widest text-stone-400">
+          {/* Cabecera */}
+          <div className="flex items-center gap-4 px-4 py-2">
+            <div className="w-11 shrink-0" />
+            <span className="flex-1 text-[10px] font-dm font-semibold uppercase tracking-widest text-stone-400">
               Plato
             </span>
-            <span className="text-[10px] font-dm font-semibold uppercase tracking-widest text-stone-400">
+            <span className="hidden md:block w-24 text-[10px] font-dm font-semibold uppercase tracking-widest text-stone-400">
+              Alcance
+            </span>
+            <span className="w-16 text-[10px] font-dm font-semibold uppercase tracking-widest text-stone-400">
               Estado
             </span>
-            <span className="hidden lg:block text-[10px] font-dm font-semibold uppercase tracking-widest text-stone-400">
+            <span className="hidden lg:block w-24 text-[10px] font-dm font-semibold uppercase tracking-widest text-stone-400">
               Creado
             </span>
-            <span className="text-[10px] font-dm font-semibold uppercase tracking-widest text-stone-400">
+            <span className="w-16 text-[10px] font-dm font-semibold uppercase tracking-widest text-stone-400 text-right">
               Acciones
             </span>
           </div>
@@ -295,6 +422,7 @@ export default function PlatosList() {
               toggling={toggling}
               onToggle={handleToggle}
               onView={(id) => navigate(`/menu/platos/${id}`)}
+              restaurantesMap={restaurantesMap}
             />
           ))}
         </div>

@@ -1,4 +1,4 @@
-// restohub/src/features/menu/components/PlatoDetail.jsx
+// src/features/menu/components/admin/PlatoDetail.jsx
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@apollo/client/react";
@@ -16,22 +16,23 @@ import {
   Clock,
   Tag,
   Loader2,
+  Globe,
+  Building2,
 } from "lucide-react";
 import Swal from "sweetalert2";
-import {
-  GET_PLATO,
-  GET_INGREDIENTES,
-  GET_RESTAURANTES,
-} from "../../graphql/queries";
+
+// ✅ FIX: imports desde ./graphql/ (no desde ../../graphql/)
+import { GET_PLATO, GET_INGREDIENTES } from "./graphql/queries";
+import { GET_RESTAURANTES } from "./graphql/operations";
 import {
   ACTIVAR_PLATO,
   DESACTIVAR_PLATO,
   AGREGAR_INGREDIENTE_PLATO,
   QUITAR_INGREDIENTE_PLATO,
-  CREATE_PRECIO,
+  CREAR_PRECIO_PLATO, // ✅ FIX: era CREATE_PRECIO
   ACTIVAR_PRECIO,
   DESACTIVAR_PRECIO,
-} from "../../graphql/mutations";
+} from "./graphql/mutations";
 import {
   Badge,
   Button,
@@ -40,7 +41,6 @@ import {
   Skeleton,
 } from "../../../../shared/components/ui";
 
-// ── Formato precio ────────────────────────────────────────────────────────
 const fmt = (v, moneda = "COP") =>
   new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -142,8 +142,7 @@ function ModalIngrediente({ open, onClose, platoId, ingredientesActuales }) {
       setCantidad("");
     } else {
       Swal.fire({
-        background: "#ffffff",
-        color: "#1C1917",
+        background: "#fff",
         icon: "error",
         title: "Error",
         text: res.agregarIngredientePlato.error,
@@ -151,6 +150,9 @@ function ModalIngrediente({ open, onClose, platoId, ingredientesActuales }) {
       });
     }
   };
+
+  const inputCls =
+    "w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 outline-none appearance-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all";
 
   return (
     <Modal open={open} onClose={onClose} title="Agregar ingrediente" size="sm">
@@ -163,7 +165,7 @@ function ModalIngrediente({ open, onClose, platoId, ingredientesActuales }) {
             value={ingredienteId}
             onChange={(e) => setIngredienteId(e.target.value)}
             required
-            className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 outline-none appearance-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+            className={inputCls}
           >
             <option value="">Selecciona un ingrediente</option>
             {disponibles.map((i) => (
@@ -185,7 +187,7 @@ function ModalIngrediente({ open, onClose, platoId, ingredientesActuales }) {
             onChange={(e) => setCantidad(e.target.value)}
             required
             placeholder="Ej: 0.250"
-            className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+            className={inputCls}
           />
         </div>
         <div className="flex justify-end gap-2 pt-1">
@@ -210,7 +212,9 @@ function ModalPrecio({ open, onClose, platoId }) {
     fechaInicio: "",
     fechaFin: "",
   });
-  const [crear, { loading }] = useMutation(CREATE_PRECIO, {
+
+  // ✅ FIX: CREAR_PRECIO_PLATO, no CREATE_PRECIO
+  const [crear, { loading }] = useMutation(CREAR_PRECIO_PLATO, {
     refetchQueries: ["GetPlato"],
   });
 
@@ -230,8 +234,7 @@ function ModalPrecio({ open, onClose, platoId }) {
       setForm({ restauranteId: "", precio: "", fechaInicio: "", fechaFin: "" });
     } else {
       Swal.fire({
-        background: "#ffffff",
-        color: "#1C1917",
+        background: "#fff",
         icon: "error",
         title: "Error",
         text: res.crearPrecioPlato.error,
@@ -240,37 +243,23 @@ function ModalPrecio({ open, onClose, platoId }) {
     }
   };
 
-  const inputClass =
+  const inputCls =
     "w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all";
-  const labelClass =
+  const labelCls =
     "text-[10px] font-dm font-semibold tracking-widest uppercase text-stone-500";
-
-  const field = (label, key, type = "text", placeholder = "") => (
-    <div className="space-y-1.5">
-      <label className={labelClass}>{label}</label>
-      <input
-        type={type}
-        value={form[key]}
-        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-        placeholder={placeholder}
-        required={key !== "fechaFin"}
-        className={inputClass}
-      />
-    </div>
-  );
 
   return (
     <Modal open={open} onClose={onClose} title="Asignar precio" size="sm">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
-          <label className={labelClass}>Restaurante</label>
+          <label className={labelCls}>Restaurante</label>
           <select
             value={form.restauranteId}
             onChange={(e) =>
               setForm({ ...form, restauranteId: e.target.value })
             }
             required
-            className={inputClass + " appearance-none cursor-pointer"}
+            className={inputCls + " appearance-none cursor-pointer"}
           >
             <option value="">Selecciona un restaurante</option>
             {(data?.restaurantes ?? []).map((r) => (
@@ -280,9 +269,42 @@ function ModalPrecio({ open, onClose, platoId }) {
             ))}
           </select>
         </div>
-        {field("Precio", "precio", "number", "Ej: 25000")}
-        {field("Fecha de inicio", "fechaInicio", "datetime-local")}
-        {field("Fecha de fin (opcional)", "fechaFin", "datetime-local")}
+
+        <div className="space-y-1.5">
+          <label className={labelCls}>Precio</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            value={form.precio}
+            onChange={(e) => setForm({ ...form, precio: e.target.value })}
+            required
+            placeholder="Ej: 25000"
+            className={inputCls}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className={labelCls}>Fecha de inicio</label>
+          <input
+            type="datetime-local"
+            value={form.fechaInicio}
+            onChange={(e) => setForm({ ...form, fechaInicio: e.target.value })}
+            required
+            className={inputCls}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className={labelCls}>Fecha de fin (opcional)</label>
+          <input
+            type="datetime-local"
+            value={form.fechaFin}
+            onChange={(e) => setForm({ ...form, fechaFin: e.target.value })}
+            className={inputCls}
+          />
+        </div>
+
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" type="button" onClick={onClose}>
             Cancelar
@@ -305,7 +327,9 @@ export default function PlatoDetail() {
   const [toggling, setToggling] = useState(null);
   const [removing, setRemoving] = useState(null);
 
+  // ✅ FIX: GET_PLATO desde ./graphql/queries, no ../../graphql/queries
   const { data, loading } = useQuery(GET_PLATO, { variables: { id } });
+
   const [activarPlato] = useMutation(ACTIVAR_PLATO, {
     refetchQueries: ["GetPlato"],
   });
@@ -337,15 +361,16 @@ export default function PlatoDetail() {
   if (!plato)
     return <p className="font-dm text-stone-400 p-8">Plato no encontrado.</p>;
 
+  const esGlobal = !plato.restauranteId;
+
   const handleTogglePlato = async () => {
     const mutation = plato.activo ? desactivarPlato : activarPlato;
     await mutation({ variables: { id: plato.id } });
   };
 
   const handleQuitarIng = async (ing) => {
-    const ok = await Swal.fire({
-      background: "#ffffff",
-      color: "#1C1917",
+    const { isConfirmed } = await Swal.fire({
+      background: "#fff",
       title: `¿Quitar ${ing.ingredienteNombre}?`,
       text: "Esta acción publicará un evento a inventory_service.",
       icon: "warning",
@@ -355,7 +380,7 @@ export default function PlatoDetail() {
       cancelButtonColor: "#E7E5E4",
       confirmButtonText: "Sí, quitar",
     });
-    if (!ok.isConfirmed) return;
+    if (!isConfirmed) return;
     setRemoving(ing.ingredienteId);
     await quitarIngrediente({
       variables: { platoId: plato.id, ingredienteId: ing.ingredienteId },
@@ -387,12 +412,11 @@ export default function PlatoDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* ── Panel izquierdo — info del plato ── */}
+        {/* ── Panel izquierdo ── */}
         <div className="lg:col-span-1 space-y-4">
-          <div className="rounded-2xl border border-stone-200 bg-white shadow-card overflow-hidden">
+          <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
             <div className="h-1 bg-gradient-to-r from-amber-400 to-amber-300" />
 
-            {/* Imagen */}
             <div className="relative h-44 bg-stone-100 overflow-hidden">
               {plato.imagen ? (
                 <img
@@ -405,7 +429,6 @@ export default function PlatoDetail() {
                   <ImageOff size={28} className="text-stone-300" />
                 </div>
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-white/50 via-transparent to-transparent" />
             </div>
 
             <div className="p-4 space-y-4">
@@ -413,12 +436,31 @@ export default function PlatoDetail() {
                 <h1 className="font-playfair text-stone-900 font-bold text-xl leading-tight">
                   {plato.nombre}
                 </h1>
-                {plato.categoriaNombre && (
-                  <Badge variant="muted" size="xs" className="mt-1.5">
-                    <Tag size={9} />
-                    {plato.categoriaNombre}
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  {plato.categoriaNombre && (
+                    <Badge variant="muted" size="xs">
+                      <Tag size={9} /> {plato.categoriaNombre}
+                    </Badge>
+                  )}
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] font-dm font-semibold px-2 py-1 rounded-full"
+                    style={
+                      esGlobal
+                        ? { background: "#eff6ff", color: "#3b82f6" }
+                        : { background: "#f0fdf4", color: "#16a34a" }
+                    }
+                  >
+                    {esGlobal ? (
+                      <>
+                        <Globe size={9} /> Global
+                      </>
+                    ) : (
+                      <>
+                        <Building2 size={9} /> Propio
+                      </>
+                    )}
+                  </span>
+                </div>
                 <p className="text-stone-400 text-xs font-dm mt-2 leading-relaxed">
                   {plato.descripcion}
                 </p>
@@ -454,13 +496,11 @@ export default function PlatoDetail() {
               >
                 {plato.activo ? (
                   <>
-                    <ToggleLeft size={13} />
-                    Desactivar plato
+                    <ToggleLeft size={13} /> Desactivar plato
                   </>
                 ) : (
                   <>
-                    <ToggleRight size={13} />
-                    Activar plato
+                    <ToggleRight size={13} /> Activar plato
                   </>
                 )}
               </Button>
@@ -468,10 +508,10 @@ export default function PlatoDetail() {
           </div>
         </div>
 
-        {/* ── Panel derecho — ingredientes + precios ── */}
+        {/* ── Panel derecho ── */}
         <div className="lg:col-span-2 space-y-5">
           {/* Ingredientes */}
-          <div className="rounded-2xl border border-stone-200 bg-white shadow-card overflow-hidden">
+          <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
             <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-0.5">
@@ -488,13 +528,12 @@ export default function PlatoDetail() {
                 </h2>
               </div>
               <Button size="sm" onClick={() => setModalIng(true)}>
-                <Plus size={13} />
-                Agregar
+                <Plus size={13} /> Agregar
               </Button>
             </div>
 
             <div className="p-4">
-              {plato.ingredientes?.length === 0 ? (
+              {!plato.ingredientes?.length ? (
                 <div className="text-center py-8">
                   <Package size={20} className="text-stone-300 mx-auto mb-2" />
                   <p className="text-stone-400 text-xs font-dm">
@@ -503,7 +542,7 @@ export default function PlatoDetail() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {plato.ingredientes?.map((ing) => (
+                  {plato.ingredientes.map((ing) => (
                     <IngredienteTag
                       key={ing.id}
                       ing={ing}
@@ -517,7 +556,7 @@ export default function PlatoDetail() {
           </div>
 
           {/* Precios */}
-          <div className="rounded-2xl border border-stone-200 bg-white shadow-card overflow-hidden">
+          <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
             <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-0.5">
@@ -534,12 +573,11 @@ export default function PlatoDetail() {
                 </h2>
               </div>
               <Button size="sm" onClick={() => setModalPrecio(true)}>
-                <Plus size={13} />
-                Asignar precio
+                <Plus size={13} /> Asignar precio
               </Button>
             </div>
             <div className="p-4 space-y-2">
-              {plato.precios?.length === 0 ? (
+              {!plato.precios?.length ? (
                 <div className="text-center py-8">
                   <Coins size={20} className="text-stone-300 mx-auto mb-2" />
                   <p className="text-stone-400 text-xs font-dm">
@@ -547,7 +585,7 @@ export default function PlatoDetail() {
                   </p>
                 </div>
               ) : (
-                plato.precios?.map((p) => (
+                plato.precios.map((p) => (
                   <PrecioRow
                     key={p.id}
                     precio={p}
@@ -561,7 +599,6 @@ export default function PlatoDetail() {
         </div>
       </div>
 
-      {/* Modals */}
       <ModalIngrediente
         open={modalIng}
         onClose={() => setModalIng(false)}

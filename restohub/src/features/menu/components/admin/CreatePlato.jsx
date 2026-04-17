@@ -1,4 +1,4 @@
-// src/features/menu/components/CreatePlato.jsx
+// src/features/menu/components/admin/CreatePlato.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@apollo/client/react";
@@ -14,10 +14,13 @@ import {
   Trash2,
   Package,
   FlaskConical,
-  Loader2,
+  Globe,
+  Building2,
 } from "lucide-react";
-import { CREATE_PLATO, AGREGAR_INGREDIENTE_PLATO } from "./graphql/mutations";
-import { GET_CATEGORIAS, GET_INGREDIENTES } from "./graphql/queries";
+import { CREAR_PLATO, AGREGAR_INGREDIENTE_PLATO } from "./graphql/mutations";
+import { GET_INGREDIENTES } from "./graphql/queries";
+import { GET_CATEGORIAS } from "./graphql/categorias.operations";
+import { GET_RESTAURANTES } from "./graphql/operations";
 import {
   Button,
   Input,
@@ -41,7 +44,7 @@ const UNIDADES = [
 ];
 
 // ── PASO 1: Info básica ────────────────────────────────────────────────────
-function Step1({ form, setForm, categorias }) {
+function Step1({ form, setForm, categorias, restaurantes }) {
   return (
     <div className="space-y-5">
       <div>
@@ -49,7 +52,7 @@ function Step1({ form, setForm, categorias }) {
           Información del plato
         </h2>
         <p className="text-stone-400 text-sm mt-1 font-dm">
-          Define el nombre, descripción y categoría del plato.
+          Define el nombre, descripción, categoría y alcance del plato.
         </p>
       </div>
 
@@ -86,6 +89,28 @@ function Step1({ form, setForm, categorias }) {
         ))}
       </Select>
 
+      {/* Restaurante — null = global */}
+      <div className="space-y-1.5">
+        <label className="text-[10px] font-dm font-semibold tracking-widest uppercase text-stone-500">
+          Alcance
+        </label>
+        <select
+          value={form.restauranteId}
+          onChange={(e) => setForm({ ...form, restauranteId: e.target.value })}
+          className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 outline-none appearance-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+        >
+          <option value="">🌐 Global — toda la cadena</option>
+          {restaurantes.map((r) => (
+            <option key={r.id} value={r.id}>
+              🏪 {r.nombre} — {r.ciudad}
+            </option>
+          ))}
+        </select>
+        <p className="text-[10px] font-dm text-stone-400">
+          Dejar vacío para que el plato sea visible en todos los restaurantes.
+        </p>
+      </div>
+
       <Input
         label="URL de imagen (opcional)"
         icon={LinkIcon}
@@ -110,7 +135,6 @@ function Step2({
   const disponibles = ingredientesCatalogo.filter(
     (i) => !ingredientesSeleccionados.some((s) => s.ingredienteId === i.id),
   );
-
   const ingredienteActual = ingredientesCatalogo.find(
     (i) => i.id === ingredienteId,
   );
@@ -142,12 +166,11 @@ function Step2({
           Ingredientes de la receta
         </h2>
         <p className="text-stone-400 text-sm mt-1 font-dm">
-          Agrega los ingredientes que conforman este plato. Puedes saltarte este
-          paso y agregarlos después.
+          Agrega los ingredientes del plato. Puedes saltarte este paso y
+          agregarlos después.
         </p>
       </div>
 
-      {/* Agregar ingrediente */}
       <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 space-y-3">
         <p className="text-xs font-dm font-semibold text-stone-600 uppercase tracking-wider">
           Agregar ingrediente
@@ -187,7 +210,6 @@ function Step2({
         </div>
       </div>
 
-      {/* Lista de ingredientes seleccionados */}
       {ingredientesSeleccionados.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 rounded-2xl border-2 border-dashed border-stone-200">
           <Package size={24} className="text-stone-200 mb-2" />
@@ -197,12 +219,10 @@ function Step2({
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
-              Receta ({ingredientesSeleccionados.length} ingrediente
-              {ingredientesSeleccionados.length !== 1 ? "s" : ""})
-            </p>
-          </div>
+          <p className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
+            Receta ({ingredientesSeleccionados.length} ingrediente
+            {ingredientesSeleccionados.length !== 1 ? "s" : ""})
+          </p>
           {ingredientesSeleccionados.map((ing) => (
             <div
               key={ing.ingredienteId}
@@ -237,8 +257,10 @@ function Step2({
 }
 
 // ── PASO 3: Confirmación ───────────────────────────────────────────────────
-function Step3({ form, ingredientesSeleccionados, categorias }) {
+function Step3({ form, ingredientesSeleccionados, categorias, restaurantes }) {
   const categoria = categorias.find((c) => c.id === form.categoriaId);
+  const restaurante = restaurantes.find((r) => r.id === form.restauranteId);
+
   return (
     <div className="space-y-5">
       <div>
@@ -246,14 +268,12 @@ function Step3({ form, ingredientesSeleccionados, categorias }) {
           Confirmar plato
         </h2>
         <p className="text-stone-400 text-sm mt-1 font-dm">
-          Revisa la información antes de crear el plato.
+          Revisa la información antes de crear.
         </p>
       </div>
 
-      {/* Preview card */}
       <div className="rounded-2xl border border-amber-200 bg-amber-50/50 overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-amber-400 to-amber-600" />
-
         {form.imagen && (
           <div className="h-40 overflow-hidden">
             <img
@@ -264,20 +284,38 @@ function Step3({ form, ingredientesSeleccionados, categorias }) {
             />
           </div>
         )}
-
         <div className="p-5 space-y-4">
           <div>
-            <div className="flex items-start gap-3 mb-2">
+            <div className="flex items-start gap-3 mb-2 flex-wrap">
               <div>
                 <h3 className="font-playfair text-stone-900 text-xl font-bold">
                   {form.nombre || "—"}
                 </h3>
-                {categoria && (
-                  <Badge variant="amber" size="xs" className="mt-1">
-                    <Tag size={9} />
-                    {categoria.nombre}
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {categoria && (
+                    <Badge variant="amber" size="xs">
+                      <Tag size={9} /> {categoria.nombre}
+                    </Badge>
+                  )}
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] font-dm font-semibold px-2 py-1 rounded-full"
+                    style={
+                      restaurante
+                        ? { background: "#f0fdf4", color: "#16a34a" }
+                        : { background: "#eff6ff", color: "#3b82f6" }
+                    }
+                  >
+                    {restaurante ? (
+                      <>
+                        <Building2 size={9} /> {restaurante.nombre}
+                      </>
+                    ) : (
+                      <>
+                        <Globe size={9} /> Global
+                      </>
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
             <p className="text-sm font-dm text-stone-500 leading-relaxed">
@@ -332,6 +370,7 @@ export default function CreatePlato() {
     descripcion: "",
     categoriaId: "",
     imagen: "",
+    restauranteId: "",
   });
   const [ingredientesSeleccionados, setIngredientesSeleccionados] = useState(
     [],
@@ -344,13 +383,17 @@ export default function CreatePlato() {
   const { data: ingData } = useQuery(GET_INGREDIENTES, {
     variables: { activo: true },
   });
-  const [crearPlato] = useMutation(CREATE_PLATO, {
+  const { data: restData } = useQuery(GET_RESTAURANTES);
+
+  // ✅ FIX: CREAR_PLATO, no CREATE_PLATO
+  const [crearPlato] = useMutation(CREAR_PLATO, {
     refetchQueries: ["GetPlatos"],
   });
   const [agregarIngrediente] = useMutation(AGREGAR_INGREDIENTE_PLATO);
 
   const categorias = catData?.categorias ?? [];
   const ingredientesCatalogo = ingData?.ingredientes ?? [];
+  const restaurantes = restData?.restaurantes ?? [];
 
   const canNext =
     step === 0 ? form.nombre.trim() && form.descripcion.trim() : true;
@@ -358,21 +401,19 @@ export default function CreatePlato() {
   const handleFinalizar = async () => {
     setCreandoPlato(true);
     try {
-      // 1. Crear el plato
       const { data: res } = await crearPlato({
         variables: {
           nombre: form.nombre,
           descripcion: form.descripcion,
           categoriaId: form.categoriaId || null,
           imagen: form.imagen || null,
+          restauranteId: form.restauranteId || null,
         },
       });
 
       if (!res.crearPlato.ok) throw new Error(res.crearPlato.error);
-
       const platoId = res.crearPlato.plato?.id;
 
-      // 2. Agregar ingredientes uno a uno (si hay plato ID)
       if (platoId && ingredientesSeleccionados.length > 0) {
         await Promise.all(
           ingredientesSeleccionados.map((ing) =>
@@ -414,7 +455,6 @@ export default function CreatePlato() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Back */}
       <button
         onClick={() => navigate("/menu/platos")}
         className="flex items-center gap-2 text-stone-400 hover:text-stone-700 transition text-sm mb-6 group"
@@ -426,7 +466,6 @@ export default function CreatePlato() {
         Volver a platos
       </button>
 
-      {/* Wizard header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-4 h-0.5 bg-amber-500 rounded-full" />
@@ -440,10 +479,14 @@ export default function CreatePlato() {
         <StepIndicator steps={STEPS} current={step} />
       </div>
 
-      {/* Card de contenido */}
       <Card accent className="mb-5">
         {step === 0 && (
-          <Step1 form={form} setForm={setForm} categorias={categorias} />
+          <Step1
+            form={form}
+            setForm={setForm}
+            categorias={categorias}
+            restaurantes={restaurantes}
+          />
         )}
         {step === 1 && (
           <Step2
@@ -457,11 +500,11 @@ export default function CreatePlato() {
             form={form}
             ingredientesSeleccionados={ingredientesSeleccionados}
             categorias={categorias}
+            restaurantes={restaurantes}
           />
         )}
       </Card>
 
-      {/* Navegación wizard */}
       <div className="flex items-center justify-between">
         <Button
           variant="secondary"
