@@ -18,7 +18,7 @@ services:
       - restohub_network
 
   portal_empleados_frontend:
-    image: node:18
+    image: node:20-alpine
     container_name: portal_empleados_frontend
     working_dir: /app
     ports:
