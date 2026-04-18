@@ -83,6 +83,7 @@ export const GET_TURNOS = gql`
       estadoDisplay
       duracionHoras
       qrToken
+      qrExpiraEn
       notas
     }
   }

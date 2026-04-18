@@ -59,6 +59,19 @@ import CCocineroLayout from "../../features/orders/components/Cocinero/CCocinero
 import CComandas from "../../features/orders/components/Cocinero/CComandas";
 import CStockList from "../../features/inventory/components/Cocinero/CStockList";
 import CMiTurno from "../../features/staff/components/Cocinero/CMiTurno";
+
+// ── Cajero ────────────────────────────────────────────────────────────────
+import CCajeroLayout from "../../features/orders/components/Cajero/CCajeroLayout";
+import CCobrar from "../../features/orders/components/Cajero/CCobrar";
+import CPedidosDia from "../../features/orders/components/Cajero/CPedidosDia";
+import CMiTurnoCajero from "../../features/staff/components/Cajero/CMiTurnoCajero";
+
+// ── Repartidor ────────────────────────────────────────────────────────────
+import RRepartidorLayout from "../../features/orders/components/Repartidor/RRepartidorLayout";
+import RMisEntregas from "../../features/orders/components/Repartidor/RMisEntregas";
+import REnCamino from "../../features/orders/components/Repartidor/REnCamino";
+import RMiTurno from "../../features/staff/components/Repartidor/RMiTurno";
+
 import SSupervisorLayout from "../../features/staff/components/Supervisor/SSupervisorLayout";
 import SPedidosList from "../../features/orders/components/Supervisor/SPedidosList";
 import SStaffList from "../../features/staff/components/Supervisor/SStaffList";
@@ -383,21 +396,33 @@ const router = createBrowserRouter([
           { path: "turno", element: <CMiTurno /> },
         ],
       },
+      // ── Cajero ───────────────────────────────────────────────────────
       {
         path: "caja",
         element: (
           <RoleRoute roles={["cajero"]}>
-            <WIP title="Cajero — Cobro y puntos" />
+            <CCajeroLayout />
           </RoleRoute>
         ),
+        children: [
+          { index: true, element: <CCobrar /> },
+          { path: "pedidos", element: <CPedidosDia /> },
+          { path: "turno", element: <CMiTurnoCajero /> },
+        ],
       },
+      // ── Repartidor ───────────────────────────────────────────────────
       {
         path: "entregas",
         element: (
           <RoleRoute roles={["repartidor"]}>
-            <WIP title="Repartidor — Mis entregas" />
+            <RRepartidorLayout />
           </RoleRoute>
         ),
+        children: [
+          { index: true, element: <RMisEntregas /> },
+          { path: "en-camino", element: <REnCamino /> },
+          { path: "turno", element: <RMiTurno /> },
+        ],
       },
 
       // ── Auxiliares ───────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 services:
-  frontend:
+  restohub_frontend:
     build:
       context: ./restohub
       dockerfile: Dockerfile
@@ -14,6 +14,23 @@ services:
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
     command: npm run dev -- --host
+    networks:
+      - restohub_network
+
+  portal_empleados_frontend:
+    image: node:18
+    container_name: portal_empleados_frontend
+    working_dir: /app
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./portal_empleados:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://gateway_service:8000/api/graphql/
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    command: sh -c "npm install && npm run dev -- --host --port 5174"
     networks:
       - restohub_network
 

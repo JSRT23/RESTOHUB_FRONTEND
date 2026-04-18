@@ -1,7 +1,7 @@
-// src/features/staff/components/Mesero/MMiTurno.jsx
-// Mesero — su turno activo del día.
+// src/features/staff/components/Cajero/CMiTurnoCajero.jsx
+// Cajero — su turno activo del día.
 // Muestra horario, estado, horas trabajadas, QR token para check-in/out.
-// Ruta: /mesero/turno
+// Ruta: /caja/turno
 
 import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
@@ -153,7 +153,7 @@ function QRBlock({ qrToken, qrExpiraEn }) {
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
-export default function MMiTurno() {
+export default function CMiTurnoCajero() {
   const { user } = useAuth();
   const empleadoId = user?.empleadoId;
   const restauranteId = user?.restauranteId;

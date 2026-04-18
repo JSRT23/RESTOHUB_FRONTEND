@@ -2,9 +2,6 @@
 import { gql } from "@apollo/client";
 
 // ── AUTH: registrar usuario en auth_service ───────────────────────────────
-// Se llama DESPUÉS de crear en staff_service.
-// No se pasa empleadoId — auth_service lo vincula internamente por email/rol,
-// igual que hace con gerente_local al crear restaurantes.
 export const REGISTRAR_USUARIO_EMPLEADO = gql`
   mutation RegistrarUsuarioEmpleado(
     $email: String!
@@ -38,8 +35,6 @@ export const REGISTRAR_USUARIO_EMPLEADO = gql`
 
 // ── EMPLEADOS ─────────────────────────────────────────────────────────────
 
-// Paso 2: registra en staff_service.
-// "restaurante" = UUID del menu_service, "pais" = código ISO (CO, MX…)
 export const CREAR_EMPLEADO = gql`
   mutation CrearEmpleado(
     $nombre: String!
@@ -84,8 +79,6 @@ export const CREAR_EMPLEADO = gql`
   }
 `;
 
-// Solo edita campos mutables: nombre, apellido, teléfono, rol.
-// Documento y email son inmutables por diseño del sistema.
 export const EDITAR_EMPLEADO = gql`
   mutation EditarEmpleado(
     $empleadoId: ID!
@@ -116,7 +109,6 @@ export const EDITAR_EMPLEADO = gql`
   }
 `;
 
-// Al reactivar se actualiza la fecha de contratación
 export const EDITAR_FECHA_CONTRATACION = gql`
   mutation EditarFechaContratacion(
     $empleadoId: ID!
@@ -190,7 +182,24 @@ export const CREAR_TURNO = gql`
         estado
         estadoDisplay
         duracionHoras
+        qrToken
         notas
+      }
+      errores
+    }
+  }
+`;
+
+export const INICIAR_TURNO = gql`
+  mutation IniciarTurno($turnoId: ID!) {
+    iniciarTurno(turnoId: $turnoId) {
+      ok
+      turno {
+        id
+        estado
+        estadoDisplay
+        qrToken
+        qrExpiraEn
       }
       errores
     }
@@ -200,6 +209,20 @@ export const CREAR_TURNO = gql`
 export const CANCELAR_TURNO = gql`
   mutation CancelarTurno($turnoId: ID!) {
     cancelarTurno(turnoId: $turnoId) {
+      ok
+      turno {
+        id
+        estado
+        estadoDisplay
+      }
+      errores
+    }
+  }
+`;
+
+export const REGISTRAR_SALIDA = gql`
+  mutation RegistrarSalida($turnoId: ID!) {
+    registrarSalida(turnoId: $turnoId) {
       ok
       turno {
         id
@@ -260,9 +283,7 @@ export const CERRAR_NOMINA = gql`
   }
 `;
 
-// ── AUTH: desactivar / activar usuario ───────────────────────────────────
-// Se llaman en paralelo con desactivarEmpleado / activarEmpleado de staff
-// para revocar o restaurar el acceso al sistema.
+// ── AUTH: desactivar / activar usuario ────────────────────────────────────
 
 export const DESACTIVAR_USUARIO_AUTH = gql`
   mutation DesactivarUsuarioAuth($email: String!) {

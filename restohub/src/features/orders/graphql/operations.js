@@ -200,17 +200,50 @@ export const COMANDA_LISTA = gql`
 // ── ENTREGAS ──────────────────────────────────────────────────────────────
 
 export const GET_ENTREGAS = gql`
-  query GetEntregas($estadoEntrega: String, $tipoEntrega: String) {
-    entregas(estadoEntrega: $estadoEntrega, tipoEntrega: $tipoEntrega) {
+  query GetEntregas(
+    $estadoEntrega: String
+    $tipoEntrega: String
+    $repartidorId: ID
+    $restauranteId: ID
+  ) {
+    entregas(
+      estadoEntrega: $estadoEntrega
+      tipoEntrega: $tipoEntrega
+      repartidorId: $repartidorId
+      restauranteId: $restauranteId
+    ) {
       id
       pedido
+      restauranteId
       tipoEntrega
       direccion
+      notas
       repartidorId
       repartidorNombre
       estadoEntrega
       fechaSalida
       fechaEntregaReal
+      pedidoDetalle {
+        id
+        total
+        moneda
+        detalles {
+          id
+          nombrePlato
+          cantidad
+        }
+      }
+    }
+  }
+`;
+
+export const ASIGNAR_REPARTIDOR = gql`
+  mutation AsignarRepartidor($id: ID!, $repartidorId: ID!) {
+    asignarRepartidor(id: $id, repartidorId: $repartidorId) {
+      id
+      repartidorId
+      repartidorNombre
+      estadoEntrega
     }
   }
 `;
@@ -231,6 +264,36 @@ export const COMPLETAR_ENTREGA = gql`
       id
       estadoEntrega
       fechaEntregaReal
+    }
+  }
+`;
+
+// ── COBRO ─────────────────────────────────────────────────────────────────
+
+export const COBRAR_PEDIDO = gql`
+  mutation CobrarPedido(
+    $id: ID!
+    $metodoPago: String!
+    $totalCobrado: Float!
+    $descuentoCupon: Float
+    $descuentoPuntos: Float
+    $cuponId: ID
+    $puntosCanjados: Int
+  ) {
+    cobrarPedido(
+      id: $id
+      metodoPago: $metodoPago
+      totalCobrado: $totalCobrado
+      descuentoCupon: $descuentoCupon
+      descuentoPuntos: $descuentoPuntos
+      cuponId: $cuponId
+      puntosCanjados: $puntosCanjados
+    ) {
+      id
+      estado
+      totalCobrado
+      metodoPago
+      fechaCobro
     }
   }
 `;

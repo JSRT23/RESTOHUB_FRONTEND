@@ -34,6 +34,7 @@ import {
 } from "../../../../shared/components/ui";
 import { GET_TURNOS, GET_EMPLEADOS } from "../../graphql/queries";
 import { CREAR_TURNO, CANCELAR_TURNO } from "../../graphql/mutations";
+import { inicioSemana, finSemanas, toLocalISO } from "../../utils/turnoFechas";
 
 // ── Paleta ─────────────────────────────────────────────────────────────────
 const G = {
@@ -164,8 +165,8 @@ function ModalCrear({ open, onClose, restauranteId, empleados }) {
         variables: {
           empleado: form.empleadoId,
           restauranteId,
-          fechaInicio: new Date(form.fechaInicio).toISOString(),
-          fechaFin: new Date(form.fechaFin).toISOString(),
+          fechaInicio: toLocalISO(new Date(form.fechaInicio)),
+          fechaFin: toLocalISO(new Date(form.fechaFin)),
           notas: form.notas || null,
         },
       });
@@ -390,22 +391,10 @@ export default function GTurnosList() {
   const restauranteId = user?.restauranteId;
 
   // Rango de fechas: semana actual
-  const hoy = new Date();
-  const lunesSemana = new Date(hoy);
-  lunesSemana.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
-  lunesSemana.setHours(0, 0, 0, 0);
-  const domingoSemana = new Date(lunesSemana);
-  domingoSemana.setDate(lunesSemana.getDate() + 13); // 2 semanas
-  domingoSemana.setHours(23, 59, 59, 999);
-
-  const pad = (n) => String(n).padStart(2, "0");
-  const toDateStr = (d) =>
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
-  const [fechaDesde, setFechaDesde] = useState(toDateStr(lunesSemana));
-  const [fechaHasta, setFechaHasta] = useState(toDateStr(domingoSemana));
+  const [fechaDesde, setFechaDesde] = useState(inicioSemana().slice(0, 10));
+  const [fechaHasta, setFechaHasta] = useState(finSemanas(2).slice(0, 10));
   const [showCrear, setShowCrear] = useState(false);
   const [canceling, setCanceling] = useState(null);
 
@@ -616,6 +605,7 @@ export default function GTurnosList() {
       {!loading && agrupados.length > 0 && (
         <div className="space-y-6">
           {agrupados.map(([fechaKey, lista]) => {
+            const hoy = new Date();
             const fechaD = new Date(fechaKey);
             const esHoy = fechaD.toDateString() === hoy.toDateString();
             const esManana =

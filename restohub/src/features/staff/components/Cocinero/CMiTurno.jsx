@@ -17,6 +17,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { GET_TURNOS, GET_ASISTENCIA } from "../../graphql/queries";
+import { inicioHoy, finHoy } from "../../utils/turnoFechas";
 import { Skeleton } from "../../../../shared/components/ui";
 
 const G = {
@@ -63,17 +64,6 @@ function fmtFecha(iso) {
     day: "numeric",
     month: "long",
   });
-}
-function hoy() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-function manana() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setHours(23, 59, 59, 999);
-  return d.toISOString();
 }
 
 // ── Bloque QR ──────────────────────────────────────────────────────────────
@@ -176,8 +166,8 @@ export default function CMiTurno() {
     variables: {
       empleadoId,
       restauranteId,
-      fechaDesde: hoy(),
-      fechaHasta: manana(),
+      fechaDesde: inicioHoy(),
+      fechaHasta: finHoy(),
     },
     skip: !empleadoId,
     fetchPolicy: "cache-and-network",
@@ -185,7 +175,7 @@ export default function CMiTurno() {
   });
 
   const { data: asistData, loading: asistLoading } = useQuery(GET_ASISTENCIA, {
-    variables: { empleadoId, restauranteId, fechaDesde: hoy() },
+    variables: { empleadoId, restauranteId, fechaDesde: inicioHoy() },
     skip: !empleadoId,
     fetchPolicy: "cache-and-network",
     pollInterval: 30000,
