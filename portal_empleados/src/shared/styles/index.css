@@ -1,0 +1,274 @@
+/* portal_empleados/src/shared/styles/index.css */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+@import "tailwindcss";
+
+/* ── Paleta ──────────────────────────────────────────────────────────────── */
+:root {
+  --page-bg: #e8e8e6;
+  --white: #ffffff;
+  --border: #e2e8f0;
+  --text: #1c1917;
+  --muted: #78716c;
+  --subtle: #a8a29e;
+  --nav-bg: #1e3a5f;
+  --nav-act: #60a5fa;
+  --nav-ico: #93c5fd;
+  --accent: #051F20;
+  --danger: #dc2626;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--page-bg);
+  color: var(--text);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+#root {
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100svh;
+  background: var(--page-bg);
+  position: relative;
+}
+
+/* ── Pantallas full-width — kiosco supervisor y login desktop ─────────────
+   El kiosco y el login de escritorio necesitan ancho completo.
+   Usamos :has() para detectar si alguno de esos layouts está activo.  */
+#root:has(.kiosco-full),
+#root:has(.lp-desktop-inner) {
+  max-width: none;
+  background: transparent;
+}
+
+/* ── Tipografía ───────────────────────────────────────────────────────────── */
+.font-playfair {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.font-dm {
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+/* ── Keyframes ───────────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse2 {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .5;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.anim-fadeup {
+  animation: fadeUp .35s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.anim-fadein {
+  animation: fadeIn .25s ease both;
+}
+
+.anim-spin {
+  animation: spin .7s linear infinite;
+}
+
+.anim-pulse {
+  animation: pulse2 2s ease-in-out infinite;
+}
+
+.d1 {
+  animation-delay: .07s;
+}
+
+.d2 {
+  animation-delay: .14s;
+}
+
+.d3 {
+  animation-delay: .21s;
+}
+
+/* ── Skeleton ─────────────────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, #f0ede8 25%, #e8e4de 50%, #f0ede8 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 12px;
+}
+
+/* ── Card blanca ─────────────────────────────────────────────────────────── */
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .06), 0 4px 16px rgba(0, 0, 0, .04);
+  transition: box-shadow .2s ease, transform .15s ease;
+}
+
+.card-hover:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .08), 0 16px 40px rgba(0, 0, 0, .06);
+}
+
+.card-hover:active {
+  transform: scale(.99);
+}
+
+/* ── Input ───────────────────────────────────────────────────────────────── */
+.inp {
+  width: 100%;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.inp::placeholder {
+  color: #cbd5e1;
+}
+
+.inp:focus {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px #235347;
+}
+
+/* ── Botón primario ──────────────────────────────────────────────────────── */
+.btn-primary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 16px;
+  background: var(--accent);
+  color: white;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+
+.btn-primary:hover {
+  opacity: .92;
+}
+
+.btn-primary:active {
+  transform: scale(.99);
+}
+
+.btn-primary:disabled {
+  opacity: .4;
+  pointer-events: none;
+}
+
+/* ── Botón ghost ─────────────────────────────────────────────────────────── */
+.btn-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.btn-ghost:hover {
+  background: #f8f7f4;
+  color: var(--text);
+  border-color: #cbd5e1;
+}
+
+/* ── Safe area ───────────────────────────────────────────────────────────── */
+.safe-b {
+  padding-bottom: env(safe-area-inset-bottom, 10px);
+}
+
+.safe-t {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* ── Sin spin inputs number ──────────────────────────────────────────────── */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* ── Scrollbar oculto ────────────────────────────────────────────────────── */
+.noscroll::-webkit-scrollbar {
+  display: none;
+}
+
+.noscroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

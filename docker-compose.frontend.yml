@@ -10,7 +10,9 @@ services:
       - ./restohub:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://gateway_service:8000/api/graphql/
+      # El browser accede desde el host, no desde dentro de Docker.
+      # Usa localhost (o la IP LAN de tu máquina si accedes desde celular).
+      - VITE_API_URL=http://localhost:8000/api/graphql/
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
     command: npm run dev -- --host
@@ -27,7 +29,10 @@ services:
       - ./portal_empleados:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://gateway_service:8000/api/graphql/
+      # Misma lógica: el browser resuelve localhost, no gateway_service.
+      # Si accedes desde celular en la misma red WiFi, reemplaza localhost
+      # por la IP LAN de tu PC (ej: 192.168.1.X).
+      - VITE_API_URL=http://localhost:8000/api/graphql/
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
     command: sh -c "npm install && npm run dev -- --host --port 5174"

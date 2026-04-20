@@ -6,7 +6,7 @@
 //
 // Ruta: /gerente/staff/turnos
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import {
   Clock,
@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   XCircle,
   Ban,
+  RotateCcw,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { useAuth } from "../../../../app/auth/AuthContext";
@@ -106,7 +107,13 @@ function Field({ icon: Icon, label, required, children }) {
 }
 
 // ── Modal: Crear turno ─────────────────────────────────────────────────────
-function ModalCrear({ open, onClose, restauranteId, empleados }) {
+function ModalCrear({
+  open,
+  onClose,
+  restauranteId,
+  empleados,
+  preFillEmpleadoId,
+}) {
   const ahora = new Date();
   const enUnaHora = new Date(ahora.getTime() + 3600000);
   const enOchoHoras = new Date(ahora.getTime() + 8 * 3600000);
@@ -122,6 +129,12 @@ function ModalCrear({ open, onClose, restauranteId, empleados }) {
     notas: "",
   };
   const [form, setForm] = useState(INIT);
+  // Pre-fill empleado si viene de "Reprogramar"
+  useEffect(() => {
+    if (open && preFillEmpleadoId)
+      setForm((f) => ({ ...f, empleadoId: preFillEmpleadoId }));
+    if (!open) setForm(INIT);
+  }, [open, preFillEmpleadoId]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const [crear, { loading }] = useMutation(CREAR_TURNO, {
@@ -171,7 +184,12 @@ function ModalCrear({ open, onClose, restauranteId, empleados }) {
         },
       });
       const res = data?.crearTurno;
-      if (!res?.ok) throw new Error(res?.errores?.[0] || "Error al crear");
+      if (!res?.ok)
+        throw new Error(
+          Array.isArray(res?.errores)
+            ? res.errores[0]
+            : (res?.errores ?? "Error al crear"),
+        );
       const emp = empleados.find((e) => e.id === form.empleadoId);
       Swal.fire({
         background: "#fff",
@@ -302,7 +320,7 @@ function ModalCrear({ open, onClose, restauranteId, empleados }) {
 }
 
 // ── Tarjeta de turno ───────────────────────────────────────────────────────
-function TurnoCard({ turno, onCancelar, canceling }) {
+function TurnoCard({ turno, onCancelar, canceling, onReprogramar }) {
   const estado = ESTADO_CONFIG[turno.estado] ?? ESTADO_CONFIG.programado;
   const IconEstado = estado.icon;
   const cancelable =
@@ -366,6 +384,17 @@ function TurnoCard({ turno, onCancelar, canceling }) {
         )}
       </div>
 
+      {/* Reprogramar — solo cancelados */}
+      {turno.estado === "cancelado" && (
+        <button
+          onClick={() => onReprogramar && onReprogramar(turno)}
+          className="p-2 rounded-lg text-stone-400 hover:text-blue-500 hover:bg-blue-50 transition-colors flex-shrink-0"
+          title="Reprogramar turno"
+        >
+          <RotateCcw size={14} />
+        </button>
+      )}
+
       {/* Cancelar */}
       {cancelable && (
         <button
@@ -397,6 +426,7 @@ export default function GTurnosList() {
   const [fechaHasta, setFechaHasta] = useState(finSemanas(2).slice(0, 10));
   const [showCrear, setShowCrear] = useState(false);
   const [canceling, setCanceling] = useState(null);
+  const [reprogramar, setReprogramar] = useState(null); // turno a reprogramar
 
   const { data, loading, error } = useQuery(GET_TURNOS, {
     variables: {
@@ -461,7 +491,12 @@ export default function GTurnosList() {
     try {
       const { data } = await cancelar({ variables: { turnoId: turno.id } });
       const res = data?.cancelarTurno;
-      if (!res?.ok) throw new Error(res?.errores?.[0] || "Error");
+      if (!res?.ok)
+        throw new Error(
+          Array.isArray(res?.errores)
+            ? res.errores[0]
+            : (res?.errores ?? "Error al cancelar"),
+        );
       Swal.fire({
         background: "#fff",
         icon: "success",
@@ -642,6 +677,7 @@ export default function GTurnosList() {
                       turno={t}
                       onCancelar={handleCancelar}
                       canceling={canceling}
+                      onReprogramar={setReprogramar}
                     />
                   ))}
                 </div>
@@ -652,10 +688,14 @@ export default function GTurnosList() {
       )}
 
       <ModalCrear
-        open={showCrear}
-        onClose={() => setShowCrear(false)}
+        open={showCrear || !!reprogramar}
+        onClose={() => {
+          setShowCrear(false);
+          setReprogramar(null);
+        }}
         restauranteId={restauranteId}
         empleados={empleados}
+        preFillEmpleadoId={reprogramar?.empleado ?? null}
       />
     </div>
   );

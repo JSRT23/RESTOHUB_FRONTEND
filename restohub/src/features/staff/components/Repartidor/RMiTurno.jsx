@@ -29,20 +29,20 @@ const G = {
 };
 
 const ESTADO_TURNO = {
-  PROGRAMADO: {
+  programado: {
     label: "Programado",
     bg: "#eff6ff",
     text: "#3b82f6",
     border: "#bfdbfe",
   },
-  EN_CURSO: { label: "En curso", bg: G[50], text: G[300], border: G[100] },
-  COMPLETADO: {
+  en_curso: { label: "En curso", bg: G[50], text: G[300], border: G[100] },
+  completado: {
     label: "Completado",
     bg: "#f0fdf4",
     text: "#16a34a",
     border: "#bbf7d0",
   },
-  CANCELADO: {
+  cancelado: {
     label: "Cancelado",
     bg: "#fef2f2",
     text: "#dc2626",
@@ -186,15 +186,15 @@ export default function RMiTurno() {
 
   // Turno prioritario: en curso > programado > completado
   const turnoActivo =
-    turnos.find((t) => t.estado === "EN_CURSO") ??
-    turnos.find((t) => t.estado === "PROGRAMADO") ??
+    turnos.find((t) => t.estado === "en_curso") ??
+    turnos.find((t) => t.estado === "programado") ??
     turnos[0];
 
   const registroHoy = asistencia[0]; // el más reciente
   const estaEnTurno = registroHoy && !registroHoy.horaSalida;
 
   const meta = turnoActivo
-    ? (ESTADO_TURNO[turnoActivo.estado] ?? ESTADO_TURNO.PROGRAMADO)
+    ? (ESTADO_TURNO[turnoActivo.estado] ?? ESTADO_TURNO.programado)
     : null;
 
   if (!empleadoId)
@@ -271,7 +271,7 @@ export default function RMiTurno() {
                 >
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      turnoActivo.estado === "EN_CURSO" ? "animate-pulse" : ""
+                      turnoActivo.estado === "en_curso" ? "animate-pulse" : ""
                     }`}
                     style={{ background: meta.text }}
                   />

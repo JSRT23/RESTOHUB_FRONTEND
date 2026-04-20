@@ -335,14 +335,22 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
       await Swal.fire({
         background: "#fff",
         icon: "success",
-        title: "¡Empleado creado!",
-        html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;text-align:center;line-height:1.8">
-          <p><b style="color:#163832">${nombreCompleto}</b> fue agregado al equipo.</p>
-          <p style="font-size:12px;color:#9ca3af">${email.trim()} ya puede iniciar sesión</p>
+        title: "¡Empleado registrado!",
+        html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.7">
+          <p style="text-align:center;margin-bottom:12px">
+            <b style="color:#163832">${nombreCompleto}</b> fue agregado al equipo.
+          </p>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;text-align:left">
+            <p style="color:#1d4ed8;font-weight:700;font-size:13px;margin:0 0 4px">
+              🔗 Cuenta pendiente de vinculación
+            </p>
+            <p style="color:#3b82f6;font-size:12px;margin:0;line-height:1.5">
+              El <b>administrador central</b> debe vincular su cuenta de acceso. El reporte fue enviado automáticamente.
+            </p>
+          </div>
         </div>`,
         confirmButtonColor: G[900],
-        timer: 2500,
-        timerProgressBar: true,
+        confirmButtonText: "Entendido",
       });
       setForm(INIT);
       onClose();
