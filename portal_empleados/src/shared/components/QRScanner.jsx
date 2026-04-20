@@ -66,8 +66,19 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     setFase("requesting");
     setErrorMsg("");
 
+    // getUserMedia SOLO funciona en HTTPS o localhost.
+    // En http://192.168.x.x el navegador bloquea mediaDevices completamente.
+    const isSecure =
+      window.location.protocol === "https:" ||
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1";
+
+    if (!isSecure || !navigator.mediaDevices?.getUserMedia) {
+      setFase("no_https");
+      return;
+    }
+
     try {
-      // Preferir cámara trasera en mobile, cualquiera en desktop
       const constraints = {
         video: {
           facingMode: { ideal: "environment" },
@@ -413,6 +424,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
       {/* ── Estados sin cámara: centro de pantalla ── */}
       {(fase === "idle" ||
         fase === "requesting" ||
+        fase === "no_https" ||
         fase === "denied" ||
         fase === "error") && (
         <div
@@ -462,6 +474,206 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 {fase === "requesting" &&
                   "Acepta el permiso cuando el navegador lo solicite"}
               </p>
+            </div>
+          )}
+
+          {fase === "no_https" && (
+            <div
+              style={{
+                width: "100%",
+                maxWidth: "360px",
+                background: "rgba(10,10,10,.95)",
+                borderRadius: "24px",
+                padding: "28px 24px",
+                border: "1px solid rgba(239,68,68,.25)",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  width: "60px",
+                  height: "60px",
+                  borderRadius: "18px",
+                  background: "rgba(239,68,68,.12)",
+                  border: "1px solid rgba(248,113,113,.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 16px",
+                }}
+              >
+                {/* Ícono candado / HTTPS */}
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#f87171"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="3" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+
+              <p
+                style={{
+                  color: "#f87171",
+                  fontSize: "17px",
+                  fontWeight: "700",
+                  margin: "0 0 12px",
+                  fontFamily: "'DM Sans',sans-serif",
+                }}
+              >
+                Se requiere HTTPS
+              </p>
+
+              <p
+                style={{
+                  color: "rgba(255,255,255,.65)",
+                  fontSize: "13px",
+                  lineHeight: "1.7",
+                  margin: "0 0 20px",
+                  fontFamily: "'DM Sans',sans-serif",
+                }}
+              >
+                La cámara{" "}
+                <strong style={{ color: "#fff" }}>no funciona en HTTP</strong>.
+                <br />
+                El navegador bloquea el acceso a{" "}
+                <code
+                  style={{
+                    background: "rgba(255,255,255,.1)",
+                    padding: "2px 6px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                  }}
+                >
+                  navigator.mediaDevices
+                </code>{" "}
+                en conexiones no seguras.
+              </p>
+
+              <div
+                style={{
+                  background: "rgba(251,191,36,.08)",
+                  border: "1px solid rgba(251,191,36,.2)",
+                  borderRadius: "14px",
+                  padding: "14px 16px",
+                  textAlign: "left",
+                  marginBottom: "16px",
+                }}
+              >
+                <p
+                  style={{
+                    color: "#fbbf24",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    margin: "0 0 8px",
+                    fontFamily: "'DM Sans',sans-serif",
+                  }}
+                >
+                  ¿Cómo arreglarlo?
+                </p>
+                <p
+                  style={{
+                    color: "rgba(251,191,36,.8)",
+                    fontSize: "12px",
+                    margin: "0 0 6px",
+                    lineHeight: "1.5",
+                    fontFamily: "'DM Sans',sans-serif",
+                  }}
+                >
+                  <strong>Opción 1:</strong> Abre el portal desde{" "}
+                  <code
+                    style={{
+                      background: "rgba(0,0,0,.3)",
+                      padding: "1px 5px",
+                      borderRadius: "4px",
+                    }}
+                  >
+                    https://
+                  </code>{" "}
+                  con un dominio real o túnel (ngrok, Cloudflare Tunnel).
+                </p>
+                <p
+                  style={{
+                    color: "rgba(251,191,36,.8)",
+                    fontSize: "12px",
+                    margin: 0,
+                    lineHeight: "1.5",
+                    fontFamily: "'DM Sans',sans-serif",
+                  }}
+                >
+                  <strong>Opción 2:</strong> En Vite, agrega en{" "}
+                  <code
+                    style={{
+                      background: "rgba(0,0,0,.3)",
+                      padding: "1px 5px",
+                      borderRadius: "4px",
+                    }}
+                  >
+                    vite.config.js
+                  </code>
+                  :<br />
+                  <code
+                    style={{
+                      background: "rgba(0,0,0,.3)",
+                      padding: "3px 8px",
+                      borderRadius: "4px",
+                      display: "inline-block",
+                      marginTop: "4px",
+                      fontSize: "11px",
+                    }}
+                  >
+                    server: {"{"} https: true {"}"}
+                  </code>
+                </p>
+              </div>
+
+              <div
+                style={{
+                  background: "rgba(255,255,255,.04)",
+                  border: "1px solid rgba(255,255,255,.08)",
+                  borderRadius: "12px",
+                  padding: "12px",
+                }}
+              >
+                <p
+                  style={{
+                    color: "rgba(255,255,255,.5)",
+                    fontSize: "12px",
+                    margin: 0,
+                    lineHeight: "1.5",
+                    fontFamily: "'DM Sans',sans-serif",
+                  }}
+                >
+                  Mientras tanto, comunícate con el supervisor para que registre
+                  el turno manualmente.
+                </p>
+              </div>
+
+              <button
+                onClick={onCerrar}
+                style={{
+                  width: "100%",
+                  marginTop: "16px",
+                  padding: "13px",
+                  borderRadius: "14px",
+                  border: "none",
+                  background: "rgba(255,255,255,.1)",
+                  border: "1px solid rgba(255,255,255,.15)",
+                  color: "#fff",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  cursor: "pointer",
+                  fontFamily: "'DM Sans',sans-serif",
+                }}
+              >
+                Cerrar
+              </button>
             </div>
           )}
 
