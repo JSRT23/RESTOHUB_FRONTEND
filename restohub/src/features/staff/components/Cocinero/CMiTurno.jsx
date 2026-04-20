@@ -35,7 +35,7 @@ const ESTADO_TURNO = {
     text: "#3b82f6",
     border: "#bfdbfe",
   },
-  en_curso: { label: "En curso", bg: G[50], text: G[300], border: G[100] },
+  activo: { label: "Activo", bg: G[50], text: G[300], border: G[100] },
   completado: {
     label: "Completado",
     bg: "#f0fdf4",
@@ -186,7 +186,7 @@ export default function CMiTurno() {
 
   // Turno prioritario: en curso > programado > completado
   const turnoActivo =
-    turnos.find((t) => t.estado === "en_curso") ??
+    turnos.find((t) => t.estado === "activo") ??
     turnos.find((t) => t.estado === "programado") ??
     turnos[0];
 
@@ -271,7 +271,7 @@ export default function CMiTurno() {
                 >
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      turnoActivo.estado === "en_curso" ? "animate-pulse" : ""
+                      turnoActivo.estado === "activo" ? "animate-pulse" : ""
                     }`}
                     style={{ background: meta.text }}
                   />

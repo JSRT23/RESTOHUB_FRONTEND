@@ -1,7 +1,7 @@
-// src/features/staff/components/Cajero/CMiTurnoCajero.jsx
-// Cajero — su turno activo del día.
+// src/features/staff/components/Cocinero/CMiTurno.jsx
+// Cocinero — su turno activo del día.
 // Muestra horario, estado, horas trabajadas, QR token para check-in/out.
-// Ruta: /caja/turno
+// Ruta: /cocina/turno
 
 import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
@@ -35,7 +35,7 @@ const ESTADO_TURNO = {
     text: "#3b82f6",
     border: "#bfdbfe",
   },
-  en_curso: { label: "En curso", bg: G[50], text: G[300], border: G[100] },
+  activo: { label: "Activo", bg: G[50], text: G[300], border: G[100] },
   completado: {
     label: "Completado",
     bg: "#f0fdf4",
@@ -153,7 +153,7 @@ function QRBlock({ qrToken, qrExpiraEn }) {
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
-export default function CMiTurnoCajero() {
+export default function CMiTurno() {
   const { user } = useAuth();
   const empleadoId = user?.empleadoId;
   const restauranteId = user?.restauranteId;
@@ -186,7 +186,7 @@ export default function CMiTurnoCajero() {
 
   // Turno prioritario: en curso > programado > completado
   const turnoActivo =
-    turnos.find((t) => t.estado === "en_curso") ??
+    turnos.find((t) => t.estado === "activo") ??
     turnos.find((t) => t.estado === "programado") ??
     turnos[0];
 
@@ -271,7 +271,7 @@ export default function CMiTurnoCajero() {
                 >
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      turnoActivo.estado === "en_curso" ? "animate-pulse" : ""
+                      turnoActivo.estado === "activo" ? "animate-pulse" : ""
                     }`}
                     style={{ background: meta.text }}
                   />

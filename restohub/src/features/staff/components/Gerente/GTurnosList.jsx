@@ -87,7 +87,7 @@ function fmtDatetimeLocal(str) {
 
 const ESTADO_CONFIG = {
   programado: { label: "Programado", variant: "blue", icon: AlarmClock },
-  en_curso: { label: "En curso", variant: "green", icon: CheckCircle2 },
+  activo: { label: "Activo", variant: "green", icon: CheckCircle2 },
   completado: { label: "Completado", variant: "default", icon: CheckCircle2 },
   cancelado: { label: "Cancelado", variant: "red", icon: XCircle },
 };
@@ -323,8 +323,7 @@ function ModalCrear({
 function TurnoCard({ turno, onCancelar, canceling, onReprogramar }) {
   const estado = ESTADO_CONFIG[turno.estado] ?? ESTADO_CONFIG.programado;
   const IconEstado = estado.icon;
-  const cancelable =
-    turno.estado === "programado" || turno.estado === "en_curso";
+  const cancelable = turno.estado === "programado" || turno.estado === "activo";
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-4 flex gap-4 items-start hover:shadow-sm transition-all">
@@ -333,7 +332,7 @@ function TurnoCard({ turno, onCancelar, canceling, onReprogramar }) {
         className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
         style={{
           background:
-            turno.estado === "en_curso"
+            turno.estado === "activo"
               ? "#d1fae5"
               : turno.estado === "cancelado"
                 ? "#fee2e2"
@@ -344,7 +343,7 @@ function TurnoCard({ turno, onCancelar, canceling, onReprogramar }) {
           size={16}
           style={{
             color:
-              turno.estado === "en_curso"
+              turno.estado === "activo"
                 ? "#059669"
                 : turno.estado === "cancelado"
                   ? "#dc2626"
@@ -519,7 +518,7 @@ export default function GTurnosList() {
 
   // KPIs
   const programados = turnos.filter((t) => t.estado === "programado").length;
-  const enCurso = turnos.filter((t) => t.estado === "en_curso").length;
+  const enCurso = turnos.filter((t) => t.estado === "activo").length;
   const completados = turnos.filter((t) => t.estado === "completado").length;
 
   return (
@@ -540,7 +539,7 @@ export default function GTurnosList() {
         <div className="grid grid-cols-3 gap-3">
           {[
             { label: "Programados", value: programados, color: "#2563eb" },
-            { label: "En curso", value: enCurso, color: "#059669" },
+            { label: "Activo", value: enCurso, color: "#059669" },
             { label: "Completados", value: completados, color: G[300] },
           ].map((k) => (
             <div
@@ -595,7 +594,7 @@ export default function GTurnosList() {
           >
             <option value="todos">Todos los estados</option>
             <option value="programado">Programado</option>
-            <option value="en_curso">En curso</option>
+            <option value="activo">En curso</option>
             <option value="completado">Completado</option>
             <option value="cancelado">Cancelado</option>
           </select>

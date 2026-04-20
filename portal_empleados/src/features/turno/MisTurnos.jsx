@@ -33,6 +33,7 @@ const fmtFecha = (iso) => {
   });
 };
 
+// ── Estados con keys exactas del backend ─────────────────────────────────
 const ECFG = {
   programado: {
     label: "Programado",
@@ -41,7 +42,7 @@ const ECFG = {
     bg: "#eff6ff",
     border: "#bfdbfe",
   },
-  en_curso: {
+  activo: {
     label: "En curso",
     dot: "#235347",
     text: "#235347",
@@ -86,7 +87,7 @@ const IcoChev = ({ open }) => (
 function TurnoCard({ turno, delay = 0 }) {
   const [open, setOpen] = useState(false);
   const cfg = ECFG[turno.estado] ?? ECFG.programado;
-  const vivo = turno.estado === "en_curso";
+  const vivo = turno.estado === "activo";
 
   return (
     <button

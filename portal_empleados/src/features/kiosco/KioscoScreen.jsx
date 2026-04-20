@@ -42,7 +42,7 @@ const ECFG = {
     qrColor: "2563eb",
     accent: "rgba(37,99,235,.08)",
   },
-  en_curso: {
+  activo: {
     label: "En curso",
     color: G[300],
     bg: G[50],
@@ -228,7 +228,7 @@ function QRPanel({
 
   const exp = segs !== null && segs <= 0;
   const urgente = segs !== null && segs > 0 && segs < 60;
-  const cfg = accion === "iniciar" ? ECFG.programado : ECFG.en_curso;
+  const cfg = accion === "iniciar" ? ECFG.programado : ECFG.activo;
 
   const minutos = segs !== null && segs > 0 ? Math.floor(segs / 60) : 0;
   const secs = segs !== null && segs > 0 ? segs % 60 : 0;
@@ -681,6 +681,18 @@ export default function KioscoScreen() {
     fetchPolicy: "network-only",
   });
 
+  // Turnos del restaurante hoy — para contadores reales del header
+  const { data: tRestData, refetch: rRestT } = useQuery(GET_TURNOS, {
+    variables: {
+      restauranteId: user?.restauranteId,
+      fechaDesde: ds(),
+      fechaHasta: ds(),
+    },
+    skip: !user?.restauranteId,
+    fetchPolicy: "cache-and-network",
+    pollInterval: 30000,
+  });
+
   const [iniciarTurno] = useMutation(INICIAR_TURNO);
   const [registrarSalida] = useMutation(REGISTRAR_SALIDA);
 
@@ -690,7 +702,7 @@ export default function KioscoScreen() {
   useEffect(() => {
     if (!buscado) return;
     setTurno(
-      turnos.find((t) => t.estado === "en_curso") ??
+      turnos.find((t) => t.estado === "activo") ??
         turnos.find((t) => t.estado === "programado") ??
         null,
     );
@@ -760,6 +772,7 @@ export default function KioscoScreen() {
         showConfirmButton: false,
       });
       await rT();
+      await rRestT();
       limpiar();
     } catch (e) {
       Swal.fire({
@@ -775,13 +788,17 @@ export default function KioscoScreen() {
   };
 
   const esInit = turno?.estado === "programado";
-  const esFin = turno?.estado === "en_curso";
+  const esFin = turno?.estado === "activo";
   const nombre = buscado ? `${buscado.nombre} ${buscado.apellido}` : "";
   const cfgT = turno ? (ECFG[turno.estado] ?? ECFG.programado) : null;
   const mostrarQR = buscado && turno && (esInit || esFin) && turno.qrToken;
 
-  const entradas = fichajes.filter((f) => f.tipo === "Entrada").length;
-  const salidas = fichajes.filter((f) => f.tipo === "Salida").length;
+  // Contadores reales basados en turnos del restaurante hoy
+  const turnosHoy = tRestData?.turnos ?? [];
+  const entradas = turnosHoy.filter(
+    (t) => t.estado === "activo" || t.estado === "completado",
+  ).length;
+  const salidas = turnosHoy.filter((t) => t.estado === "completado").length;
 
   return (
     <div

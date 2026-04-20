@@ -15,6 +15,7 @@ const G = { 50: "#DAF1DE", 100: "#8EB69B", 300: "#235347", 900: "#051F20" };
 
 const ds = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 const fmtHora = (iso) =>
   iso
     ? new Date(iso).toLocaleTimeString("es-CO", {
@@ -22,9 +23,11 @@ const fmtHora = (iso) =>
         minute: "2-digit",
       })
     : "—";
+
 const minsHasta = (iso) =>
   iso ? Math.floor((new Date(iso) - Date.now()) / 60000) : null;
 
+// ── Estados — keys exactas del backend ────────────────────────────────────
 const ECFG = {
   programado: {
     label: "Programado",
@@ -32,7 +35,7 @@ const ECFG = {
     bg: "#eff6ff",
     border: "#bfdbfe",
   },
-  en_curso: {
+  activo: {
     label: "En curso",
     color: "#235347",
     bg: "#DAF1DE",
@@ -60,7 +63,7 @@ const ROL_LABEL = {
   supervisor: "Supervisor",
 };
 
-/* ── Icons ────────────────────────────────────────────────────────────────── */
+/* ── Icons ──────────────────────────────────────────────────────────────── */
 const IcoQR = () => (
   <svg
     width="16"
@@ -114,6 +117,21 @@ const IcoCal = () => (
     <line x1="3" y1="10" x2="21" y2="10" />
   </svg>
 );
+const IcoClock = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12,6 12,12 16,14" />
+  </svg>
+);
 
 export default function Inicio() {
   const navigate = useNavigate();
@@ -141,13 +159,23 @@ export default function Inicio() {
 
   const turnos = data?.turnos ?? [];
   const turno =
-    turnos.find((t) => t.estado === "en_curso") ??
+    turnos.find((t) => t.estado === "activo") ??
     turnos.find((t) => t.estado === "programado") ??
     turnos[0];
+
   const cfg = turno ? (ECFG[turno.estado] ?? ECFG.programado) : null;
   const esInit = turno?.estado === "programado";
-  const esFin = turno?.estado === "en_curso";
+  const esFin = turno?.estado === "activo";
+
+  // Ventana de salida: QR se habilita -15min antes del fechaFin
   const minsR = esFin ? minsHasta(turno?.fechaFin) : null;
+  const enVentanaSalida = esFin && minsR !== null && minsR <= 15;
+  // Hora en que se activa el QR de salida (fechaFin - 15min)
+  const horaActivacion = turno?.fechaFin
+    ? fmtHora(
+        new Date(new Date(turno.fechaFin).getTime() - 15 * 60000).toISOString(),
+      )
+    : null;
 
   const onQR = async () => {
     setScanner(false);
@@ -193,15 +221,34 @@ export default function Inicio() {
         icon: "warning",
         title: "No se pudo registrar",
         html: `<p style='font-family:DM Sans;color:#78716c;font-size:14px;margin:0'>
-        <strong style='color:#1c1917'>Comunícate con el supervisor</strong><br/><br/>
-        Pídele que registre tu turno manualmente desde el panel de control.
-      </p>`,
+          <strong style='color:#1c1917'>Comunícate con el supervisor</strong><br/><br/>
+          Pídele que registre tu turno manualmente desde el panel de control.
+        </p>`,
         confirmButtonColor: G[900],
         confirmButtonText: "Entendido",
       });
     } finally {
       setBusy(false);
     }
+  };
+
+  const abrirScanner = () => {
+    // Si está activo pero fuera de la ventana, informar
+    if (esFin && !enVentanaSalida) {
+      Swal.fire({
+        background: "#fff",
+        icon: "info",
+        title: "Aún no disponible",
+        html: `<p style='font-family:DM Sans;color:#78716c;font-size:14px;margin:0;line-height:1.6'>
+          El QR de salida se activa <strong>15 minutos antes</strong> del fin del turno.<br/>
+          Estará disponible a las <strong>${horaActivacion}</strong>.
+        </p>`,
+        confirmButtonColor: G[900],
+        confirmButtonText: "Entendido",
+      });
+      return;
+    }
+    setScanner(true);
   };
 
   return (
@@ -256,7 +303,6 @@ export default function Inicio() {
               })}
             </p>
           </div>
-          {/* Inicial */}
           <div
             style={{
               width: "42px",
@@ -335,7 +381,7 @@ export default function Inicio() {
           className="card anim-fadeup d1"
           style={{ marginBottom: "12px", overflow: "hidden" }}
         >
-          {/* Badge estado */}
+          {/* Badge estado + countdown */}
           <div
             style={{
               padding: "16px 18px 10px",
@@ -375,6 +421,7 @@ export default function Inicio() {
               )}
               {cfg.label}
             </span>
+
             {esFin && minsR !== null && (
               <span
                 className="font-dm"
@@ -395,7 +442,7 @@ export default function Inicio() {
             )}
           </div>
 
-          {/* Horario */}
+          {/* Horario grande */}
           <div style={{ padding: "4px 18px 16px" }}>
             <div
               style={{
@@ -454,11 +501,11 @@ export default function Inicio() {
             />
           )}
 
-          {/* Botón */}
+          {/* Botón acción */}
           {(esInit || esFin) && (
             <div style={{ padding: "14px 16px" }}>
               <button
-                onClick={() => setScanner(true)}
+                onClick={abrirScanner}
                 disabled={busy}
                 className="btn-primary"
               >
@@ -467,8 +514,71 @@ export default function Inicio() {
                   ? "Procesando..."
                   : esInit
                     ? "Escanear para iniciar"
-                    : "Escanear para finalizar"}
+                    : enVentanaSalida
+                      ? "Escanear para finalizar"
+                      : "Escanear para finalizar"}
               </button>
+
+              {/* Aviso ventana de salida — solo cuando activo y fuera de ventana */}
+              {esFin && !enVentanaSalida && horaActivacion && (
+                <div
+                  className="anim-fadein"
+                  style={{
+                    marginTop: "10px",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "8px",
+                    padding: "10px 12px",
+                    borderRadius: "12px",
+                    background: "#fffbeb",
+                    border: "1px solid #fde68a",
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#d97706",
+                      marginTop: "1px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <IcoClock />
+                  </span>
+                  <div>
+                    <p
+                      className="font-dm"
+                      style={{
+                        color: "#92400e",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        margin: "0 0 1px",
+                      }}
+                    >
+                      QR de salida disponible a las {horaActivacion}
+                    </p>
+                    <p
+                      className="font-dm"
+                      style={{ color: "#b45309", fontSize: "11px", margin: 0 }}
+                    >
+                      El QR de salida se activa 15 min antes de las{" "}
+                      {fmtHora(turno.fechaFin)}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Estado final */}
+          {(turno.estado === "completado" || turno.estado === "cancelado") && (
+            <div style={{ padding: "14px 18px 18px", textAlign: "center" }}>
+              <p
+                className="font-dm"
+                style={{ color: "#a8a29e", fontSize: "13px", margin: 0 }}
+              >
+                {turno.estado === "completado"
+                  ? "✅ Turno completado"
+                  : "❌ Turno cancelado"}
+              </p>
             </div>
           )}
         </div>
@@ -483,6 +593,7 @@ export default function Inicio() {
         <IcoList /> Ver todos mis turnos
       </button>
 
+      {/* QR Scanner */}
       {scanner && turno && (
         <QRScanner
           tokenEsperado={turno.qrToken}

@@ -113,8 +113,8 @@ const ESTADO_CFG = {
     border: "#bfdbfe",
     dot: "bg-blue-500",
   },
-  en_curso: {
-    label: "En curso",
+  activo: {
+    label: "Activo",
     bg: G[50],
     text: G[300],
     border: G[100],
@@ -344,40 +344,80 @@ function ModalQR({ turno, modo, onClose }) {
           </div>
         </div>
 
-        {/* QR real — generado vía API de Google Charts, sin dependencias */}
+        {/* QR — con lógica de ventana para modo "finalizar" */}
         {token ? (
-          <div className="flex flex-col items-center gap-3">
-            <div
-              className={`p-4 rounded-3xl border-4 transition-all ${qrExpirado ? "opacity-40 grayscale" : ""}`}
-              style={{ borderColor: accentColor, background: "#fff" }}
-            >
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(token)}&color=${qrExpirado ? "9ca3af" : accentColor.replace("#", "")}&bgcolor=ffffff&format=svg&qzone=1`}
-                alt="QR de turno"
-                width={200}
-                height={200}
-                style={{ display: "block" }}
-              />
-            </div>
+          (() => {
+            // Ventana de salida: solo -15min antes del fechaFin
+            const minsParaFin = minutosHasta(turno.fechaFin);
+            const fueraDeVentana =
+              !esIniciar && (minsParaFin === null || minsParaFin > 15);
+            const qrActivo = !fueraDeVentana && !qrExpirado;
 
-            {/* Expiración */}
-            {turno.qrExpiraEn && (
-              <div
-                className={`flex items-center gap-2 text-xs font-dm font-semibold px-3 py-1.5 rounded-full ${
-                  qrExpirado
-                    ? "bg-red-50 text-red-500"
-                    : segundos !== null && segundos < 60
-                      ? "bg-amber-50 text-amber-600"
-                      : "bg-stone-100 text-stone-500"
-                }`}
-              >
-                <Timer size={11} />
-                {qrExpirado
-                  ? "QR vencido — inicia manualmente"
-                  : `Expira en ${fmtExpira(segundos)}`}
+            return (
+              <div className="flex flex-col items-center gap-3">
+                {fueraDeVentana ? (
+                  // Fuera de ventana — mostrar countdown hasta que se habilite
+                  <div className="flex flex-col items-center gap-3 py-6">
+                    <div
+                      className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                      style={{
+                        background: "#fffbeb",
+                        border: "2px solid #fde68a",
+                      }}
+                    >
+                      <Timer size={28} style={{ color: "#d97706" }} />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-dm font-semibold text-stone-700">
+                        QR de salida disponible en
+                      </p>
+                      <p
+                        className="font-playfair text-3xl font-bold mt-1"
+                        style={{ color: "#d97706" }}
+                      >
+                        {fmtCountdown(minsParaFin - 15)}
+                      </p>
+                      <p className="text-xs font-dm text-stone-400 mt-1">
+                        Se activa 15 minutos antes del fin del turno (
+                        {fmtHora(turno.fechaFin)})
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className={`p-4 rounded-3xl border-4 transition-all ${!qrActivo ? "opacity-40 grayscale" : ""}`}
+                    style={{ borderColor: accentColor, background: "#fff" }}
+                  >
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(token)}&color=${!qrActivo ? "9ca3af" : accentColor.replace("#", "")}&bgcolor=ffffff&format=svg&qzone=1`}
+                      alt="QR de turno"
+                      width={200}
+                      height={200}
+                      style={{ display: "block" }}
+                    />
+                  </div>
+                )}
+
+                {/* Estado del QR */}
+                {!fueraDeVentana && turno.qrExpiraEn && (
+                  <div
+                    className={`flex items-center gap-2 text-xs font-dm font-semibold px-3 py-1.5 rounded-full ${
+                      qrExpirado
+                        ? "bg-red-50 text-red-500"
+                        : segundos !== null && segundos < 60
+                          ? "bg-amber-50 text-amber-600"
+                          : "bg-stone-100 text-stone-500"
+                    }`}
+                  >
+                    <Timer size={11} />
+                    {qrExpirado
+                      ? "QR vencido — usa acción manual"
+                      : `Expira en ${fmtExpira(segundos)}`}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()
         ) : (
           <div className="flex flex-col items-center gap-2 py-8 text-stone-400">
             <QrCode size={40} className="opacity-30" />
@@ -602,7 +642,7 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════════
 function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
   const meta = ESTADO_CFG[turno.estado] ?? ESTADO_CFG.programado;
-  const enCurso = turno.estado === "en_curso";
+  const enCurso = turno.estado === "activo";
   const prog = turno.estado === "programado";
   const cancel = !["completado", "cancelado"].includes(turno.estado);
 
@@ -914,7 +954,7 @@ export default function SStaffList() {
   const asistencia = asistData?.asistencia ?? [];
   const alertas = alertasData?.alertasOperacionales ?? [];
 
-  const enCurso = turnos.filter((t) => t.estado === "en_curso").length;
+  const enCurso = turnos.filter((t) => t.estado === "activo").length;
   const programados = turnos.filter((t) => t.estado === "programado").length;
   const alertasAltas = alertas.filter(
     (a) => (a.nivel ?? "").toUpperCase() === "ALTA",
@@ -956,22 +996,47 @@ export default function SStaffList() {
     return () => clearInterval(id);
   }, [turnos, cancelarTurno]);
 
-  // ── Auto-abrir modal QR para finalizar (-15min antes o +45min después) ───
+  // ── Ventana de salida: -15min antes del fechaFin se habilita el QR ─────
+  // Si llega +15min después sin escanear → cancelar automáticamente
   const modalAutoAbiertoRef = useRef(new Set());
+  const autoCancelSalidaRef = useRef(new Set());
+
   useEffect(() => {
-    if (qrModal) return; // ya hay un modal abierto
-    const candidato = turnos.find((t) => {
-      if (t.estado !== "en_curso") return false;
-      if (modalAutoAbiertoRef.current.has(t.id)) return false;
-      const restantes = minutosHasta(t.fechaFin);
-      // -15 antes de acabar o hasta +45 después
-      return restantes !== null && restantes <= 15 && restantes >= -45;
-    });
-    if (candidato) {
-      modalAutoAbiertoRef.current.add(candidato.id);
-      setQrModal({ turno: candidato, modo: "finalizar" });
+    const ahora = Date.now();
+
+    // Auto-abrir modal para finalizar cuando estamos en ventana (-15 a 0 min)
+    if (!qrModal) {
+      const candidato = turnos.find((t) => {
+        if (t.estado !== "activo") return false;
+        if (modalAutoAbiertoRef.current.has(t.id)) return false;
+        const restantes = minutosHasta(t.fechaFin);
+        return restantes !== null && restantes <= 15 && restantes >= 0;
+      });
+      if (candidato) {
+        modalAutoAbiertoRef.current.add(candidato.id);
+        setQrModal({ turno: candidato, modo: "finalizar" });
+      }
     }
-  }, [turnos, qrModal]);
+
+    // Auto-cancelar turnos activos que pasaron +15min de su fechaFin sin salida
+    const vencidos = turnos.filter((t) => {
+      if (t.estado !== "activo") return false;
+      if (autoCancelSalidaRef.current.has(t.id)) return false;
+      const pasados = minutosDesde(t.fechaFin);
+      return pasados !== null && pasados >= 15;
+    });
+
+    vencidos.forEach(async (t) => {
+      autoCancelSalidaRef.current.add(t.id);
+      try {
+        const { data } = await cancelarTurno({ variables: { turnoId: t.id } });
+        if (!data?.cancelarTurno?.ok) autoCancelSalidaRef.current.delete(t.id);
+      } catch (e) {
+        autoCancelSalidaRef.current.delete(t.id);
+        console.error("[Auto-cancel salida]", e);
+      }
+    });
+  }, [turnos, qrModal, cancelarTurno]);
 
   // ── Filtro de turnos ──────────────────────────────────────────────────────
   const filteredTurnos = useMemo(() => {
@@ -1056,7 +1121,7 @@ export default function SStaffList() {
       <div className="grid grid-cols-3 gap-3">
         {[
           {
-            label: "En curso",
+            label: "Activo",
             n: enCurso,
             style: { background: G[50], borderColor: G[100] },
             text: G[300],
@@ -1143,7 +1208,7 @@ export default function SStaffList() {
           <div className="flex items-center gap-1 p-1 rounded-xl bg-white border border-stone-200">
             {[
               { v: "all", l: "Todos" },
-              { v: "en_curso", l: "En curso" },
+              { v: "activo", l: "Activo" },
               { v: "programado", l: "Programados" },
               { v: "completado", l: "Completados" },
             ].map(({ v, l }) => (
