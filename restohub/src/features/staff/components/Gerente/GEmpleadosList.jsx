@@ -194,6 +194,8 @@ function PasswordField({ label, value, onChange, placeholder, required }) {
 // ── Modal: Crear empleado (auth + staff) ───────────────────────────────────
 function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
   const today = new Date().toISOString().split("T")[0];
+  // País viene del restaurante — no el empleado lo elige
+  const paisRestaurante = restaurantePais || "Colombia";
   const INIT = {
     nombre: "",
     apellido: "",
@@ -203,7 +205,7 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
     password: "",
     passwordConfirm: "",
     rol: "mesero",
-    pais: "Colombia",
+    pais: paisRestaurante,
     fechaContratacion: today,
   };
   const [form, setForm] = useState(INIT);
@@ -226,15 +228,7 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
       rol,
       pais,
     } = form;
-    if (
-      !nombre ||
-      !apellido ||
-      !documento ||
-      !email ||
-      !password ||
-      !rol ||
-      !pais
-    ) {
+    if (!nombre || !apellido || !documento || !email || !password || !rol) {
       Swal.fire({
         background: "#fff",
         icon: "warning",
@@ -336,21 +330,18 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
         background: "#fff",
         icon: "success",
         title: "¡Empleado registrado!",
-        html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.7">
-          <p style="text-align:center;margin-bottom:12px">
-            <b style="color:#163832">${nombreCompleto}</b> fue agregado al equipo.
-          </p>
-          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;text-align:left">
-            <p style="color:#1d4ed8;font-weight:700;font-size:13px;margin:0 0 4px">
-              🔗 Cuenta pendiente de vinculación
-            </p>
-            <p style="color:#3b82f6;font-size:12px;margin:0;line-height:1.5">
-              El <b>administrador central</b> debe vincular su cuenta de acceso. El reporte fue enviado automáticamente.
+        html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;text-align:center;line-height:1.8">
+          <p style="margin:0 0 8px"><b style="color:#163832">${nombreCompleto}</b> fue agregado al equipo.</p>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;text-align:left">
+            <p style="color:#15803d;font-weight:700;font-size:13px;margin:0 0 3px">✅ Cuenta vinculada</p>
+            <p style="color:#16a34a;font-size:12px;margin:0">
+              <b>${email.trim()}</b> ya puede iniciar sesión en el portal de empleados con la contraseña asignada.
             </p>
           </div>
         </div>`,
         confirmButtonColor: G[900],
-        confirmButtonText: "Entendido",
+        timer: 3000,
+        timerProgressBar: true,
       });
       setForm(INIT);
       onClose();
@@ -456,50 +447,45 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
           />
         </div>
 
-        {/* Rol y país */}
-        <div className="grid grid-cols-2 gap-3">
-          <Field icon={ShieldCheck} label="Rol" required>
-            <div className="relative">
-              <select
-                className={cls + " appearance-none cursor-pointer pr-8"}
-                onFocus={fi}
-                onBlur={fb}
-                value={form.rol}
-                onChange={set("rol")}
-              >
-                {ROLES_GERENTE.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
-              />
-            </div>
-          </Field>
-          <Field icon={Globe} label="País" required>
-            <div className="relative">
-              <select
-                className={cls + " appearance-none cursor-pointer pr-8"}
-                onFocus={fi}
-                onBlur={fb}
-                value={form.pais}
-                onChange={set("pais")}
-              >
-                {PAISES.map((p) => (
-                  <option key={p.code} value={p.label}>
-                    {p.flag} {p.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
-              />
-            </div>
-          </Field>
+        {/* Rol */}
+        <Field icon={ShieldCheck} label="Rol" required>
+          <div className="relative">
+            <select
+              className={cls + " appearance-none cursor-pointer pr-8"}
+              onFocus={fi}
+              onBlur={fb}
+              value={form.rol}
+              onChange={set("rol")}
+            >
+              {ROLES_GERENTE.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={14}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
+            />
+          </div>
+        </Field>
+
+        {/* País — asignado automáticamente del restaurante */}
+        <div
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-dm"
+          style={{
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            color: "#15803d",
+          }}
+        >
+          <Globe size={13} style={{ color: "#16a34a", flexShrink: 0 }} />
+          <span>
+            País asignado automáticamente:{" "}
+            <strong>
+              {flagFor(paisRestaurante)} {paisRestaurante}
+            </strong>
+          </span>
         </div>
 
         {/* Fecha contratación */}
@@ -1246,7 +1232,9 @@ export default function GEmpleadosList() {
         open={showCrear}
         onClose={() => setShowCrear(false)}
         restauranteId={restauranteId}
-        restaurantePais={user?.restaurantePais}
+        restaurantePais={
+          user?.restaurantePais || empleados?.[0]?.pais || "Colombia"
+        }
       />
 
       <ModalEditar
