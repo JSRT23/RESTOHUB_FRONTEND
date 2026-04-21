@@ -1,7 +1,6 @@
 // portal_empleados/src/shared/components/QRScanner.jsx
-// Scanner QR estilo iPhone.
-// IMPORTANTE: solicita permiso de cámara de forma explícita (requerido en iOS Safari).
-// Estados: idle → requesting → active → success | denied | error
+// Scanner QR estilo iPhone con linterna.
+// getUserMedia requiere HTTPS en producción (no en localhost).
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
@@ -14,24 +13,31 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
   const streamRef = useRef(null);
   const rafRef = useRef(null);
   const jsqrRef = useRef(null);
+  const trackRef = useRef(null);
 
-  // Estados: idle | requesting | active | success | denied | error
   const [fase, setFase] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [linterna, setLinterna] = useState(false);
+  const [hayLinterna, setHayLinterna] = useState(false);
 
-  // ── Cargar jsQR una sola vez ──────────────────────────────────────────
   useEffect(() => {
     import("jsqr").then((m) => {
       jsqrRef.current = m.default;
     });
   }, []);
 
-  // ── Loop de escaneo ───────────────────────────────────────────────────
+  const apagar = useCallback(() => {
+    try {
+      trackRef.current?.applyConstraints({ advanced: [{ torch: false }] });
+    } catch (_) {}
+    setLinterna(false);
+  }, []);
+
   const startScan = useCallback(() => {
     const loop = () => {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const jsqr = jsqrRef.current;
+      const video = videoRef.current,
+        canvas = canvasRef.current,
+        jsqr = jsqrRef.current;
       if (!video || !canvas || !jsqr) {
         rafRef.current = requestAnimationFrame(loop);
         return;
@@ -40,34 +46,41 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         rafRef.current = requestAnimationFrame(loop);
         return;
       }
-
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(video, 0, 0);
-
       const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsqr(img.data, img.width, img.height, {
         inversionAttempts: "dontInvert",
       });
-
       if (code && code.data.trim() === tokenEsperado) {
         setFase("success");
+        apagar();
         setTimeout(() => onExito(code.data.trim()), 700);
-        return; // no seguir escaneando
+        return;
       }
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
-  }, [tokenEsperado, onExito]);
+  }, [tokenEsperado, onExito, apagar]);
 
-  // ── Solicitar cámara ──────────────────────────────────────────────────
+  const toggleLinterna = useCallback(async () => {
+    const track = trackRef.current;
+    if (!track) return;
+    try {
+      const next = !linterna;
+      await track.applyConstraints({ advanced: [{ torch: next }] });
+      setLinterna(next);
+    } catch (e) {
+      console.warn("Torch error:", e);
+    }
+  }, [linterna]);
+
   const requestCamera = useCallback(async () => {
     setFase("requesting");
     setErrorMsg("");
 
-    // getUserMedia SOLO funciona en HTTPS o localhost.
-    // En http://192.168.x.x el navegador bloquea mediaDevices completamente.
     const isSecure =
       window.location.protocol === "https:" ||
       window.location.hostname === "localhost" ||
@@ -79,74 +92,73 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     }
 
     try {
-      const constraints = {
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
         audio: false,
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      });
       streamRef.current = stream;
+
+      const track = stream.getVideoTracks()[0];
+      trackRef.current = track;
+      if (track) {
+        const caps = track.getCapabilities?.() ?? {};
+        setHayLinterna(!!caps.torch);
+      }
 
       const video = videoRef.current;
       if (!video) {
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
-
       video.srcObject = stream;
-
-      // En iOS Safari es obligatorio llamar play() después de asignar srcObject
       await video.play();
-
       setFase("active");
       startScan();
     } catch (err) {
-      const name = err.name ?? "";
-
-      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+      const n = err.name ?? "";
+      if (n === "NotAllowedError" || n === "PermissionDeniedError") {
         setFase("denied");
         setErrorMsg(
-          "Permiso de cámara denegado.\n\n" +
-            "iOS Safari: Ajustes > Safari > Cámara → Permitir\n" +
-            "Chrome Android: toca el 🔒 en la barra de URL → Cámara → Permitir",
+          "iOS Safari: Ajustes → Safari → Cámara → Permitir\nChrome Android: toca 🔒 en la URL → Cámara → Permitir",
         );
-      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+      } else if (n === "NotFoundError") {
         setFase("error");
         setErrorMsg("No se encontró cámara en este dispositivo.");
-      } else if (name === "NotReadableError" || name === "TrackStartError") {
+      } else if (n === "NotReadableError") {
         setFase("error");
-        setErrorMsg(
-          "La cámara está siendo usada por otra aplicación. Ciérrala e intenta de nuevo.",
-        );
+        setErrorMsg("La cámara está en uso por otra app.");
       } else {
         setFase("error");
-        setErrorMsg(`No se pudo abrir la cámara: ${err.message || name}`);
+        setErrorMsg(`Error: ${err.message || n}`);
       }
     }
   }, [startScan]);
 
-  // ── Auto-iniciar al montar ─────────────────────────────────────────────
   useEffect(() => {
-    // Pequeño delay para que el DOM esté listo (importante en iOS)
-    const t = setTimeout(() => requestCamera(), 100);
+    const t = setTimeout(requestCamera, 100);
     return () => clearTimeout(t);
   }, [requestCamera]);
 
-  // ── Cleanup al desmontar ──────────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (streamRef.current)
-        streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
   const exitoFlash = fase === "success";
   const mostrarVisor = fase === "active" || fase === "success";
+  const sinCamara = [
+    "idle",
+    "requesting",
+    "no_https",
+    "denied",
+    "error",
+  ].includes(fase);
 
   return (
     <div
@@ -157,10 +169,9 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         background: "#000",
         display: "flex",
         flexDirection: "column",
-        fontFamily: "'DM Sans', system-ui, sans-serif",
+        fontFamily: "'DM Sans',system-ui,sans-serif",
       }}
     >
-      {/* ── Video fullscreen ── */}
       <video
         ref={videoRef}
         muted
@@ -178,7 +189,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
-      {/* ── Overlay oscuro con recorte (solo cuando hay cámara) ── */}
       {mostrarVisor && (
         <svg
           style={{
@@ -212,7 +222,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         </svg>
       )}
 
-      {/* ── Marco del visor (esquinas iPhone) ── */}
       {mostrarVisor && (
         <div
           style={{
@@ -224,12 +233,11 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
             height: `${VISOR}px`,
             borderRadius: `${RADIO}px`,
             boxShadow: exitoFlash
-              ? "0 0 0 3px #22c55e, 0 0 60px rgba(34,197,94,.4)"
+              ? "0 0 0 3px #22c55e,0 0 60px rgba(34,197,94,.4)"
               : "0 0 0 1.5px rgba(255,255,255,.8)",
-            transition: "box-shadow .3s ease",
+            transition: "box-shadow .3s",
           }}
         >
-          {/* 4 esquinas independientes */}
           {[
             {
               top: 0,
@@ -267,13 +275,11 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 width: "32px",
                 height: "32px",
                 ...s,
-                transition: "border-color .3s",
                 ...(exitoFlash ? { borderColor: "#22c55e" } : {}),
               }}
             />
           ))}
 
-          {/* Línea de escaneo */}
           {fase === "active" && (
             <div
               style={{
@@ -283,14 +289,13 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 height: "2px",
                 borderRadius: "1px",
                 background:
-                  "linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent)",
+                  "linear-gradient(90deg,transparent,rgba(255,255,255,.9),transparent)",
                 boxShadow: "0 0 10px rgba(255,255,255,.6)",
                 animation: "scanline 2.4s ease-in-out infinite",
               }}
             />
           )}
 
-          {/* Flash de éxito */}
           {exitoFlash && (
             <div
               style={{
@@ -329,7 +334,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         </div>
       )}
 
-      {/* ── Header con botón Cancelar ── */}
+      {/* ── Header ── */}
       <div
         style={{
           position: "absolute",
@@ -337,17 +342,20 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
           left: 0,
           right: 0,
           zIndex: 10,
-          padding: "env(safe-area-inset-top, 44px) 20px 16px",
-          paddingTop: "max(env(safe-area-inset-top, 44px), 44px)",
+          paddingTop: "max(env(safe-area-inset-top,44px),44px)",
+          padding: "max(env(safe-area-inset-top,44px),44px) 20px 16px",
           background:
-            "linear-gradient(to bottom, rgba(0,0,0,.7) 0%, transparent 100%)",
+            "linear-gradient(to bottom,rgba(0,0,0,.7) 0%,transparent 100%)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
         }}
       >
         <button
-          onClick={onCerrar}
+          onClick={() => {
+            apagar();
+            onCerrar();
+          }}
           style={{
             background: "rgba(255,255,255,.15)",
             backdropFilter: "blur(10px)",
@@ -362,7 +370,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
             display: "flex",
             alignItems: "center",
             gap: "7px",
-            fontFamily: "'DM Sans', sans-serif",
+            fontFamily: "'DM Sans',sans-serif",
           }}
         >
           <svg
@@ -379,13 +387,51 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
           </svg>
           Cancelar
         </button>
+
         <span style={{ color: "#fff", fontSize: "16px", fontWeight: "600" }}>
           Escanear QR
         </span>
-        <div style={{ width: "80px" }} />
+
+        {/* Botón linterna */}
+        {fase === "active" && hayLinterna ? (
+          <button
+            onClick={toggleLinterna}
+            style={{
+              width: "42px",
+              height: "42px",
+              borderRadius: "50%",
+              background: linterna ? "#fbbf24" : "rgba(255,255,255,.15)",
+              backdropFilter: "blur(10px)",
+              WebkitBackdropFilter: "blur(10px)",
+              border: linterna
+                ? "2px solid #f59e0b"
+                : "1px solid rgba(255,255,255,.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all .2s",
+            }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={linterna ? "#78350f" : "#fff"}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2" />
+            </svg>
+          </button>
+        ) : (
+          <div style={{ width: "42px" }} />
+        )}
       </div>
 
-      {/* ── Texto instructivo debajo del visor ── */}
+      {/* ── Instrucción ── */}
       {fase === "active" && (
         <div
           style={{
@@ -393,18 +439,29 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
             bottom: 0,
             left: 0,
             right: 0,
-            padding: "0 24px max(env(safe-area-inset-bottom, 24px), 48px)",
+            padding: "0 24px max(env(safe-area-inset-bottom,24px),48px)",
             background:
-              "linear-gradient(to top, rgba(0,0,0,.7) 0%, transparent 100%)",
+              "linear-gradient(to top,rgba(0,0,0,.7) 0%,transparent 100%)",
             textAlign: "center",
           }}
         >
+          {hayLinterna && (
+            <p
+              style={{
+                color: "rgba(255,255,255,.4)",
+                fontSize: "12px",
+                margin: "0 0 4px",
+              }}
+            >
+              ⚡ Toca el rayo para encender la linterna
+            </p>
+          )}
           <p
             style={{
               color: "#fff",
               fontSize: "15px",
               fontWeight: "500",
-              margin: "0 0 6px",
+              margin: "0 0 4px",
             }}
           >
             Apunta al QR del supervisor
@@ -421,12 +478,8 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         </div>
       )}
 
-      {/* ── Estados sin cámara: centro de pantalla ── */}
-      {(fase === "idle" ||
-        fase === "requesting" ||
-        fase === "no_https" ||
-        fase === "denied" ||
-        fase === "error") && (
+      {/* ── Estados sin cámara ── */}
+      {sinCamara && (
         <div
           style={{
             position: "absolute",
@@ -440,7 +493,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         >
           {(fase === "idle" || fase === "requesting") && (
             <div style={{ textAlign: "center" }}>
-              {/* Spinner */}
               <div
                 style={{
                   width: "56px",
@@ -456,24 +508,25 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 style={{
                   color: "rgba(255,255,255,.8)",
                   fontSize: "16px",
-                  margin: "0 0 6px",
                   fontWeight: "500",
+                  margin: "0 0 6px",
                 }}
               >
                 {fase === "idle"
                   ? "Preparando cámara..."
-                  : "Solicitando acceso a la cámara..."}
+                  : "Solicitando acceso..."}
               </p>
-              <p
-                style={{
-                  color: "rgba(255,255,255,.35)",
-                  fontSize: "13px",
-                  margin: 0,
-                }}
-              >
-                {fase === "requesting" &&
-                  "Acepta el permiso cuando el navegador lo solicite"}
-              </p>
+              {fase === "requesting" && (
+                <p
+                  style={{
+                    color: "rgba(255,255,255,.35)",
+                    fontSize: "13px",
+                    margin: 0,
+                  }}
+                >
+                  Acepta el permiso cuando el navegador lo solicite
+                </p>
+              )}
             </div>
           )}
 
@@ -481,11 +534,11 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
             <div
               style={{
                 width: "100%",
-                maxWidth: "360px",
+                maxWidth: "340px",
                 background: "rgba(10,10,10,.95)",
                 borderRadius: "24px",
                 padding: "28px 24px",
-                border: "1px solid rgba(239,68,68,.25)",
+                border: "1px solid rgba(251,191,36,.2)",
                 textAlign: "center",
               }}
             >
@@ -494,21 +547,20 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   width: "60px",
                   height: "60px",
                   borderRadius: "18px",
-                  background: "rgba(239,68,68,.12)",
-                  border: "1px solid rgba(248,113,113,.3)",
+                  background: "rgba(251,191,36,.12)",
+                  border: "1px solid rgba(251,191,36,.3)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   margin: "0 auto 16px",
                 }}
               >
-                {/* Ícono candado / HTTPS */}
                 <svg
                   width="28"
                   height="28"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="#f87171"
+                  stroke="#fbbf24"
                   strokeWidth="1.8"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -517,152 +569,87 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
               </div>
-
               <p
                 style={{
-                  color: "#f87171",
+                  color: "#fbbf24",
                   fontSize: "17px",
                   fontWeight: "700",
-                  margin: "0 0 12px",
-                  fontFamily: "'DM Sans',sans-serif",
+                  margin: "0 0 10px",
                 }}
               >
                 Se requiere HTTPS
               </p>
-
               <p
                 style={{
-                  color: "rgba(255,255,255,.65)",
+                  color: "rgba(255,255,255,.6)",
                   fontSize: "13px",
-                  lineHeight: "1.7",
-                  margin: "0 0 20px",
-                  fontFamily: "'DM Sans',sans-serif",
+                  lineHeight: "1.6",
+                  margin: "0 0 16px",
                 }}
               >
-                La cámara{" "}
-                <strong style={{ color: "#fff" }}>no funciona en HTTP</strong>.
-                <br />
-                El navegador bloquea el acceso a{" "}
+                La cámara no funciona en{" "}
                 <code
                   style={{
                     background: "rgba(255,255,255,.1)",
-                    padding: "2px 6px",
-                    borderRadius: "6px",
-                    fontSize: "12px",
+                    padding: "1px 5px",
+                    borderRadius: "4px",
                   }}
                 >
-                  navigator.mediaDevices
-                </code>{" "}
-                en conexiones no seguras.
+                  http://IP
+                </code>
+                .<br />
+                Instala el plugin SSL en Vite:
               </p>
-
               <div
                 style={{
-                  background: "rgba(251,191,36,.08)",
-                  border: "1px solid rgba(251,191,36,.2)",
-                  borderRadius: "14px",
-                  padding: "14px 16px",
+                  background: "rgba(0,0,0,.4)",
+                  borderRadius: "10px",
+                  padding: "10px 12px",
                   textAlign: "left",
-                  marginBottom: "16px",
+                  marginBottom: "14px",
                 }}
               >
-                <p
+                <code
                   style={{
-                    color: "#fbbf24",
-                    fontSize: "13px",
-                    fontWeight: "700",
-                    margin: "0 0 8px",
-                    fontFamily: "'DM Sans',sans-serif",
-                  }}
-                >
-                  ¿Cómo arreglarlo?
-                </p>
-                <p
-                  style={{
-                    color: "rgba(251,191,36,.8)",
+                    color: "#86efac",
                     fontSize: "12px",
-                    margin: "0 0 6px",
-                    lineHeight: "1.5",
-                    fontFamily: "'DM Sans',sans-serif",
+                    lineHeight: "1.8",
+                    display: "block",
                   }}
                 >
-                  <strong>Opción 1:</strong> Abre el portal desde{" "}
-                  <code
-                    style={{
-                      background: "rgba(0,0,0,.3)",
-                      padding: "1px 5px",
-                      borderRadius: "4px",
-                    }}
-                  >
-                    https://
-                  </code>{" "}
-                  con un dominio real o túnel (ngrok, Cloudflare Tunnel).
-                </p>
-                <p
+                  npm i -D @vitejs/plugin-basic-ssl
+                </code>
+                <code
                   style={{
-                    color: "rgba(251,191,36,.8)",
-                    fontSize: "12px",
-                    margin: 0,
-                    lineHeight: "1.5",
-                    fontFamily: "'DM Sans',sans-serif",
+                    color: "#93c5fd",
+                    fontSize: "11px",
+                    lineHeight: "1.8",
+                    display: "block",
+                    marginTop: "4px",
                   }}
                 >
-                  <strong>Opción 2:</strong> En Vite, agrega en{" "}
-                  <code
-                    style={{
-                      background: "rgba(0,0,0,.3)",
-                      padding: "1px 5px",
-                      borderRadius: "4px",
-                    }}
-                  >
-                    vite.config.js
-                  </code>
-                  :<br />
-                  <code
-                    style={{
-                      background: "rgba(0,0,0,.3)",
-                      padding: "3px 8px",
-                      borderRadius: "4px",
-                      display: "inline-block",
-                      marginTop: "4px",
-                      fontSize: "11px",
-                    }}
-                  >
-                    server: {"{"} https: true {"}"}
-                  </code>
-                </p>
+                  {
+                    "// vite.config.js\nimport basicSsl from '@vitejs/plugin-basic-ssl'\nexport default { plugins:[basicSsl()], server:{host:true} }"
+                  }
+                </code>
               </div>
-
-              <div
+              <p
                 style={{
-                  background: "rgba(255,255,255,.04)",
-                  border: "1px solid rgba(255,255,255,.08)",
-                  borderRadius: "12px",
-                  padding: "12px",
+                  color: "rgba(255,255,255,.35)",
+                  fontSize: "12px",
+                  margin: "0 0 14px",
+                  lineHeight: "1.5",
                 }}
               >
-                <p
-                  style={{
-                    color: "rgba(255,255,255,.5)",
-                    fontSize: "12px",
-                    margin: 0,
-                    lineHeight: "1.5",
-                    fontFamily: "'DM Sans',sans-serif",
-                  }}
-                >
-                  Mientras tanto, comunícate con el supervisor para que registre
-                  el turno manualmente.
-                </p>
-              </div>
-
+                Luego abre <strong>https://</strong>192.168.x.x:5174 en el
+                celular y acepta el certificado.
+              </p>
               <button
                 onClick={onCerrar}
                 style={{
                   width: "100%",
-                  marginTop: "16px",
                   padding: "13px",
                   borderRadius: "14px",
-                  border: "none",
                   background: "rgba(255,255,255,.1)",
                   border: "1px solid rgba(255,255,255,.15)",
                   color: "#fff",
@@ -689,7 +676,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 textAlign: "center",
               }}
             >
-              {/* Ícono candado */}
               <div
                 style={{
                   width: "60px",
@@ -717,31 +703,27 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
               </div>
-
               <p
                 style={{
                   color: "#fbbf24",
                   fontSize: "17px",
                   fontWeight: "700",
-                  margin: "0 0 10px",
+                  margin: "0 0 8px",
                 }}
               >
-                Acceso a cámara requerido
+                Permiso de cámara requerido
               </p>
-
               <p
                 style={{
                   color: "rgba(255,255,255,.6)",
                   fontSize: "13px",
                   lineHeight: "1.6",
-                  margin: "0 0 20px",
+                  margin: "0 0 18px",
                   whiteSpace: "pre-line",
                 }}
               >
                 {errorMsg}
               </p>
-
-              {/* Botón reintentar */}
               <button
                 onClick={requestCamera}
                 style={{
@@ -755,40 +737,28 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   fontWeight: "700",
                   cursor: "pointer",
                   marginBottom: "10px",
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: "'DM Sans',sans-serif",
                 }}
               >
                 Intentar de nuevo
               </button>
-
-              {/* Aviso supervisor */}
               <div
                 style={{
                   background: "rgba(255,255,255,.04)",
-                  border: "1px solid rgba(255,255,255,.08)",
+                  border: "1px solid rgba(255,255,255,.07)",
                   borderRadius: "12px",
-                  padding: "12px",
+                  padding: "11px",
                 }}
               >
                 <p
                   style={{
-                    color: "#fbbf24",
-                    fontSize: "13px",
-                    fontWeight: "700",
-                    margin: "0 0 3px",
-                  }}
-                >
-                  ¿No puedes activar el permiso?
-                </p>
-                <p
-                  style={{
-                    color: "rgba(255,255,255,.45)",
+                    color: "rgba(255,255,255,.4)",
                     fontSize: "12px",
                     margin: 0,
                     lineHeight: "1.5",
                   }}
                 >
-                  Comunícate con el supervisor para que registre tu turno
+                  ¿No puedes activarlo? Dile al supervisor que lo registre
                   manualmente.
                 </p>
               </div>
@@ -850,7 +820,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   color: "rgba(255,255,255,.55)",
                   fontSize: "13px",
                   lineHeight: "1.6",
-                  margin: "0 0 20px",
+                  margin: "0 0 18px",
                 }}
               >
                 {errorMsg}
@@ -861,7 +831,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   width: "100%",
                   padding: "13px",
                   borderRadius: "14px",
-                  border: "none",
                   background: "rgba(255,255,255,.1)",
                   border: "1px solid rgba(255,255,255,.15)",
                   color: "#fff",
@@ -869,7 +838,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   fontWeight: "600",
                   cursor: "pointer",
                   marginBottom: "10px",
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: "'DM Sans',sans-serif",
                 }}
               >
                 Reintentar
@@ -885,7 +854,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   color: "rgba(255,255,255,.4)",
                   fontSize: "14px",
                   cursor: "pointer",
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: "'DM Sans',sans-serif",
                 }}
               >
                 Cerrar
