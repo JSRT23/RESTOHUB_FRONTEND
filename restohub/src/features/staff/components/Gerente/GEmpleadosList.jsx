@@ -7,8 +7,9 @@
 //   4. Editar → solo nombre, apellido, teléfono, rol. Doc/email inmutables.
 //   5. SweetAlert2 en todas las acciones.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
+import { gql } from "@apollo/client";
 import {
   Users,
   Plus,
@@ -41,6 +42,18 @@ import {
   Modal,
 } from "../../../../shared/components/ui";
 import { GET_EMPLEADOS } from "../../graphql/queries";
+
+// Traer usuarios de auth para cruzar vinculación por email
+const GET_USUARIOS_RESTAURANTE = gql`
+  query GetUsuariosRestaurante($restauranteId: ID) {
+    usuarios(restauranteId: $restauranteId) {
+      id
+      email
+      empleadoId
+      activo
+    }
+  }
+`;
 import {
   REGISTRAR_USUARIO_EMPLEADO,
   CREAR_EMPLEADO,
@@ -50,6 +63,7 @@ import {
   ACTIVAR_EMPLEADO,
   DESACTIVAR_USUARIO_AUTH,
   ACTIVAR_USUARIO_AUTH,
+  VINCULAR_EMPLEADO_ID,
 } from "../../graphql/mutations";
 
 // ── Paleta ─────────────────────────────────────────────────────────────────
@@ -194,8 +208,17 @@ function PasswordField({ label, value, onChange, placeholder, required }) {
 // ── Modal: Crear empleado (auth + staff) ───────────────────────────────────
 function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
   const today = new Date().toISOString().split("T")[0];
-  // País viene del restaurante — no el empleado lo elige
-  const paisRestaurante = restaurantePais || "Colombia";
+  // País viene del restaurante — puede llegar como código "CO" o label "Colombia"
+  const paisRestaurante = (() => {
+    const p = restaurantePais;
+    if (!p) return "Colombia";
+    const found = PAISES.find(
+      (x) =>
+        x.code.toLowerCase() === p.toLowerCase() ||
+        x.label.toLowerCase() === p.toLowerCase(),
+    );
+    return found?.label ?? p;
+  })();
   const INIT = {
     nombre: "",
     apellido: "",
@@ -216,6 +239,7 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
   const [crearStaff] = useMutation(CREAR_EMPLEADO, {
     refetchQueries: ["GetEmpleados"],
   });
+  const [desactivarAuth] = useMutation(DESACTIVAR_USUARIO_AUTH); // rollback si staff falla
 
   const handleSave = async () => {
     const {
@@ -226,8 +250,9 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
       password,
       passwordConfirm,
       rol,
-      pais,
     } = form;
+
+    // ── Validaciones ──────────────────────────────────────────────────────
     if (!nombre || !apellido || !documento || !email || !password || !rol) {
       Swal.fire({
         background: "#fff",
@@ -261,14 +286,15 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
 
     setLoading(true);
     const nombreCompleto = `${nombre.trim()} ${apellido.trim()}`;
+    const emailTrim = email.trim();
+    // País resuelto automáticamente del restaurante (código ISO: "CO", "MX", etc.)
+    const paisEnviar = paisCode(paisRestaurante); // usa el país del restaurante directamente
+
     try {
-      // ── Paso 1: crear cuenta en auth_service ────────────────────────────
-      // Flujo correcto según API (paso 16 de la doc): auth va PRIMERO.
-      // El serializer ya NO exige empleado_id en el registro — fue corregido.
-      // El gerente fuerza su propio restaurante_id en RegistroView del backend.
+      // ── PASO 1: crear cuenta en auth_service ──────────────────────────
       const { data: d1 } = await registrarAuth({
         variables: {
-          email: email.trim(),
+          email: emailTrim,
           nombre: nombreCompleto,
           password,
           passwordConfirm,
@@ -276,7 +302,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
           restauranteId,
         },
       });
-
       const auth = d1?.registrarUsuario;
       if (!auth?.ok) {
         Swal.fire({
@@ -286,62 +311,75 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
           text: auth?.error || "No se pudo crear el acceso para el empleado.",
           confirmButtonColor: G[900],
         });
-        setLoading(false);
         return;
       }
 
-      // ── Paso 2: crear perfil en staff_service ───────────────────────────
-      const { data: d2 } = await crearStaff({
-        variables: {
-          nombre: nombre.trim(),
-          apellido: apellido.trim(),
-          documento: documento.trim(),
-          email: email.trim(),
-          telefono: form.telefono || null,
-          rol,
-          pais: paisCode(form.pais),
-          restaurante: restauranteId,
-          fechaContratacion: form.fechaContratacion || null,
-        },
-      });
+      // ── PASO 2: crear perfil en staff_service ─────────────────────────
+      let staffOk = false;
+      let staffError = "";
+      try {
+        const { data: d2 } = await crearStaff({
+          variables: {
+            nombre: nombre.trim(),
+            apellido: apellido.trim(),
+            documento: documento.trim(),
+            email: emailTrim,
+            telefono: form.telefono || null,
+            rol,
+            pais: paisEnviar,
+            restaurante: restauranteId,
+            fechaContratacion: form.fechaContratacion || null,
+          },
+        });
+        const staff = d2?.crearEmpleado;
+        staffOk = !!staff?.ok;
+        staffError = staff?.errores?.[0] ?? "Error desconocido en staff";
+      } catch (staffErr) {
+        staffError = staffErr.message;
+      }
 
-      const staff = d2?.crearEmpleado;
-      if (!staff?.ok) {
-        // Auth OK pero staff falló — puede iniciar sesión pero sin perfil completo
+      if (!staffOk) {
+        // ── ROLLBACK: desactivar auth para no dejar cuenta huérfana ──────
+        try {
+          await desactivarAuth({ variables: { email: emailTrim } });
+        } catch (_) {}
+
         Swal.fire({
           background: "#fff",
-          icon: "warning",
-          title: "Cuenta creada con advertencia",
+          icon: "error",
+          title: "No se pudo crear el empleado",
           html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.6">
-            <p><b style="color:#163832">${nombreCompleto}</b> ya puede iniciar sesión,
-            pero hubo un problema al registrar su perfil de staff:</p>
-            <p style="font-size:12px;color:#9ca3af;margin-top:6px">${staff?.errores?.[0] ?? "Error desconocido"}</p>
+            <p>Hubo un error al registrar el perfil de <b>${nombreCompleto}</b>.</p>
+            <p style="font-size:12px;color:#9ca3af;margin-top:6px;background:#fef2f2;padding:8px 10px;border-radius:8px">
+              ${staffError}
+            </p>
+            <p style="font-size:12px;margin-top:8px">
+              La cuenta de acceso fue <b>revertida automáticamente</b>. Intenta de nuevo.
+            </p>
           </div>`,
           confirmButtonColor: G[900],
         });
-        setForm(INIT);
-        onClose();
-        setLoading(false);
         return;
       }
 
-      // ── Todo OK ─────────────────────────────────────────────────────────
+      // ── PASO 3: todo OK ───────────────────────────────────────────────
       await Swal.fire({
         background: "#fff",
         icon: "success",
         title: "¡Empleado registrado!",
-        html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;text-align:center;line-height:1.8">
-          <p style="margin:0 0 8px"><b style="color:#163832">${nombreCompleto}</b> fue agregado al equipo.</p>
-          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;text-align:left">
+        html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.7;text-align:center">
+          <p style="margin:0 0 12px">
+            <b style="color:#163832">${nombreCompleto}</b> fue agregado al equipo.
+          </p>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 14px;text-align:left">
             <p style="color:#15803d;font-weight:700;font-size:13px;margin:0 0 3px">✅ Cuenta vinculada</p>
-            <p style="color:#16a34a;font-size:12px;margin:0">
-              <b>${email.trim()}</b> ya puede iniciar sesión en el portal de empleados con la contraseña asignada.
+            <p style="color:#16a34a;font-size:12px;margin:0;line-height:1.5">
+              <b>${emailTrim}</b> ya puede iniciar sesión con la contraseña asignada.
             </p>
           </div>
         </div>`,
         confirmButtonColor: G[900],
-        timer: 3000,
-        timerProgressBar: true,
+        confirmButtonText: "Entendido",
       });
       setForm(INIT);
       onClose();
@@ -357,7 +395,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
       setLoading(false);
     }
   };
-
   if (!open) return null;
 
   return (
@@ -844,9 +881,11 @@ function ModalReactivar({ open, onClose, empleado }) {
 function EmpleadoCard({
   emp,
   esMismo,
+  vinculado,
   onEdit,
   onDesactivar,
   onReactivar,
+  onVincular,
   toggling,
 }) {
   const initials = getInitials(emp.nombre, emp.apellido);
@@ -932,6 +971,63 @@ function EmpleadoCard({
                 <Pencil size={14} />
               </button>
             )}
+            {/* Botón vincular — azul si no vinculado, gris si ya vinculado */}
+            <button
+              onClick={() => !vinculado && onVincular(emp)}
+              disabled={vinculado || toggling === emp.id}
+              className="p-2 rounded-lg transition-colors disabled:cursor-not-allowed"
+              style={
+                vinculado
+                  ? { color: "#a8a29e", cursor: "default" }
+                  : { color: "#2563eb" }
+              }
+              title={vinculado ? "Cuenta vinculada ✓" : "Vincular cuenta"}
+            >
+              {vinculado ? (
+                // Gris: ya vinculado — ícono check
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="20,6 9,17 4,12" />
+                </svg>
+              ) : toggling === emp.id ? (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ animation: "spin .7s linear infinite" }}
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              ) : (
+                // Azul: no vinculado — ícono link
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+              )}
+            </button>
             <button
               onClick={() =>
                 emp.activo ? onDesactivar(emp) : onReactivar(emp)
@@ -985,11 +1081,33 @@ export default function GEmpleadosList() {
     fetchPolicy: "cache-and-network",
   });
 
+  // Cruce auth ↔ staff por email para detectar vinculación
+  const { data: dataUsuarios, refetch: refetchUsuarios } = useQuery(
+    GET_USUARIOS_RESTAURANTE,
+    {
+      variables: { restauranteId },
+      skip: !restauranteId,
+      fetchPolicy: "cache-and-network",
+    },
+  );
+
+  // Map email → empleadoId para saber si cada empleado tiene cuenta vinculada
+  const usuariosPorEmail = useMemo(() => {
+    const m = {};
+    (dataUsuarios?.usuarios ?? []).forEach((u) => {
+      if (u.email) m[u.email.toLowerCase()] = u;
+    });
+    return m;
+  }, [dataUsuarios]);
+
   const [desactivar] = useMutation(DESACTIVAR_EMPLEADO, {
     refetchQueries: ["GetEmpleados"],
   });
   const [desactivarAuth] = useMutation(DESACTIVAR_USUARIO_AUTH);
   const [activarAuth] = useMutation(ACTIVAR_USUARIO_AUTH);
+  const [vincularMut] = useMutation(VINCULAR_EMPLEADO_ID, {
+    refetchQueries: ["GetEmpleados"],
+  });
 
   // El backend devuelve todos los empleados del restaurante incluyendo
   // al gerente (rol "gerente" o "gerente_local"). El gerente local NO
@@ -1064,6 +1182,57 @@ export default function GEmpleadosList() {
         background: "#fff",
         icon: "error",
         title: "Error",
+        text: err.message,
+        confirmButtonColor: G[900],
+      });
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  const handleVincular = async (emp) => {
+    // Si ya está vinculado, no hacer nada
+    if (emp.vinculado) return;
+
+    const confirm = await Swal.fire({
+      background: "#fff",
+      icon: "question",
+      title: `¿Vincular cuenta de ${emp.nombre}?`,
+      html: `<span style="font-family:'DM Sans';color:#78716c;font-size:13px">
+        Esto conectará el perfil de <b>${emp.nombre} ${emp.apellido}</b>
+        con su cuenta de acceso al sistema.
+      </span>`,
+      showCancelButton: true,
+      confirmButtonColor: G[900],
+      cancelButtonColor: "#d1d5db",
+      confirmButtonText: "Sí, vincular",
+      cancelButtonText: "Cancelar",
+    });
+    if (!confirm.isConfirmed) return;
+
+    setToggling(emp.id);
+    try {
+      const { data } = await vincularMut({
+        variables: { email: emp.email, empleadoId: emp.id },
+      });
+      const res = data?.vincularEmpleadoId;
+      if (!res?.ok) throw new Error(res?.error || "No se pudo vincular");
+      Swal.fire({
+        background: "#fff",
+        icon: "success",
+        title: "¡Cuenta vinculada!",
+        html: `<span style="font-family:'DM Sans';color:#78716c">
+          <b>${emp.nombre} ${emp.apellido}</b> ya puede iniciar sesión en el portal.
+        </span>`,
+        timer: 1800,
+        showConfirmButton: false,
+      });
+      refetchUsuarios(); // actualizar estado vinculado en las tarjetas
+    } catch (err) {
+      Swal.fire({
+        background: "#fff",
+        icon: "error",
+        title: "Error al vincular",
         text: err.message,
         confirmButtonColor: G[900],
       });
@@ -1215,9 +1384,13 @@ export default function GEmpleadosList() {
                 emp.id === user?.empleadoId ||
                 emp.email?.toLowerCase() === user?.email?.toLowerCase()
               }
+              vinculado={
+                !!usuariosPorEmail[emp.email?.toLowerCase()]?.empleadoId
+              }
               onEdit={setEmpleadoEdit}
               onDesactivar={handleDesactivar}
               onReactivar={setEmpleadoReactivar}
+              onVincular={handleVincular}
               toggling={toggling}
             />
           ))}

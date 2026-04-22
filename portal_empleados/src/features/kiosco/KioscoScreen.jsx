@@ -202,15 +202,7 @@ const IcoRefresh = () => (
 );
 
 /* ── QR Panel: sin botón manual, con aviso ──────────────────────────────── */
-function QRPanel({
-  token,
-  expiraEn,
-  nombre,
-  accion,
-  onVolver,
-  onManual,
-  busy,
-}) {
+function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
   const [segs, setSegs] = useState(null);
   const [qrKey, setQrKey] = useState(0); // forzar reload del QR
 
@@ -493,62 +485,6 @@ function QRPanel({
             </p>
           </div>
         </div>
-
-        {/* Botón manual — solo visible para el supervisor, discreto */}
-        <button
-          onClick={onManual}
-          disabled={busy}
-          style={{
-            background: "none",
-            border: "1px solid #e2e8f0",
-            borderRadius: "12px",
-            padding: "10px 20px",
-            color: "#a8a29e",
-            fontSize: "13px",
-            fontFamily: "'DM Sans',sans-serif",
-            fontWeight: "500",
-            cursor: busy ? "default" : "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            opacity: busy ? 0.5 : 0.8,
-            transition: "all .15s",
-          }}
-          onMouseEnter={(e) => {
-            if (!busy) {
-              e.currentTarget.style.borderColor = "#a8a29e";
-              e.currentTarget.style.color = "#78716c";
-              e.currentTarget.style.opacity = "1";
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "#e2e8f0";
-            e.currentTarget.style.color = "#a8a29e";
-            e.currentTarget.style.opacity = ".8";
-          }}
-        >
-          {busy ? (
-            <>
-              <span
-                style={{
-                  width: "13px",
-                  height: "13px",
-                  border: "1.5px solid #d4d4d4",
-                  borderTopColor: "transparent",
-                  borderRadius: "50%",
-                  display: "inline-block",
-                  animation: "spin .7s linear infinite",
-                }}
-              />{" "}
-              Procesando...
-            </>
-          ) : (
-            <>
-              {accion === "iniciar" ? <IcoPlay /> : <IcoStop />} Registrar{" "}
-              {accion === "iniciar" ? "entrada" : "salida"} manualmente
-            </>
-          )}
-        </button>
         <style>{`
           @keyframes spin  { to { transform:rotate(360deg); } }
           @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
@@ -696,6 +632,27 @@ export default function KioscoScreen() {
   const [iniciarTurno] = useMutation(INICIAR_TURNO);
   const [registrarSalida] = useMutation(REGISTRAR_SALIDA);
 
+  // ── Auto-cancelar turno ACTIVO si pasaron 30min después de fechaFin ───────
+  const canceladosAutoRef = useRef(new Set());
+  useEffect(() => {
+    if (!turno || turno.estado !== "activo" || !turno.fechaFin) return;
+    const check = () => {
+      const limiteCancel = new Date(turno.fechaFin).getTime() + 30 * 60000;
+      if (
+        Date.now() > limiteCancel &&
+        !canceladosAutoRef.current.has(turno.id)
+      ) {
+        canceladosAutoRef.current.add(turno.id);
+        rT()
+          .then(() => limpiar())
+          .catch(() => {});
+      }
+    };
+    check();
+    const id = setInterval(check, 30000);
+    return () => clearInterval(id);
+  }, [turno?.id, turno?.estado, turno?.fechaFin]);
+
   const empleados = empData?.empleados ?? [];
   const turnos = tData?.turnos ?? [];
 
@@ -791,7 +748,30 @@ export default function KioscoScreen() {
   const esFin = turno?.estado === "activo";
   const nombre = buscado ? `${buscado.nombre} ${buscado.apellido}` : "";
   const cfgT = turno ? (ECFG[turno.estado] ?? ECFG.programado) : null;
-  const mostrarQR = buscado && turno && (esInit || esFin) && turno.qrToken;
+
+  // Ventana del QR de salida: desde -15min antes de fechaFin hasta +30min después
+  const enVentanaSalida = (() => {
+    if (!esFin || !turno?.fechaFin) return false;
+    const ahora = Date.now();
+    const inicio = new Date(turno.fechaFin).getTime() - 15 * 60000; // -15min
+    const fin = new Date(turno.fechaFin).getTime() + 30 * 60000; // +30min
+    return ahora >= inicio && ahora <= fin;
+  })();
+
+  // QR de salida disponible a las (fechaFin - 15min)
+  const horaActivacionSalida = turno?.fechaFin
+    ? fmtHora(
+        new Date(new Date(turno.fechaFin).getTime() - 15 * 60000).toISOString(),
+      )
+    : null;
+
+  // Mostrar panel QR: entrada siempre, salida solo en ventana
+  const mostrarQR =
+    buscado && turno && turno.qrToken && (esInit || (esFin && enVentanaSalida));
+
+  // Si turno activo pero fuera de ventana — mostrar aviso en lugar del QR
+  const mostrarAvisoFueraVentana =
+    buscado && esFin && !enVentanaSalida && turno?.qrToken;
 
   // Contadores reales basados en turnos del restaurante hoy
   const turnosHoy = tRestData?.turnos ?? [];
@@ -826,9 +806,13 @@ export default function KioscoScreen() {
           zIndex: 20,
           boxShadow: "0 1px 4px rgba(0,0,0,.05)",
         }}
+        className="kiosco-header"
       >
         {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div
+          className="kiosco-header-brand"
+          style={{ display: "flex", alignItems: "center", gap: "12px" }}
+        >
           <div
             style={{
               width: "38px",
@@ -878,7 +862,7 @@ export default function KioscoScreen() {
         </div>
 
         {/* Reloj */}
-        <div style={{ textAlign: "center" }}>
+        <div className="kiosco-header-clock" style={{ textAlign: "center" }}>
           <p
             style={{
               fontFamily: "'DM Sans',sans-serif",
@@ -1007,31 +991,76 @@ export default function KioscoScreen() {
         </div>
       </header>
 
+      {/* ── ESTILOS RESPONSIVE ───────────────────────────────────────────── */}
+      <style>{`
+        .kiosco-body {
+          flex: 1;
+          display: grid;
+          gap: 20px;
+          padding: 24px 32px;
+          align-items: start;
+          width: 100%;
+          max-width: 1600px;
+          margin: 0 auto;
+          box-sizing: border-box;
+        }
+        /* Desktop: 3 col cuando hay QR/espera, 2 col en búsqueda */
+        @media (min-width: 1024px) {
+          .kiosco-body.modo-busqueda   { grid-template-columns: 1fr 360px; }
+          .kiosco-body.modo-qr         { grid-template-columns: 340px 1fr 300px; }
+          .kiosco-body.modo-espera     { grid-template-columns: 340px 1fr 300px; }
+        }
+        /* Tablet: 2 col siempre */
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .kiosco-body.modo-busqueda   { grid-template-columns: 1fr 320px; }
+          .kiosco-body.modo-qr         { grid-template-columns: 1fr 280px; }
+          .kiosco-body.modo-espera     { grid-template-columns: 1fr 280px; }
+          .kiosco-col-busqueda-qr      { display: none !important; }
+        }
+        /* Móvil: 1 col */
+        @media (max-width: 639px) {
+          .kiosco-body { grid-template-columns: 1fr !important; padding: 16px; gap: 14px; }
+          .kiosco-header-clock         { display: none !important; }
+          .kiosco-col-busqueda-qr      { display: none !important; }
+        }
+        /* Header responsive */
+        @media (max-width: 767px) {
+          .kiosco-header { padding: 0 16px !important; }
+          .kiosco-header-brand p:last-child { display: none; }
+          .kiosco-header-clock { font-size: 18px !important; }
+          .kiosco-stats-label { display: none; }
+        }
+        @media (max-width: 480px) {
+          .kiosco-header-clock { display: none !important; }
+        }
+        /* Log panel: se mueve abajo en móvil/tablet */
+        @media (max-width: 1023px) {
+          .kiosco-log { max-height: 280px !important; }
+        }
+        @keyframes kiosco-spin  { to { transform:rotate(360deg); } }
+        @keyframes kiosco-pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+      `}</style>
+
       {/* ── BODY ──────────────────────────────────────────────────────────── */}
       <div
-        style={{
-          flex: 1,
-          display: "grid",
-          gridTemplateColumns: mostrarQR ? "380px 1fr 340px" : "1fr 420px",
-          gap: "24px",
-          padding: "28px 40px",
-          alignItems: "start",
-          maxWidth: "1600px",
-          margin: "0 auto",
-          width: "100%",
-        }}
+        className={`kiosco-body ${mostrarQR ? "modo-qr" : mostrarAvisoFueraVentana ? "modo-espera" : "modo-busqueda"}`}
       >
-        {/* ── COL 1: Búsqueda ──────────────────────────────────────────────── */}
-        {!mostrarQR && (
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "18px" }}
-          >
-            {/* Título */}
+        {/* ── COL 1: Búsqueda (visible siempre excepto en tablet/móvil cuando hay QR) */}
+        <div
+          className={
+            mostrarQR || mostrarAvisoFueraVentana
+              ? "kiosco-col-busqueda-qr"
+              : ""
+          }
+          style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+        >
+          {/* Título — solo en modo búsqueda */}
+          {!mostrarQR && !mostrarAvisoFueraVentana && (
             <div>
               <h1
                 style={{
                   fontFamily: "'Playfair Display',serif",
-                  fontSize: "32px",
+                  fontSize: "clamp(22px,4vw,32px)",
                   fontWeight: "700",
                   color: "#1c1917",
                   margin: "0 0 6px",
@@ -1051,69 +1080,77 @@ export default function KioscoScreen() {
                 Ingresa tu documento para registrar entrada o salida
               </p>
             </div>
+          )}
 
-            {/* Input documento */}
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-            >
-              <div style={{ position: "relative" }}>
-                <span
-                  style={{
-                    position: "absolute",
-                    left: "18px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "#a8a29e",
-                    pointerEvents: "none",
-                  }}
-                >
-                  <IcoSearch size={20} />
-                </span>
-                <input
-                  ref={inputRef}
-                  type="number"
-                  inputMode="numeric"
-                  autoFocus
-                  value={doc}
-                  onChange={(e) => setDoc(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && buscar()}
-                  placeholder="Número de documento"
-                  style={{
-                    width: "100%",
-                    background: "#fff",
-                    borderRadius: "18px",
-                    border: "1.5px solid #e2e8f0",
-                    padding: "22px 22px 22px 54px",
-                    fontFamily: "monospace",
-                    fontSize: "28px",
-                    color: "#1c1917",
-                    outline: "none",
-                    letterSpacing: ".04em",
-                    boxShadow: "0 2px 8px rgba(0,0,0,.05)",
-                    transition: "border-color .15s, box-shadow .15s",
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = G[300];
-                    e.target.style.boxShadow = `0 0 0 3px rgba(35,83,71,.1)`;
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "#e2e8f0";
-                    e.target.style.boxShadow = "0 2px 8px rgba(0,0,0,.05)";
-                  }}
-                />
-              </div>
+          {/* Input documento */}
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+          >
+            <div style={{ position: "relative" }}>
+              <span
+                style={{
+                  position: "absolute",
+                  left: "18px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#a8a29e",
+                  pointerEvents: "none",
+                }}
+              >
+                <IcoSearch size={18} />
+              </span>
+              <input
+                ref={inputRef}
+                type="number"
+                inputMode="numeric"
+                autoFocus
+                value={doc}
+                onChange={(e) => setDoc(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && buscar()}
+                placeholder="Número de documento"
+                style={{
+                  width: "100%",
+                  background: "#fff",
+                  borderRadius: "16px",
+                  border: "1.5px solid #e2e8f0",
+                  padding:
+                    mostrarQR || mostrarAvisoFueraVentana
+                      ? "14px 14px 14px 46px"
+                      : "20px 20px 20px 50px",
+                  fontFamily: "monospace",
+                  fontSize:
+                    mostrarQR || mostrarAvisoFueraVentana
+                      ? "18px"
+                      : "clamp(18px,3vw,26px)",
+                  color: "#1c1917",
+                  outline: "none",
+                  boxShadow: "0 2px 8px rgba(0,0,0,.05)",
+                  transition: "border-color .15s, box-shadow .15s",
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = G[300];
+                  e.target.style.boxShadow = `0 0 0 3px rgba(35,83,71,.1)`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "#e2e8f0";
+                  e.target.style.boxShadow = "0 2px 8px rgba(0,0,0,.05)";
+                }}
+              />
+            </div>
+            {!(mostrarQR || mostrarAvisoFueraVentana) && (
               <button
                 onClick={buscar}
                 disabled={!doc.trim()}
                 style={{
                   width: "100%",
-                  padding: "22px",
-                  borderRadius: "16px",
+                  padding: "18px",
+                  borderRadius: "14px",
                   border: "none",
                   background: doc.trim() ? G[900] : "#e7e5e4",
                   color: doc.trim() ? "#fff" : "#a8a29e",
                   fontFamily: "'DM Sans',sans-serif",
-                  fontSize: "18px",
+                  fontSize: "17px",
                   fontWeight: "700",
                   cursor: doc.trim() ? "pointer" : "default",
                   boxShadow: doc.trim()
@@ -1126,142 +1163,164 @@ export default function KioscoScreen() {
                   gap: "10px",
                 }}
               >
-                <IcoSearch size={20} /> Buscar empleado
+                <IcoSearch size={18} /> Buscar empleado
               </button>
-            </div>
-
-            {/* Empleado encontrado (antes del QR) */}
-            {buscado && (
-              <div
+            )}
+            {/* Botón buscar compacto cuando hay QR/espera */}
+            {(mostrarQR || mostrarAvisoFueraVentana) && (
+              <button
+                onClick={() => {
+                  limpiar();
+                  setTimeout(buscar, 10);
+                }}
+                disabled={!doc.trim()}
                 style={{
-                  background: "#fff",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "20px",
-                  padding: "20px",
-                  boxShadow: "0 2px 8px rgba(0,0,0,.05)",
+                  width: "100%",
+                  padding: "11px",
+                  borderRadius: "12px",
+                  border: "none",
+                  background: doc.trim() ? G[900] : "#e7e5e4",
+                  color: doc.trim() ? "#fff" : "#a8a29e",
+                  fontFamily: "'DM Sans',sans-serif",
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  cursor: doc.trim() ? "pointer" : "default",
+                  transition: "all .18s",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
                 }}
               >
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "14px" }}
-                >
-                  <div
-                    style={{
-                      width: "60px",
-                      height: "60px",
-                      borderRadius: "18px",
-                      background: G[50],
-                      border: `1.5px solid ${G[100]}`,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: G[300],
-                      flexShrink: 0,
-                    }}
-                  >
-                    <IcoUser size={28} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <h3
-                      style={{
-                        fontFamily: "'Playfair Display',serif",
-                        fontSize: "20px",
-                        fontWeight: "700",
-                        color: "#1c1917",
-                        margin: "0 0 3px",
-                      }}
-                    >
-                      {nombre}
-                    </h3>
-                    <p
-                      style={{
-                        fontFamily: "'DM Sans',sans-serif",
-                        fontSize: "13px",
-                        color: "#78716c",
-                        margin: "0 0 8px",
-                        textTransform: "capitalize",
-                      }}
-                    >
-                      {buscado.rolDisplay}
-                    </p>
-                    {turno ? (
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                          fontSize: "11px",
-                          fontWeight: "700",
-                          textTransform: "uppercase",
-                          letterSpacing: ".07em",
-                          padding: "4px 10px",
-                          borderRadius: "20px",
-                          background: cfgT?.bg,
-                          color: cfgT?.color,
-                          border: `1px solid ${cfgT?.border}`,
-                        }}
-                      >
-                        {cfgT?.label} · {fmtHora(turno.fechaInicio)} –{" "}
-                        {fmtHora(turno.fechaFin)}
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          fontSize: "12px",
-                          color: "#d97706",
-                          fontWeight: "600",
-                        }}
-                      >
-                        Sin turno para hoy
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={limpiar}
-                    style={{
-                      background: "none",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "10px",
-                      padding: "8px 14px",
-                      color: "#78716c",
-                      fontSize: "13px",
-                      fontFamily: "'DM Sans',sans-serif",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Cambiar
-                  </button>
-                </div>
-              </div>
+                <IcoSearch size={14} /> Buscar
+              </button>
             )}
           </div>
-        )}
 
-        {/* ── COL QR (cuando hay empleado) ─────────────────────────────────── */}
-        {mostrarQR && (
-          <>
-            {/* Panel búsqueda colapsado */}
+          {/* Empleado encontrado (modo búsqueda) */}
+          {buscado && !(mostrarQR || mostrarAvisoFueraVentana) && (
             <div
               style={{
                 background: "#fff",
                 border: "1px solid #e2e8f0",
-                borderRadius: "20px",
+                borderRadius: "18px",
                 padding: "18px",
                 boxShadow: "0 2px 8px rgba(0,0,0,.05)",
               }}
             >
               <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  marginBottom: "14px",
-                }}
+                style={{ display: "flex", alignItems: "center", gap: "14px" }}
               >
                 <div
                   style={{
-                    width: "48px",
-                    height: "48px",
-                    borderRadius: "14px",
+                    width: "56px",
+                    height: "56px",
+                    borderRadius: "16px",
+                    background: G[50],
+                    border: `1.5px solid ${G[100]}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: G[300],
+                    flexShrink: 0,
+                  }}
+                >
+                  <IcoUser size={26} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <h3
+                    style={{
+                      fontFamily: "'Playfair Display',serif",
+                      fontSize: "18px",
+                      fontWeight: "700",
+                      color: "#1c1917",
+                      margin: "0 0 3px",
+                    }}
+                  >
+                    {nombre}
+                  </h3>
+                  <p
+                    style={{
+                      fontFamily: "'DM Sans',sans-serif",
+                      fontSize: "13px",
+                      color: "#78716c",
+                      margin: "0 0 8px",
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {buscado.rolDisplay}
+                  </p>
+                  {turno ? (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        fontSize: "11px",
+                        fontWeight: "700",
+                        textTransform: "uppercase",
+                        letterSpacing: ".07em",
+                        padding: "4px 10px",
+                        borderRadius: "20px",
+                        background: cfgT?.bg,
+                        color: cfgT?.color,
+                        border: `1px solid ${cfgT?.border}`,
+                      }}
+                    >
+                      {cfgT?.label} · {fmtHora(turno.fechaInicio)} –{" "}
+                      {fmtHora(turno.fechaFin)}
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "#d97706",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Sin turno para hoy
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={limpiar}
+                  style={{
+                    background: "none",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "10px",
+                    padding: "8px 12px",
+                    color: "#78716c",
+                    fontSize: "13px",
+                    fontFamily: "'DM Sans',sans-serif",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  Cambiar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Empleado colapsado (modo QR/espera) */}
+          {buscado && (mostrarQR || mostrarAvisoFueraVentana) && (
+            <div
+              style={{
+                background: "#fff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "16px",
+                padding: "14px",
+                boxShadow: "0 2px 8px rgba(0,0,0,.05)",
+              }}
+            >
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "10px" }}
+              >
+                <div
+                  style={{
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "12px",
                     background: G[50],
                     border: `1px solid ${G[100]}`,
                     display: "flex",
@@ -1271,16 +1330,19 @@ export default function KioscoScreen() {
                     flexShrink: 0,
                   }}
                 >
-                  <IcoUser size={22} />
+                  <IcoUser size={18} />
                 </div>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <p
                     style={{
-                      fontFamily: "'Playfair Display',serif",
-                      fontSize: "16px",
+                      fontFamily: "'DM Sans',sans-serif",
+                      fontSize: "14px",
                       fontWeight: "700",
                       color: "#1c1917",
-                      margin: "0 0 2px",
+                      margin: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
                     }}
                   >
                     {nombre}
@@ -1288,117 +1350,237 @@ export default function KioscoScreen() {
                   <p
                     style={{
                       fontFamily: "'DM Sans',sans-serif",
-                      fontSize: "12px",
+                      fontSize: "11px",
                       color: "#78716c",
                       margin: 0,
                       textTransform: "capitalize",
                     }}
                   >
-                    {buscado?.rolDisplay}
+                    {buscado.rolDisplay}
                   </p>
                 </div>
-              </div>
-              {turno && cfgT && (
-                <span
+                <button
+                  onClick={limpiar}
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "5px",
-                    fontSize: "11px",
-                    fontWeight: "700",
-                    textTransform: "uppercase",
-                    letterSpacing: ".07em",
-                    padding: "4px 10px",
-                    borderRadius: "20px",
-                    background: cfgT.bg,
-                    color: cfgT.color,
-                    border: `1px solid ${cfgT.border}`,
+                    background: "none",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "8px",
+                    padding: "6px 10px",
+                    color: "#78716c",
+                    fontSize: "12px",
+                    fontFamily: "'DM Sans',sans-serif",
+                    cursor: "pointer",
+                    flexShrink: 0,
                   }}
                 >
-                  {cfgT.label} · {fmtHora(turno.fechaInicio)} –{" "}
-                  {fmtHora(turno.fechaFin)}
-                </span>
-              )}
-              <div
-                style={{
-                  marginTop: "12px",
-                  paddingTop: "12px",
-                  borderTop: "1px solid #f0ede8",
-                }}
-              >
-                <div style={{ position: "relative" }}>
+                  <IcoBack />
+                </button>
+              </div>
+              {turno && cfgT && (
+                <div style={{ marginTop: "10px" }}>
                   <span
                     style={{
-                      position: "absolute",
-                      left: "12px",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      color: "#a8a29e",
-                      pointerEvents: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      fontSize: "10px",
+                      fontWeight: "700",
+                      textTransform: "uppercase",
+                      letterSpacing: ".07em",
+                      padding: "3px 9px",
+                      borderRadius: "20px",
+                      background: cfgT.bg,
+                      color: cfgT.color,
+                      border: `1px solid ${cfgT.border}`,
                     }}
                   >
-                    <IcoSearch size={15} />
+                    {cfgT.label} · {fmtHora(turno.fechaInicio)} –{" "}
+                    {fmtHora(turno.fechaFin)}
                   </span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={doc}
-                    onChange={(e) => setDoc(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        limpiar();
-                        setTimeout(buscar, 10);
-                      }
-                    }}
-                    placeholder="Otro documento"
-                    style={{
-                      width: "100%",
-                      background: "#f8f7f4",
-                      border: "1px solid #e7e5e4",
-                      borderRadius: "10px",
-                      padding: "10px 10px 10px 36px",
-                      fontFamily: "monospace",
-                      fontSize: "14px",
-                      color: "#1c1917",
-                      outline: "none",
-                    }}
-                  />
                 </div>
-              </div>
+              )}
             </div>
+          )}
+        </div>
 
-            {/* QR Panel principal */}
-            <div
-              style={{
-                background: "#fff",
-                border: "1px solid #e2e8f0",
-                borderRadius: "24px",
-                padding: "28px 32px",
-                boxShadow: "0 4px 24px rgba(0,0,0,.07)",
-              }}
-            >
+        {/* ── COL CENTRAL: QR o Panel de espera ───────────────────────────────── */}
+        {(mostrarQR || mostrarAvisoFueraVentana) && (
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "24px",
+              padding: "clamp(20px,3vw,32px)",
+              boxShadow: "0 4px 24px rgba(0,0,0,.07)",
+            }}
+          >
+            {/* ── QR panel ─────────────────────────────────────────────────── */}
+            {mostrarQR && (
               <QRPanel
                 token={turno.qrToken}
                 expiraEn={turno.qrExpiraEn}
                 nombre={nombre}
                 accion={esInit ? "iniciar" : "finalizar"}
                 onVolver={limpiar}
-                onManual={() => ejecutar(esInit ? "iniciar" : "finalizar")}
-                busy={busy}
               />
-            </div>
-          </>
+            )}
+
+            {/* ── Panel de espera (activo fuera de ventana) ──────────────── */}
+            {mostrarAvisoFueraVentana && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "24px",
+                  padding: "8px 0",
+                }}
+              >
+                {/* Estado */}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    textTransform: "uppercase",
+                    letterSpacing: ".1em",
+                    padding: "6px 16px",
+                    borderRadius: "20px",
+                    background: ECFG.activo.bg,
+                    color: ECFG.activo.color,
+                    border: `1px solid ${ECFG.activo.border}`,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      background: ECFG.activo.color,
+                      display: "inline-block",
+                      animation: "kiosco-pulse 1.5s ease-in-out infinite",
+                    }}
+                  />
+                  Turno activo
+                </span>
+
+                {/* Nombre */}
+                <div style={{ textAlign: "center" }}>
+                  <h2
+                    style={{
+                      fontFamily: "'Playfair Display',serif",
+                      fontSize: "clamp(22px,3vw,32px)",
+                      fontWeight: "700",
+                      color: "#1c1917",
+                      margin: "0 0 4px",
+                      letterSpacing: "-.4px",
+                    }}
+                  >
+                    {nombre}
+                  </h2>
+                  <p
+                    style={{
+                      fontFamily: "'DM Sans',sans-serif",
+                      fontSize: "15px",
+                      color: "#78716c",
+                      margin: 0,
+                    }}
+                  >
+                    {fmtHora(turno?.fechaInicio)} – {fmtHora(turno?.fechaFin)}
+                  </p>
+                </div>
+
+                {/* Reloj + hora activación */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: "14px",
+                    background: "#fffbeb",
+                    border: "2px solid #fde68a",
+                    borderRadius: "24px",
+                    padding: "28px 40px",
+                    width: "100%",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <IcoClock size={36} style={{ color: "#d97706" }} />
+                  <div style={{ textAlign: "center" }}>
+                    <p
+                      style={{
+                        fontFamily: "'DM Sans',sans-serif",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        color: "#92400e",
+                        margin: "0 0 4px",
+                      }}
+                    >
+                      QR de salida disponible a las
+                    </p>
+                    <p
+                      style={{
+                        fontFamily: "'Playfair Display',serif",
+                        fontSize: "clamp(40px,6vw,60px)",
+                        fontWeight: "700",
+                        color: "#d97706",
+                        margin: "0 0 4px",
+                        letterSpacing: "-2px",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {horaActivacionSalida}
+                    </p>
+                    <p
+                      style={{
+                        fontFamily: "'DM Sans',sans-serif",
+                        fontSize: "12px",
+                        color: "#a16207",
+                        margin: 0,
+                      }}
+                    >
+                      15 min antes del fin del turno ({fmtHora(turno?.fechaFin)}
+                      )
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={limpiar}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "none",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "12px",
+                    padding: "10px 20px",
+                    color: "#78716c",
+                    fontSize: "13px",
+                    fontFamily: "'DM Sans',sans-serif",
+                    fontWeight: "500",
+                    cursor: "pointer",
+                  }}
+                >
+                  <IcoBack /> Nuevo empleado
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* ── COL LOG ──────────────────────────────────────────────────────── */}
+        {/* ── COL LOG: Fichajes de hoy ─────────────────────────────────────── */}
         <div
+          className="kiosco-log"
           style={{
             background: "#fff",
             border: "1px solid #e2e8f0",
             borderRadius: "20px",
             padding: "20px",
             boxShadow: "0 2px 8px rgba(0,0,0,.05)",
-            maxHeight: "calc(100vh - 68px - 56px)",
+            maxHeight: "calc(100vh - 68px - 48px)",
             display: "flex",
             flexDirection: "column",
           }}
@@ -1408,13 +1590,13 @@ export default function KioscoScreen() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              marginBottom: "16px",
+              marginBottom: "14px",
             }}
           >
             <h3
               style={{
                 fontFamily: "'Playfair Display',serif",
-                fontSize: "17px",
+                fontSize: "16px",
                 fontWeight: "700",
                 color: "#1c1917",
                 margin: 0,
@@ -1433,7 +1615,6 @@ export default function KioscoScreen() {
               {fichajes.length} registros
             </span>
           </div>
-
           <div style={{ flex: 1, overflowY: "auto" }} className="noscroll">
             {fichajes.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 20px" }}>

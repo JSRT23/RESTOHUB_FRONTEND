@@ -114,7 +114,7 @@ const ESTADO_CFG = {
     dot: "bg-blue-500",
   },
   activo: {
-    label: "Activo",
+    label: "En curso",
     bg: G[50],
     text: G[300],
     border: G[100],
@@ -180,13 +180,13 @@ const TIPO_LABEL = {
 //
 // Flujo del backend:
 //   PROGRAMADO → qrToken (entrada) ya existe desde crearTurno
-//   Empleado escanea → iniciarTurno(turnoId) → estado=en_curso + nuevo qrToken (salida)
+//   Empleado escanea → iniciarTurno(turnoId) → estado=activo + nuevo qrToken (salida)
 //   Empleado escanea al salir → registrarSalida(turnoId) → estado=completado
 // ═══════════════════════════════════════════════════════════════════════════
 function ModalQR({ turno, modo, onClose }) {
-  const esIniciar = modo === "iniciar"; // programado → en_curso
+  const esIniciar = modo === "iniciar"; // programado → activo
   const [accionando, setAccionando] = useState(false);
-  const [segundos, setSegundos] = useState(null); // countdown expiración
+  const [segundos, setSegundos] = useState(null);
 
   const [iniciarTurno] = useMutation(INICIAR_TURNO, {
     refetchQueries: ["GetTurnos"],
@@ -221,7 +221,7 @@ function ModalQR({ turno, modo, onClose }) {
     return m > 0 ? `${m}m ${pad(ss)}s` : `${ss}s`;
   };
 
-  // Acción manual de respaldo (si el empleado no puede escanear)
+  // Acción manual de respaldo
   const handleAccionManual = async () => {
     const { isConfirmed } = await Swal.fire({
       background: "#fff",
@@ -347,7 +347,7 @@ function ModalQR({ turno, modo, onClose }) {
         {/* QR — con lógica de ventana para modo "finalizar" */}
         {token ? (
           (() => {
-            // Ventana de salida: solo -15min antes del fechaFin
+            // Ventana de salida: QR habilitado desde -15min antes del fechaFin
             const minsParaFin = minutosHasta(turno.fechaFin);
             const fueraDeVentana =
               !esIniciar && (minsParaFin === null || minsParaFin > 15);
@@ -468,8 +468,13 @@ function ModalQR({ turno, modo, onClose }) {
 // MODAL REPROGRAMAR
 // ═══════════════════════════════════════════════════════════════════════════
 function ModalReprogramar({ turno, restauranteId, onClose }) {
+  // Día siguiente como fecha propuesta por defecto
+  const manana = new Date();
+  manana.setDate(manana.getDate() + 1);
+  const mananaStr = manana.toISOString().slice(0, 10);
   const hoyStr = new Date().toISOString().slice(0, 10);
-  const [fecha, setFecha] = useState(hoyStr);
+
+  const [fecha, setFecha] = useState(mananaStr);
   const [horaInicio, setHoraInicio] = useState(
     new Date(turno.fechaInicio).toTimeString().slice(0, 5),
   );
@@ -478,24 +483,123 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
   );
   const [notas, setNotas] = useState("");
 
+  // Cargar todos los turnos del empleado para detectar conflictos
+  const { data: turnosEmpleadoData, loading: loadingConflictos } = useQuery(
+    GET_TURNOS,
+    {
+      variables: {
+        empleadoId: turno.empleado,
+        restauranteId,
+        fechaDesde: mananaStr, // solo futuro interesa
+      },
+      fetchPolicy: "network-only",
+    },
+  );
+
   const [crearTurno, { loading }] = useMutation(CREAR_TURNO, {
     refetchQueries: ["GetTurnos"],
   });
 
+  // Turnos futuros del empleado (excluyendo cancelados)
+  const turnosFuturos = useMemo(() => {
+    return (turnosEmpleadoData?.turnos ?? []).filter(
+      (t) => t.id !== turno.id && t.estado !== "cancelado",
+    );
+  }, [turnosEmpleadoData, turno.id]);
+
+  // Turnos del día seleccionado
+  const turnosEnFechaSeleccionada = useMemo(() => {
+    return turnosFuturos.filter((t) => {
+      const dTurno = new Date(t.fechaInicio).toISOString().slice(0, 10);
+      return dTurno === fecha;
+    });
+  }, [turnosFuturos, fecha]);
+
+  const fechaEsHoy = fecha === hoyStr;
+  const hayConflictoEnFecha = turnosEnFechaSeleccionada.length > 0;
+
+  // Próximas fechas con turnos (para mostrar advertencia visual)
+  const fechasOcupadas = useMemo(() => {
+    const set = new Set();
+    turnosFuturos.forEach((t) => {
+      set.add(new Date(t.fechaInicio).toISOString().slice(0, 10));
+    });
+    return set;
+  }, [turnosFuturos]);
+
   const handleSave = async () => {
+    // No permitir el mismo día del turno original
+    if (fechaEsHoy) {
+      Swal.fire({
+        background: "#fff",
+        icon: "warning",
+        title: "No puedes reprogramar para hoy",
+        html: `<span style="font-family:'DM Sans';color:#78716c">El turno se reprograma para un día futuro. Selecciona mañana o más adelante.</span>`,
+        confirmButtonColor: G[900],
+      });
+      return;
+    }
+
+    // Bloquear si hay conflicto de turno en esa fecha
+    if (hayConflictoEnFecha) {
+      const lista = turnosEnFechaSeleccionada
+        .map(
+          (t) =>
+            `• ${fmtHora(t.fechaInicio)} – ${fmtHora(t.fechaFin)} (${(ESTADO_CFG[t.estado] ?? ESTADO_CFG.programado).label})`,
+        )
+        .join("<br>");
+      Swal.fire({
+        background: "#fff",
+        icon: "error",
+        title: "Fecha con turno existente",
+        html: `<span style="font-family:'DM Sans';color:#78716c"><b>${turno.empleadoNombre}</b> ya tiene turno ese día:<br><br>${lista}<br><br>Elige otra fecha.</span>`,
+        confirmButtonColor: G[900],
+      });
+      return;
+    }
+
+    const inicio = toLocalISO(new Date(`${fecha}T${horaInicio}:00`));
+    const fin = toLocalISO(new Date(`${fecha}T${horaFin}:00`));
+
+    if (new Date(fin) <= new Date(inicio)) {
+      Swal.fire({
+        background: "#fff",
+        icon: "warning",
+        title: "Horario inválido",
+        text: "La hora de fin debe ser posterior a la de inicio.",
+        confirmButtonColor: G[900],
+      });
+      return;
+    }
+
+    // Aviso de confirmación con la fecha propuesta
+    const fechaDisplay = new Date(`${fecha}T12:00:00`).toLocaleDateString(
+      "es-CO",
+      {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+      },
+    );
+    const { isConfirmed } = await Swal.fire({
+      background: "#fff",
+      icon: "info",
+      title: "Confirmar reprogramación",
+      html: `<span style="font-family:'DM Sans';color:#78716c">
+        El turno de <b>${turno.empleadoNombre}</b> se reprogramará para:<br><br>
+        <b style="color:#051F20">${fechaDisplay}</b><br>
+        <b style="color:#051F20">${horaInicio} – ${horaFin}</b>
+        ${notas ? `<br><br><i>"${notas}"</i>` : ""}
+      </span>`,
+      showCancelButton: true,
+      confirmButtonColor: G[900],
+      cancelButtonColor: "#e5e7eb",
+      confirmButtonText: "Sí, reprogramar",
+      cancelButtonText: "Revisar",
+    });
+    if (!isConfirmed) return;
+
     try {
-      const inicio = toLocalISO(new Date(`${fecha}T${horaInicio}:00`));
-      const fin = toLocalISO(new Date(`${fecha}T${horaFin}:00`));
-      if (new Date(fin) <= new Date(inicio)) {
-        Swal.fire({
-          background: "#fff",
-          icon: "warning",
-          title: "Horario inválido",
-          text: "La hora de fin debe ser posterior a la de inicio.",
-          confirmButtonColor: G[900],
-        });
-        return;
-      }
       const { data } = await crearTurno({
         variables: {
           empleado: turno.empleado,
@@ -504,7 +608,7 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
           fechaFin: fin,
           notas:
             notas ||
-            `Reprogramado desde turno cancelado — ${fmtHora(turno.fechaInicio)}`,
+            `Reprogramado — turno original ${fmtFecha(turno.fechaInicio)} ${fmtHora(turno.fechaInicio)}`,
         },
       });
       if (!data?.crearTurno?.ok)
@@ -513,7 +617,8 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
         background: "#fff",
         icon: "success",
         title: "Turno reprogramado",
-        timer: 1500,
+        html: `<span style="font-family:'DM Sans';color:#78716c">Nuevo turno creado para <b>${fechaDisplay}</b>.</span>`,
+        timer: 2000,
         timerProgressBar: true,
         confirmButtonColor: G[900],
       });
@@ -530,7 +635,9 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
   };
 
   const icls =
-    "w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 outline-none transition-all";
+    "w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 outline-none transition-all shadow-sm";
+  const iclsError =
+    "w-full px-3.5 py-2.5 rounded-xl bg-red-50 border border-red-200 text-sm font-dm text-stone-900 outline-none transition-all shadow-sm";
   const fi = (e) => {
     e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
     e.target.style.borderColor = "transparent";
@@ -543,6 +650,7 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
   return (
     <Modal open={true} onClose={onClose} title="Reprogramar turno" size="sm">
       <div className="space-y-4">
+        {/* Empleado + turno original */}
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-stone-200 bg-stone-50">
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center font-dm font-bold text-white text-xs shrink-0"
@@ -555,27 +663,105 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
               {turno.empleadoNombre}
             </p>
             <p className="text-[10px] font-dm text-stone-400">
-              Turno original: {fmtFecha(turno.fechaInicio)}{" "}
-              {fmtHora(turno.fechaInicio)}
+              Turno original cancelado: {fmtFecha(turno.fechaInicio)}{" "}
+              {fmtHora(turno.fechaInicio)} – {fmtHora(turno.fechaFin)}
             </p>
           </div>
         </div>
 
+        {/* Aviso: solo días futuros */}
+        <div
+          className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs font-dm"
+          style={{
+            background: "#eff6ff",
+            borderColor: "#bfdbfe",
+            color: "#3b82f6",
+          }}
+        >
+          <Calendar size={13} className="shrink-0 mt-0.5" />
+          <span>
+            El turno se reprogramará para la fecha que selecciones. No se puede
+            reprogramar para hoy ni para días con turno existente.
+          </span>
+        </div>
+
+        {/* Selector de fecha */}
         <div className="space-y-1.5">
           <label className="text-xs font-dm font-semibold text-stone-500">
-            Fecha
+            Nueva fecha
           </label>
           <input
             type="date"
             value={fecha}
-            min={hoyStr}
+            min={mananaStr}
             onChange={(e) => setFecha(e.target.value)}
-            className={icls}
+            className={hayConflictoEnFecha ? iclsError : icls}
             onFocus={fi}
             onBlur={fb}
           />
+
+          {/* Estado de la fecha seleccionada */}
+          {loadingConflictos ? (
+            <p className="text-[10px] font-dm text-stone-400 flex items-center gap-1">
+              <span className="w-3 h-3 border border-stone-300 border-t-transparent rounded-full animate-spin inline-block" />
+              Verificando disponibilidad...
+            </p>
+          ) : hayConflictoEnFecha ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 space-y-1.5">
+              <p className="text-xs font-dm font-semibold text-red-600 flex items-center gap-1.5">
+                <XCircle size={12} />
+                {turno.empleadoNombre} ya tiene turno ese día — elige otra fecha
+              </p>
+              {turnosEnFechaSeleccionada.map((t) => {
+                const meta = ESTADO_CFG[t.estado] ?? ESTADO_CFG.programado;
+                return (
+                  <div
+                    key={t.id}
+                    className="flex items-center gap-2 text-[10px] font-dm"
+                    style={{ color: meta.text }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ background: meta.text }}
+                    />
+                    {fmtHora(t.fechaInicio)} – {fmtHora(t.fechaFin)} ·{" "}
+                    {meta.label}
+                  </div>
+                );
+              })}
+            </div>
+          ) : fecha && fecha !== mananaStr ? (
+            <p className="text-[10px] font-dm text-emerald-600 flex items-center gap-1">
+              <CheckCircle2 size={11} /> Fecha disponible
+            </p>
+          ) : null}
+
+          {/* Próximas fechas ocupadas como advertencia */}
+          {fechasOcupadas.size > 0 && !loadingConflictos && (
+            <div className="flex items-start gap-1.5 text-[10px] font-dm text-amber-600">
+              <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+              <span>
+                Tiene turnos en:{" "}
+                {[...fechasOcupadas]
+                  .sort()
+                  .slice(0, 4)
+                  .map((f) =>
+                    new Date(`${f}T12:00:00`).toLocaleDateString("es-CO", {
+                      weekday: "short",
+                      day: "2-digit",
+                      month: "short",
+                    }),
+                  )
+                  .join(", ")}
+                {fechasOcupadas.size > 4
+                  ? ` y ${fechasOcupadas.size - 4} más`
+                  : ""}
+              </span>
+            </div>
+          )}
         </div>
 
+        {/* Horas */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <label className="text-xs font-dm font-semibold text-stone-500">
@@ -605,6 +791,7 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
           </div>
         </div>
 
+        {/* Nota */}
         <div className="space-y-1.5">
           <label className="text-xs font-dm font-semibold text-stone-500">
             Nota (opcional)
@@ -628,7 +815,12 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
           >
             Cancelar
           </Button>
-          <Button size="sm" loading={loading} onClick={handleSave}>
+          <Button
+            size="sm"
+            loading={loading}
+            disabled={hayConflictoEnFecha || fechaEsHoy || loadingConflictos}
+            onClick={handleSave}
+          >
             <RotateCcw size={13} /> Reprogramar
           </Button>
         </div>
@@ -644,7 +836,7 @@ function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
   const meta = ESTADO_CFG[turno.estado] ?? ESTADO_CFG.programado;
   const enCurso = turno.estado === "activo";
   const prog = turno.estado === "programado";
-  const cancel = !["completado", "cancelado"].includes(turno.estado);
+  const cancel = turno.estado === "programado"; // activo no se cancela manualmente
 
   // Tiempo restante para en_curso
   const minsRestantes = enCurso ? minutosHasta(turno.fechaFin) : null;
@@ -996,16 +1188,12 @@ export default function SStaffList() {
     return () => clearInterval(id);
   }, [turnos, cancelarTurno]);
 
-  // ── Ventana de salida: -15min antes del fechaFin se habilita el QR ─────
-  // Si llega +15min después sin escanear → cancelar automáticamente
-  const modalAutoAbiertoRef = useRef(new Set());
+  // ── Ventana de salida: QR habilitado -15min antes del fechaFin ────────────
+  // Si turno ACTIVO pasa +15min de fechaFin sin registrar salida → cancelar
   const autoCancelSalidaRef = useRef(new Set());
-
   useEffect(() => {
-    const ahora = Date.now();
-
-    // Auto-abrir modal para finalizar cuando estamos en ventana (-15 a 0 min)
     if (!qrModal) {
+      // Auto-abrir modal finalizar cuando entramos en ventana (-15min a 0)
       const candidato = turnos.find((t) => {
         if (t.estado !== "activo") return false;
         if (modalAutoAbiertoRef.current.has(t.id)) return false;
@@ -1018,7 +1206,7 @@ export default function SStaffList() {
       }
     }
 
-    // Auto-cancelar turnos activos que pasaron +15min de su fechaFin sin salida
+    // Auto-cancelar turnos activos que llevan +15min después de su fechaFin sin salida
     const vencidos = turnos.filter((t) => {
       if (t.estado !== "activo") return false;
       if (autoCancelSalidaRef.current.has(t.id)) return false;
@@ -1037,6 +1225,23 @@ export default function SStaffList() {
       }
     });
   }, [turnos, qrModal, cancelarTurno]);
+
+  // ── Auto-abrir modal QR para finalizar (-15min antes o +45min después) ───
+  const modalAutoAbiertoRef = useRef(new Set());
+  useEffect(() => {
+    if (qrModal) return; // ya hay un modal abierto
+    const candidato = turnos.find((t) => {
+      if (t.estado !== "activo") return false;
+      if (modalAutoAbiertoRef.current.has(t.id)) return false;
+      const restantes = minutosHasta(t.fechaFin);
+      // -15 antes de acabar o hasta +45 después
+      return restantes !== null && restantes <= 15 && restantes >= -45;
+    });
+    if (candidato) {
+      modalAutoAbiertoRef.current.add(candidato.id);
+      setQrModal({ turno: candidato, modo: "finalizar" });
+    }
+  }, [turnos, qrModal]);
 
   // ── Filtro de turnos ──────────────────────────────────────────────────────
   const filteredTurnos = useMemo(() => {
@@ -1121,7 +1326,7 @@ export default function SStaffList() {
       <div className="grid grid-cols-3 gap-3">
         {[
           {
-            label: "Activo",
+            label: "En curso",
             n: enCurso,
             style: { background: G[50], borderColor: G[100] },
             text: G[300],
@@ -1208,7 +1413,7 @@ export default function SStaffList() {
           <div className="flex items-center gap-1 p-1 rounded-xl bg-white border border-stone-200">
             {[
               { v: "all", l: "Todos" },
-              { v: "activo", l: "Activo" },
+              { v: "activo", l: "En curso" },
               { v: "programado", l: "Programados" },
               { v: "completado", l: "Completados" },
             ].map(({ v, l }) => (

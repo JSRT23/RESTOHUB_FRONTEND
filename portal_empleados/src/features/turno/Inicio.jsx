@@ -180,13 +180,15 @@ export default function Inicio() {
   const onQR = async () => {
     setScanner(false);
     setBusy(true);
+    let exito = false;
     try {
       if (esInit) {
         const { data: r } = await iniciarTurno({
           variables: { turnoId: turno.id },
         });
         if (!r?.iniciarTurno?.ok)
-          throw new Error(r?.iniciarTurno?.errores ?? "Error");
+          throw new Error(r?.iniciarTurno?.errores ?? "Error al iniciar turno");
+        exito = true;
         Swal.fire({
           background: "#fff",
           icon: "success",
@@ -202,7 +204,10 @@ export default function Inicio() {
           variables: { turnoId: turno.id },
         });
         if (!r?.registrarSalida?.ok)
-          throw new Error(r?.registrarSalida?.errores ?? "Error");
+          throw new Error(
+            r?.registrarSalida?.errores ?? "Error al registrar salida",
+          );
+        exito = true;
         Swal.fire({
           background: "#fff",
           icon: "success",
@@ -214,7 +219,6 @@ export default function Inicio() {
           confirmButtonColor: G[900],
         });
       }
-      refetch();
     } catch (e) {
       Swal.fire({
         background: "#fff",
@@ -222,13 +226,17 @@ export default function Inicio() {
         title: "No se pudo registrar",
         html: `<p style='font-family:DM Sans;color:#78716c;font-size:14px;margin:0'>
           <strong style='color:#1c1917'>Comunícate con el supervisor</strong><br/><br/>
-          Pídele que registre tu turno manualmente desde el panel de control.
+          ${e.message || "Pídele que registre tu turno manualmente."}
         </p>`,
         confirmButtonColor: G[900],
         confirmButtonText: "Entendido",
       });
     } finally {
       setBusy(false);
+      // Refetch siempre, independiente del resultado — actualiza el estado
+      try {
+        refetch();
+      } catch (_) {}
     }
   };
 

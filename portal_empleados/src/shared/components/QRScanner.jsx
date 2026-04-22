@@ -1,13 +1,14 @@
-// portal_empleados/src/shared/components/QRScanner.jsx  v3
+// portal_empleados/src/shared/components/QRScanner.jsx  v6
 //
-// Estrategia:
-//   HTTPS/localhost → getUserMedia en vivo (visor iPhone, linterna)
-//   HTTP mobile     → abre la app de cámara/escáner nativo del celular
-//                     vía <input accept="image/*"> sin capture,
-//                     lo que en iOS muestra "Tomar foto / Escáner QR / Elegir archivo"
-//                     y en Android abre la galería con opción de cámara
-//                     — el usuario usa el escáner QR nativo y la imagen resultante
-//                     se decodifica con jsQR
+// Estrategia unificada:
+//   1. Siempre intenta getUserMedia primero (funciona en PC aunque sea HTTP)
+//   2. Si getUserMedia falla por contexto inseguro (celular con HTTP)
+//      → muestra botón nativo (input file) para tomar/subir foto
+//   3. Si falla por permiso denegado → pantalla de permiso + fallback subir foto
+//
+// Resultado: PC/tablet → visor en vivo siempre
+//            Celular HTTP → botón cámara nativa
+//            Celular HTTPS → visor en vivo
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Swal from "sweetalert2";
@@ -24,17 +25,19 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
   const trackRef = useRef(null);
   const fileRef = useRef(null);
 
+  // idle | requesting | active | success | denied | native | decoding
   const [fase, setFase] = useState("idle");
-  const [errorMsg, setErrorMsg] = useState("");
   const [linterna, setLinterna] = useState(false);
   const [hayLinterna, setHayLinterna] = useState(false);
 
+  // ── Cargar jsQR ────────────────────────────────────────────────────────
   useEffect(() => {
     import("jsqr").then((m) => {
       jsqrRef.current = m.default;
     });
   }, []);
 
+  // ── Linterna ───────────────────────────────────────────────────────────
   const apagar = useCallback(() => {
     try {
       trackRef.current?.applyConstraints({ advanced: [{ torch: false }] });
@@ -51,7 +54,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     } catch (_) {}
   }, [linterna]);
 
-  // ── Loop en vivo (modo HTTPS) ──────────────────────────────────────────
+  // ── Loop en vivo ───────────────────────────────────────────────────────
   const startScan = useCallback(() => {
     const loop = () => {
       const video = videoRef.current,
@@ -85,217 +88,190 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     rafRef.current = requestAnimationFrame(loop);
   }, [tokenEsperado, onExito, apagar]);
 
-  // ── Decodificar imagen — cámara, galería, archivos ───────────────────
-  // Maneja: JPEG, PNG, WebP, HEIC (iOS convierte a JPEG al subir),
-  //         fotos rotadas (EXIF), imágenes grandes, inversión de colores.
+  // ── Decodificar foto (modo nativo / subir imagen) ──────────────────────
   const decodeImage = useCallback(
     (file) => {
       if (!file) return;
       setFase("decoding");
-      setErrorMsg("");
 
-      // Esperar a que jsQR esté cargado
-      const waitJsqr = (tries = 0) => {
+      const wait = (tries = 0) => {
         if (!jsqrRef.current) {
           if (tries > 30) {
             setFase("native");
-            Swal.fire({
-              background: "#fff",
-              icon: "error",
-              title: "QR no válido",
-              text: "No se pudo cargar el lector. Recarga la página.",
-              confirmButtonColor: "#235347",
-            });
             return;
           }
-          setTimeout(() => waitJsqr(tries + 1), 150);
-          return;
-        }
-        processar();
-      };
-
-      const processar = () => {
-        const jsqr = jsqrRef.current;
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-
-        img.onload = () => {
-          URL.revokeObjectURL(url);
-
-          // Escalar a máximo 2000px manteniendo proporción
-          // (fotos de galería pueden ser 4000x3000 — jsQR es lento con eso)
-          const MAX = 2000;
-          const ratio = Math.min(1, MAX / Math.max(img.width, img.height));
-          const w = Math.round(img.width * ratio);
-          const h = Math.round(img.height * ratio);
-
-          // Intentar 4 variantes: normal, invertido, rotado 90°, rotado 270°
-          // Cubre fotos tomadas en landscape o con orientación EXIF ignorada
-          const intentos = [
-            () => dibujar(img, w, h, 0),
-            () => dibujar(img, w, h, 90),
-            () => dibujar(img, w, h, 270),
-            () => dibujar(img, w, h, 180),
-          ];
-
-          let code = null;
-          for (const intento of intentos) {
-            const imageData = intento();
-            code =
-              jsqr(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "dontInvert",
-              }) ||
-              jsqr(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "onlyInvert",
-              }) ||
-              jsqr(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: "attemptBoth",
-              });
-            if (code) break;
-          }
-
-          if (!code) {
-            setFase("native");
-            Swal.fire({
-              background: "#fff",
-              icon: "warning",
-              title: "QR no válido",
-              text: "No se detectó ningún código QR en la imagen. Asegúrate de que el QR sea visible y bien enfocado.",
-              confirmButtonColor: "#235347",
-              confirmButtonText: "Intentar de nuevo",
-            });
-            return;
-          }
-
-          const tokenLeido = code.data.trim();
-
-          if (tokenLeido === tokenEsperado) {
-            setFase("success");
-            setTimeout(() => onExito(tokenLeido), 500);
-          } else {
-            setFase("native");
-            Swal.fire({
-              background: "#fff",
-              icon: "error",
-              title: "QR no válido",
-              text: "El código QR no corresponde a tu turno. Asegúrate de escanear el QR correcto del supervisor.",
-              confirmButtonColor: "#235347",
-              confirmButtonText: "Intentar de nuevo",
-            });
-          }
-        };
-
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          // Último recurso: leer como blob y convertir via FileReader
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            const img2 = new Image();
-            img2.onload = () => {
-              // Reintentar con la imagen cargada desde base64
-              const canvas = document.createElement("canvas");
-              canvas.width = img2.width;
-              canvas.height = img2.height;
-              canvas.getContext("2d").drawImage(img2, 0, 0);
-              const data = canvas
-                .getContext("2d")
-                .getImageData(0, 0, img2.width, img2.height);
-              const code = jsqr(data.data, data.width, data.height, {
-                inversionAttempts: "attemptBoth",
-              });
-              if (code && code.data.trim() === tokenEsperado) {
-                setFase("success");
-                setTimeout(() => onExito(code.data.trim()), 500);
-              } else {
-                setFase("native");
-                Swal.fire({
-                  background: "#fff",
-                  icon: "error",
-                  title: "QR no válido",
-                  text: code
-                    ? "El código QR no corresponde a tu turno."
-                    : "No se pudo leer la imagen.",
-                  confirmButtonColor: "#235347",
-                  confirmButtonText: "Intentar de nuevo",
-                });
-              }
-            };
-            img2.onerror = () => {
-              setFase("native");
-              Swal.fire({
-                background: "#fff",
-                icon: "error",
-                title: "QR no válido",
-                text: "No se pudo leer la imagen. Intenta con otra foto.",
-                confirmButtonColor: "#235347",
-                confirmButtonText: "Intentar de nuevo",
-              });
-            };
-            img2.src = ev.target.result;
-          };
-          reader.onerror = () => {
-            setFase("native");
-            Swal.fire({
-              background: "#fff",
-              icon: "error",
-              title: "QR no válido",
-              text: "No se pudo procesar el archivo.",
-              confirmButtonColor: "#235347",
-              confirmButtonText: "Intentar de nuevo",
-            });
-          };
-          reader.readAsDataURL(file);
-        };
-
-        img.src = url;
-      };
-
-      // Dibujar imagen rotada en canvas y devolver ImageData
-      const dibujar = (img, w, h, grados) => {
-        const canvas = document.createElement("canvas");
-        if (grados === 90 || grados === 270) {
-          canvas.width = h;
-          canvas.height = w;
+          setTimeout(() => wait(tries + 1), 150);
         } else {
-          canvas.width = w;
-          canvas.height = h;
+          run();
         }
-        const ctx = canvas.getContext("2d");
+      };
+
+      // Leer orientación EXIF para corregir fotos rotadas de cámara
+      const readExif = (buf) => {
+        try {
+          const v = new DataView(buf);
+          if (v.getUint16(0, false) !== 0xffd8) return 0;
+          let off = 2;
+          while (off < v.byteLength - 2) {
+            const m = v.getUint16(off, false);
+            off += 2;
+            if (m === 0xffe1) {
+              if (v.getUint32(off + 2, false) !== 0x45786966) return 0;
+              const le = v.getUint16(off + 8, false) === 0x4949;
+              const dir = v.getUint32(off + 14, le);
+              const n = v.getUint16(off + 8 + dir, le);
+              for (let i = 0; i < n; i++) {
+                const b = off + 8 + dir + 2 + i * 12;
+                if (v.getUint16(b, le) === 0x0112)
+                  return v.getUint16(b + 8, le);
+              }
+              return 0;
+            }
+            if ((m & 0xff00) !== 0xff00) break;
+            off += v.getUint16(off, false);
+          }
+        } catch (_) {}
+        return 0;
+      };
+
+      const draw = (img, w, h, deg) => {
+        const cv = document.createElement("canvas");
+        if (deg === 90 || deg === 270) {
+          cv.width = h;
+          cv.height = w;
+        } else {
+          cv.width = w;
+          cv.height = h;
+        }
+        const ctx = cv.getContext("2d");
         ctx.save();
-        if (grados === 90) {
+        if (deg === 90) {
           ctx.translate(h, 0);
           ctx.rotate(Math.PI / 2);
         }
-        if (grados === 180) {
+        if (deg === 180) {
           ctx.translate(w, h);
           ctx.rotate(Math.PI);
         }
-        if (grados === 270) {
+        if (deg === 270) {
           ctx.translate(0, w);
           ctx.rotate(-Math.PI / 2);
         }
         ctx.drawImage(img, 0, 0, w, h);
         ctx.restore();
-        return ctx.getImageData(0, 0, canvas.width, canvas.height);
+        return ctx.getImageData(0, 0, cv.width, cv.height);
       };
 
-      waitJsqr();
+      const tryDecode = (img, exifDeg) => {
+        const jsqr = jsqrRef.current;
+        const MAX = 2000;
+        const r = Math.min(1, MAX / Math.max(img.width, img.height));
+        const w = Math.round(img.width * r),
+          h = Math.round(img.height * r);
+        for (const deg of [...new Set([exifDeg, 0, 90, 270, 180])]) {
+          const d = draw(img, w, h, deg);
+          const code =
+            jsqr(d.data, d.width, d.height, {
+              inversionAttempts: "dontInvert",
+            }) ||
+            jsqr(d.data, d.width, d.height, {
+              inversionAttempts: "onlyInvert",
+            }) ||
+            jsqr(d.data, d.width, d.height, {
+              inversionAttempts: "attemptBoth",
+            });
+          if (code) return code;
+        }
+        return null;
+      };
+
+      const showResult = (code) => {
+        if (!code) {
+          setFase("native");
+          Swal.fire({
+            background: "#fff",
+            icon: "warning",
+            title: "QR no válido",
+            text: "No se detectó ningún código QR. Enfoca bien el código e intenta de nuevo.",
+            confirmButtonColor: "#235347",
+            confirmButtonText: "Intentar de nuevo",
+          });
+          return;
+        }
+        const tok = code.data.trim();
+        if (tok === tokenEsperado) {
+          setFase("success");
+          setTimeout(() => onExito(tok), 500);
+        } else {
+          setFase("native");
+          Swal.fire({
+            background: "#fff",
+            icon: "error",
+            title: "QR no válido",
+            text: "El código QR no corresponde a tu turno. Escanea el QR correcto del supervisor.",
+            confirmButtonColor: "#235347",
+            confirmButtonText: "Intentar de nuevo",
+          });
+        }
+      };
+
+      const run = () => {
+        const fr = new FileReader();
+        fr.onload = (ev) => {
+          const buf = ev.target.result;
+          const exif = readExif(buf);
+          const exifDeg =
+            exif === 6 ? 90 : exif === 8 ? 270 : exif === 3 ? 180 : 0;
+          const url = URL.createObjectURL(
+            new Blob([buf], { type: file.type || "image/jpeg" }),
+          );
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            showResult(tryDecode(img, exifDeg));
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            setFase("native");
+            Swal.fire({
+              background: "#fff",
+              icon: "error",
+              title: "QR no válido",
+              text: "No se pudo leer la imagen. Intenta de nuevo.",
+              confirmButtonColor: "#235347",
+              confirmButtonText: "Intentar de nuevo",
+            });
+          };
+          img.src = url;
+        };
+        fr.onerror = () => {
+          setFase("native");
+          Swal.fire({
+            background: "#fff",
+            icon: "error",
+            title: "QR no válido",
+            text: "No se pudo procesar el archivo.",
+            confirmButtonColor: "#235347",
+            confirmButtonText: "Intentar de nuevo",
+          });
+        };
+        fr.readAsArrayBuffer(file);
+      };
+
+      wait();
     },
     [tokenEsperado, onExito],
   );
 
-  // ── Solicitar cámara ───────────────────────────────────────────────────
+  // ── Iniciar cámara ─────────────────────────────────────────────────────
+  // Siempre intenta getUserMedia. En PC funciona aunque sea HTTP.
+  // Solo cae al modo nativo si el navegador rechaza por contexto inseguro
+  // (típicamente celulares con HTTP que bloquean mediaDevices completamente).
   const requestCamera = useCallback(async () => {
     setFase("requesting");
-    setErrorMsg("");
 
-    const isSecure =
-      window.location.protocol === "https:" ||
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1";
-
-    // HTTP → modo nativo directamente
-    if (!isSecure || !navigator.mediaDevices?.getUserMedia) {
+    // Si mediaDevices no existe en absoluto → modo nativo (celular HTTP)
+    if (!navigator.mediaDevices?.getUserMedia) {
       setFase("native");
       return;
     }
@@ -328,14 +304,22 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     } catch (err) {
       const n = err.name ?? "";
       if (n === "NotAllowedError" || n === "PermissionDeniedError") {
-        // Permiso denegado → ofrecer modo nativo
+        // Usuario negó el permiso → mostrar pantalla de permiso
+        setFase("denied");
+      } else if (
+        n === "NotSupportedError" ||
+        n === "SecurityError" ||
+        err.message?.includes("secure") ||
+        err.message?.includes("insecure")
+      ) {
+        // Contexto inseguro (celular con HTTP) → modo nativo
         setFase("native");
-        setErrorMsg(
-          "Permiso de cámara denegado. Usa el escáner nativo de tu celular:",
-        );
+      } else if (n === "NotFoundError") {
+        // No hay cámara → modo nativo para subir imagen
+        setFase("native");
       } else {
+        // Cualquier otro error → modo nativo como fallback
         setFase("native");
-        setErrorMsg(`Cámara no disponible: ${err.message || n}`);
       }
     }
   }, [startScan]);
@@ -344,6 +328,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     const t = setTimeout(requestCamera, 100);
     return () => clearTimeout(t);
   }, [requestCamera]);
+
   useEffect(() => {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -367,8 +352,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         fontFamily: "'DM Sans',system-ui,sans-serif",
       }}
     >
-      {/* Input file — sin capture para que iOS muestre "Escáner QR" en el menú */}
-      {/* Oculto con opacity:0 en vez de display:none para compatibilidad Android */}
+      {/* Input file — sin capture para que iOS muestre "Escanear QR" en el menú */}
       <input
         ref={fileRef}
         type="file"
@@ -384,12 +368,12 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         }}
         onChange={(e) => {
           const file = e.target.files?.[0];
-          e.target.value = ""; // reset para poder re-escanear
+          e.target.value = "";
           if (file) decodeImage(file);
         }}
       />
 
-      {/* Video en vivo */}
+      {/* Video fullscreen */}
       <video
         ref={videoRef}
         muted
@@ -407,7 +391,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
-      {/* Overlay oscuro con recorte */}
+      {/* Overlay con recorte */}
       {mostrarVisor && (
         <svg
           style={{
@@ -441,7 +425,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         </svg>
       )}
 
-      {/* Marco iPhone */}
+      {/* Marco visor */}
       {mostrarVisor && (
         <div
           style={{
@@ -499,6 +483,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
               }}
             />
           ))}
+
           {fase === "active" && (
             <div
               style={{
@@ -513,6 +498,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
               }}
             />
           )}
+
           {exitoFlash && (
             <div
               style={{
@@ -647,7 +633,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         )}
       </div>
 
-      {/* Instrucción modo activo */}
+      {/* Instrucción visor activo */}
       {fase === "active" && (
         <div
           style={{
@@ -694,7 +680,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         </div>
       )}
 
-      {/* Estados sin cámara en vivo */}
+      {/* Estados sin visor en vivo */}
       {!mostrarVisor && (
         <div
           style={{
@@ -707,7 +693,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
             padding: "32px 28px",
           }}
         >
-          {/* Spinner */}
+          {/* Iniciando / leyendo */}
           {(fase === "idle" ||
             fase === "requesting" ||
             fase === "decoding") && (
@@ -731,12 +717,110 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   margin: 0,
                 }}
               >
-                {fase === "decoding" ? "Leyendo QR..." : "Iniciando..."}
+                {fase === "decoding" ? "Leyendo QR..." : "Iniciando cámara..."}
               </p>
             </div>
           )}
 
-          {/* ── MODO NATIVO ─────────────────────────────────────────────── */}
+          {/* Permiso denegado */}
+          {fase === "denied" && (
+            <div
+              style={{
+                width: "100%",
+                maxWidth: "340px",
+                background: "rgba(15,15,15,.97)",
+                borderRadius: "28px",
+                padding: "32px 24px",
+                border: "1px solid rgba(251,191,36,.2)",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  width: "64px",
+                  height: "64px",
+                  borderRadius: "20px",
+                  background: "rgba(251,191,36,.12)",
+                  border: "1px solid rgba(251,191,36,.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 18px",
+                }}
+              >
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#fbbf24"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="3" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <p
+                style={{
+                  color: "#fbbf24",
+                  fontSize: "17px",
+                  fontWeight: "700",
+                  margin: "0 0 10px",
+                }}
+              >
+                Permiso de cámara requerido
+              </p>
+              <p
+                style={{
+                  color: "rgba(255,255,255,.55)",
+                  fontSize: "13px",
+                  lineHeight: "1.6",
+                  margin: "0 0 20px",
+                }}
+              >
+                Haz clic en el candado 🔒 de la barra del navegador y permite el
+                acceso a la cámara, luego toca "Intentar de nuevo".
+              </p>
+              <button
+                onClick={requestCamera}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  borderRadius: "14px",
+                  border: "none",
+                  background: "#fbbf24",
+                  color: "#000",
+                  fontSize: "15px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  marginBottom: "10px",
+                  fontFamily: "'DM Sans',sans-serif",
+                }}
+              >
+                Intentar de nuevo
+              </button>
+              <button
+                onClick={() => setFase("native")}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "14px",
+                  background: "rgba(255,255,255,.07)",
+                  border: "1px solid rgba(255,255,255,.1)",
+                  color: "rgba(255,255,255,.6)",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  fontFamily: "'DM Sans',sans-serif",
+                }}
+              >
+                Subir foto del QR en su lugar
+              </button>
+            </div>
+          )}
+
+          {/* Modo nativo — celular HTTP o no hay cámara */}
           {fase === "native" && (
             <div
               style={{
@@ -749,7 +833,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 textAlign: "center",
               }}
             >
-              {/* Ícono QR */}
               <div
                 style={{
                   width: "72px",
@@ -779,7 +862,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                   <path d="M14 14h.01M14 17h3M17 14v3M21 21h-3v-3M21 17h-1" />
                 </svg>
               </div>
-
               <h2
                 style={{
                   color: "#fff",
@@ -791,39 +873,34 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
               >
                 Escanear QR
               </h2>
-
               <p
                 style={{
                   color: "rgba(255,255,255,.5)",
                   fontSize: "13px",
                   lineHeight: "1.6",
-                  margin: "0 0 6px",
+                  margin: "0 0 4px",
                 }}
               >
-                Toca el botón para abrir la cámara de tu celular.
+                Toca el botón para abrir la cámara.
               </p>
               <p
                 style={{
-                  color: "rgba(255,255,255,.35)",
+                  color: "rgba(255,255,255,.3)",
                   fontSize: "12px",
                   lineHeight: "1.5",
                   margin: "0 0 24px",
                 }}
               >
-                <strong style={{ color: "rgba(255,255,255,.5)" }}>iOS:</strong>{" "}
-                elige "Escanear código QR" en el menú.{"\n"}
-                <strong style={{ color: "rgba(255,255,255,.5)" }}>
+                <strong style={{ color: "rgba(255,255,255,.45)" }}>iOS:</strong>{" "}
+                elige "Escanear código QR" en el menú.{"  "}
+                <strong style={{ color: "rgba(255,255,255,.45)" }}>
                   Android:
                 </strong>{" "}
-                apunta al QR y toca "Tomar foto".
+                apunta al QR y toma la foto.
               </p>
 
-              {/* BOTÓN PRINCIPAL */}
               <button
-                onClick={() => {
-                  setErrorMsg("");
-                  fileRef.current?.click();
-                }}
+                onClick={() => fileRef.current?.click()}
                 style={{
                   width: "100%",
                   padding: "18px",
@@ -860,7 +937,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 Abrir cámara
               </button>
 
-              {/* Aviso supervisor */}
               <div
                 style={{
                   background: "rgba(251,191,36,.07)",
@@ -887,14 +963,13 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                     lineHeight: "1.5",
                   }}
                 >
-                  Dile al supervisor que registre tu turno manualmente desde el
-                  panel de control.
+                  Dile al supervisor que registre tu turno manualmente.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Éxito */}
+          {/* Éxito modo nativo */}
           {fase === "success" && (
             <div style={{ textAlign: "center" }}>
               <div

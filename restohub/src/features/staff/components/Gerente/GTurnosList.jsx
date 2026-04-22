@@ -6,7 +6,7 @@
 //
 // Ruta: /gerente/staff/turnos
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import {
   Clock,
@@ -21,7 +21,6 @@ import {
   CheckCircle2,
   XCircle,
   Ban,
-  RotateCcw,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { useAuth } from "../../../../app/auth/AuthContext";
@@ -87,7 +86,7 @@ function fmtDatetimeLocal(str) {
 
 const ESTADO_CONFIG = {
   programado: { label: "Programado", variant: "blue", icon: AlarmClock },
-  activo: { label: "Activo", variant: "green", icon: CheckCircle2 },
+  activo: { label: "En curso", variant: "green", icon: CheckCircle2 },
   completado: { label: "Completado", variant: "default", icon: CheckCircle2 },
   cancelado: { label: "Cancelado", variant: "red", icon: XCircle },
 };
@@ -107,13 +106,7 @@ function Field({ icon: Icon, label, required, children }) {
 }
 
 // ── Modal: Crear turno ─────────────────────────────────────────────────────
-function ModalCrear({
-  open,
-  onClose,
-  restauranteId,
-  empleados,
-  preFillEmpleadoId,
-}) {
+function ModalCrear({ open, onClose, restauranteId, empleados }) {
   const ahora = new Date();
   const enUnaHora = new Date(ahora.getTime() + 3600000);
   const enOchoHoras = new Date(ahora.getTime() + 8 * 3600000);
@@ -129,12 +122,6 @@ function ModalCrear({
     notas: "",
   };
   const [form, setForm] = useState(INIT);
-  // Pre-fill empleado si viene de "Reprogramar"
-  useEffect(() => {
-    if (open && preFillEmpleadoId)
-      setForm((f) => ({ ...f, empleadoId: preFillEmpleadoId }));
-    if (!open) setForm(INIT);
-  }, [open, preFillEmpleadoId]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const [crear, { loading }] = useMutation(CREAR_TURNO, {
@@ -184,12 +171,7 @@ function ModalCrear({
         },
       });
       const res = data?.crearTurno;
-      if (!res?.ok)
-        throw new Error(
-          Array.isArray(res?.errores)
-            ? res.errores[0]
-            : (res?.errores ?? "Error al crear"),
-        );
+      if (!res?.ok) throw new Error(res?.errores?.[0] || "Error al crear");
       const emp = empleados.find((e) => e.id === form.empleadoId);
       Swal.fire({
         background: "#fff",
@@ -320,10 +302,10 @@ function ModalCrear({
 }
 
 // ── Tarjeta de turno ───────────────────────────────────────────────────────
-function TurnoCard({ turno, onCancelar, canceling, onReprogramar }) {
+function TurnoCard({ turno, onCancelar, canceling }) {
   const estado = ESTADO_CONFIG[turno.estado] ?? ESTADO_CONFIG.programado;
   const IconEstado = estado.icon;
-  const cancelable = turno.estado === "programado" || turno.estado === "activo";
+  const cancelable = turno.estado === "programado"; // activo no se cancela manualmente
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-4 flex gap-4 items-start hover:shadow-sm transition-all">
@@ -383,17 +365,6 @@ function TurnoCard({ turno, onCancelar, canceling, onReprogramar }) {
         )}
       </div>
 
-      {/* Reprogramar — solo cancelados */}
-      {turno.estado === "cancelado" && (
-        <button
-          onClick={() => onReprogramar && onReprogramar(turno)}
-          className="p-2 rounded-lg text-stone-400 hover:text-blue-500 hover:bg-blue-50 transition-colors flex-shrink-0"
-          title="Reprogramar turno"
-        >
-          <RotateCcw size={14} />
-        </button>
-      )}
-
       {/* Cancelar */}
       {cancelable && (
         <button
@@ -421,11 +392,14 @@ export default function GTurnosList() {
   // Rango de fechas: semana actual
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
-  const [fechaDesde, setFechaDesde] = useState(inicioSemana().slice(0, 10));
-  const [fechaHasta, setFechaHasta] = useState(finSemanas(2).slice(0, 10));
+  const [fechaDesde, setFechaDesde] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [fechaHasta, setFechaHasta] = useState(
+    new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10),
+  );
   const [showCrear, setShowCrear] = useState(false);
   const [canceling, setCanceling] = useState(null);
-  const [reprogramar, setReprogramar] = useState(null); // turno a reprogramar
 
   const { data, loading, error } = useQuery(GET_TURNOS, {
     variables: {
@@ -490,12 +464,7 @@ export default function GTurnosList() {
     try {
       const { data } = await cancelar({ variables: { turnoId: turno.id } });
       const res = data?.cancelarTurno;
-      if (!res?.ok)
-        throw new Error(
-          Array.isArray(res?.errores)
-            ? res.errores[0]
-            : (res?.errores ?? "Error al cancelar"),
-        );
+      if (!res?.ok) throw new Error(res?.errores?.[0] || "Error");
       Swal.fire({
         background: "#fff",
         icon: "success",
@@ -539,7 +508,7 @@ export default function GTurnosList() {
         <div className="grid grid-cols-3 gap-3">
           {[
             { label: "Programados", value: programados, color: "#2563eb" },
-            { label: "Activo", value: enCurso, color: "#059669" },
+            { label: "En curso", value: enCurso, color: "#059669" },
             { label: "Completados", value: completados, color: G[300] },
           ].map((k) => (
             <div
@@ -676,7 +645,6 @@ export default function GTurnosList() {
                       turno={t}
                       onCancelar={handleCancelar}
                       canceling={canceling}
-                      onReprogramar={setReprogramar}
                     />
                   ))}
                 </div>
@@ -687,14 +655,10 @@ export default function GTurnosList() {
       )}
 
       <ModalCrear
-        open={showCrear || !!reprogramar}
-        onClose={() => {
-          setShowCrear(false);
-          setReprogramar(null);
-        }}
+        open={showCrear}
+        onClose={() => setShowCrear(false)}
         restauranteId={restauranteId}
         empleados={empleados}
-        preFillEmpleadoId={reprogramar?.empleado ?? null}
       />
     </div>
   );

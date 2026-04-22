@@ -302,3 +302,15 @@ export const ACTIVAR_USUARIO_AUTH = gql`
     }
   }
 `;
+
+// ── VINCULAR EMPLEADO A CUENTA AUTH ───────────────────────────────────────
+// Asigna el empleadoId al usuario auth para completar la vinculación.
+// Misma mutation que usa AdminUsuariosList.
+export const VINCULAR_EMPLEADO_ID = gql`
+  mutation VincularEmpleadoId($email: String!, $empleadoId: ID!) {
+    vincularEmpleadoId(email: $email, empleadoId: $empleadoId) {
+      ok
+      error
+    }
+  }
+`;
