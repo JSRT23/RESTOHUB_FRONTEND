@@ -86,7 +86,7 @@ export default function CPedidosDia() {
 
   // Total recaudado (suma de totalCobrado si existe, si no total)
   const totalRecaudado = cobrados.reduce(
-    (s, p) => s + (p.totalCobrado ?? p.total ?? 0),
+    (s, p) => s + parseFloat(p.totalCobrado ?? p.total ?? 0),
     0,
   );
   const moneda = pedidos[0]?.moneda ?? "COP";
@@ -257,7 +257,9 @@ export default function CPedidosDia() {
                   >
                     <td className="py-3 pl-5 pr-3">
                       <span className="font-mono text-xs font-bold text-stone-700 bg-stone-100 px-2 py-0.5 rounded-lg">
-                        #{p.id.slice(-8).toUpperCase()}
+                        {p.numeroDia
+                          ? `#${p.numeroDia}`
+                          : `#${p.id.slice(-8).toUpperCase()}`}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-xs font-dm text-stone-500">
@@ -281,7 +283,10 @@ export default function CPedidosDia() {
                     </td>
                     <td className="py-3 pr-5 pl-3 text-right">
                       <span className="font-playfair font-bold text-stone-800">
-                        {fmtMoney(p.totalCobrado ?? p.total, p.moneda)}
+                        {fmtMoney(
+                          parseFloat(p.totalCobrado ?? p.total ?? 0),
+                          p.moneda,
+                        )}
                       </span>
                     </td>
                   </tr>

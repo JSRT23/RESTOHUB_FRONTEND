@@ -28,6 +28,8 @@ export const GET_PEDIDOS = gql`
       total
       moneda
       mesaId
+      metodoPago
+      numeroDia
       fechaCreacion
       fechaEntregaEstimada
     }
@@ -46,6 +48,8 @@ export const GET_PEDIDO = gql`
       total
       moneda
       mesaId
+      metodoPago
+      numeroDia
       fechaCreacion
       fechaEntregaEstimada
       detalles {
@@ -90,13 +94,19 @@ export const GET_PEDIDO = gql`
 export const CONFIRMAR_PEDIDO = gql`
   mutation ConfirmarPedido($id: ID!, $descripcion: String) {
     confirmarPedido(id: $id, descripcion: $descripcion) {
-      id
-      estado
-      detalles {
+      ok
+      error
+      pedido {
         id
-        platoId
-        nombrePlato
-        cantidad
+        estado
+        total
+        moneda
+        detalles {
+          id
+          platoId
+          nombrePlato
+          cantidad
+        }
       }
     }
   }
@@ -105,8 +115,12 @@ export const CONFIRMAR_PEDIDO = gql`
 export const CANCELAR_PEDIDO = gql`
   mutation CancelarPedido($id: ID!, $descripcion: String) {
     cancelarPedido(id: $id, descripcion: $descripcion) {
-      id
-      estado
+      ok
+      error
+      pedido {
+        id
+        estado
+      }
     }
   }
 `;
@@ -114,17 +128,30 @@ export const CANCELAR_PEDIDO = gql`
 export const MARCAR_LISTO_PEDIDO = gql`
   mutation MarcarListoPedido($id: ID!, $descripcion: String) {
     marcarListoPedido(id: $id, descripcion: $descripcion) {
-      id
-      estado
+      ok
+      error
+      pedido {
+        id
+        estado
+      }
     }
   }
 `;
 
 export const ENTREGAR_PEDIDO = gql`
-  mutation EntregarPedido($id: ID!, $descripcion: String) {
-    entregarPedido(id: $id, descripcion: $descripcion) {
-      id
-      estado
+  mutation EntregarPedido($id: ID!, $descripcion: String, $metodoPago: String) {
+    entregarPedido(
+      id: $id
+      descripcion: $descripcion
+      metodoPago: $metodoPago
+    ) {
+      ok
+      error
+      pedido {
+        id
+        estado
+        metodoPago
+      }
     }
   }
 `;
@@ -140,7 +167,7 @@ export const CREAR_PEDIDO = gql`
     $moneda: String!
     $mesaId: ID
     $fechaEntregaEstimada: String
-    $detalles: [DetallePedidoInput!]!
+    $detalles: [DetalleInput!]!
   ) {
     crearPedido(
       restauranteId: $restauranteId
@@ -152,11 +179,15 @@ export const CREAR_PEDIDO = gql`
       fechaEntregaEstimada: $fechaEntregaEstimada
       detalles: $detalles
     ) {
-      id
-      estado
-      total
-      moneda
-      fechaCreacion
+      ok
+      error
+      pedido {
+        id
+        estado
+        total
+        moneda
+        fechaCreacion
+      }
     }
   }
 `;
@@ -173,6 +204,7 @@ export const GET_COMANDAS = gql`
       horaEnvio
       horaFin
       tiempoPreparacionSegundos
+      numeroDia
     }
   }
 `;
@@ -180,8 +212,12 @@ export const GET_COMANDAS = gql`
 export const INICIAR_COMANDA = gql`
   mutation IniciarComanda($id: ID!) {
     iniciarComanda(id: $id) {
-      id
-      estado
+      ok
+      error
+      comanda {
+        id
+        estado
+      }
     }
   }
 `;
@@ -189,10 +225,14 @@ export const INICIAR_COMANDA = gql`
 export const COMANDA_LISTA = gql`
   mutation ComandaLista($id: ID!) {
     comandaLista(id: $id) {
-      id
-      estado
-      horaFin
-      tiempoPreparacionSegundos
+      ok
+      error
+      comanda {
+        id
+        estado
+        horaFin
+        tiempoPreparacionSegundos
+      }
     }
   }
 `;
@@ -264,36 +304,6 @@ export const COMPLETAR_ENTREGA = gql`
       id
       estadoEntrega
       fechaEntregaReal
-    }
-  }
-`;
-
-// ── COBRO ─────────────────────────────────────────────────────────────────
-
-export const COBRAR_PEDIDO = gql`
-  mutation CobrarPedido(
-    $id: ID!
-    $metodoPago: String!
-    $totalCobrado: Float!
-    $descuentoCupon: Float
-    $descuentoPuntos: Float
-    $cuponId: ID
-    $puntosCanjados: Int
-  ) {
-    cobrarPedido(
-      id: $id
-      metodoPago: $metodoPago
-      totalCobrado: $totalCobrado
-      descuentoCupon: $descuentoCupon
-      descuentoPuntos: $descuentoPuntos
-      cuponId: $cuponId
-      puntosCanjados: $puntosCanjados
-    ) {
-      id
-      estado
-      totalCobrado
-      metodoPago
-      fechaCobro
     }
   }
 `;

@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import Swal from "sweetalert2";
 import {
-  GET_PLATOS_GERENTE,
+  GET_PLATOS_DISPONIBLES,
   GET_PRECIOS_RESTAURANTE,
   GET_CATEGORIAS_GERENTE,
   GET_MI_RESTAURANTE,
@@ -263,9 +263,9 @@ export default function MNuevoPedido() {
     variables: { activo: true },
   });
   const { data: platosData, loading: platosLoading } = useQuery(
-    GET_PLATOS_GERENTE,
+    GET_PLATOS_DISPONIBLES,
     {
-      variables: { restauranteId, activo: true },
+      variables: { disponibles: restauranteId, activo: true },
       skip: !restauranteId,
       fetchPolicy: "cache-and-network",
     },
@@ -382,7 +382,10 @@ export default function MNuevoPedido() {
           })),
         },
       });
-      const pedido = data?.crearPedido;
+      const resultado = data?.crearPedido;
+      if (!resultado?.ok)
+        throw new Error(resultado?.error ?? "No se pudo crear el pedido");
+      const pedido = resultado.pedido;
       if (!pedido?.id) throw new Error("No se pudo crear el pedido");
 
       setPedidoCreado(pedido);
@@ -390,7 +393,7 @@ export default function MNuevoPedido() {
         background: "#fff",
         icon: "success",
         title: "¡Pedido enviado!",
-        html: `<span style="font-family:'DM Sans';color:#78716c">Pedido <b>#${pedido.id.slice(-8).toUpperCase()}</b> enviado a cocina · ${fmtMoney(pedido.total, pedido.moneda)}</span>`,
+        html: `<span style="font-family:'DM Sans';color:#78716c">Pedido <b>${pedido.numeroDia ? `#${pedido.numeroDia}` : `#${pedido.id.slice(-8).toUpperCase()}`}</b> enviado a cocina · ${fmtMoney(pedido.total, moneda)}</span>`,
         confirmButtonColor: G[900],
         confirmButtonText: "Nuevo pedido",
       });

@@ -353,3 +353,19 @@ export const DESACTIVAR_PRECIO = gql`
     }
   }
 `;
+
+// ── Platos disponibles para mesero (globales + del restaurante) ───────────
+export const GET_PLATOS_DISPONIBLES = gql`
+  query GetPlatosDisponibles($disponibles: ID!, $activo: Boolean) {
+    platos(disponibles: $disponibles, activo: $activo) {
+      id
+      restauranteId
+      nombre
+      descripcion
+      categoriaId
+      categoriaNombre
+      imagen
+      activo
+    }
+  }
+`;

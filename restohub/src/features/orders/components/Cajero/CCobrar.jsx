@@ -34,7 +34,6 @@ import Swal from "sweetalert2";
 import {
   GET_PEDIDOS,
   GET_PEDIDO,
-  COBRAR_PEDIDO,
   ENTREGAR_PEDIDO,
 } from "../../graphql/operations";
 import {
@@ -105,6 +104,7 @@ function ListaPedidosListos({ pedidos, loading, onSeleccionar }) {
     if (!q) return pedidos;
     return pedidos.filter(
       (p) =>
+        String(p.numeroDia ?? "").includes(q) ||
         p.id.toLowerCase().includes(q) ||
         (p.mesaId && p.mesaId.toLowerCase().includes(q)),
     );
@@ -129,7 +129,7 @@ function ListaPedidosListos({ pedidos, loading, onSeleccionar }) {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por ID o mesa..."
+          placeholder="Buscar por # pedido o mesa..."
           className="flex-1 bg-transparent text-sm font-dm text-stone-800 placeholder:text-stone-300 outline-none"
         />
       </div>
@@ -158,7 +158,9 @@ function ListaPedidosListos({ pedidos, loading, onSeleccionar }) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-stone-700 bg-stone-100 px-2 py-0.5 rounded-lg">
-                    #{p.id.slice(-8).toUpperCase()}
+                    {p.numeroDia
+                      ? `Pedido #${p.numeroDia}`
+                      : `#${p.id.slice(-8).toUpperCase()}`}
                   </span>
                   {p.mesaId && (
                     <Badge variant="muted" size="xs">
@@ -227,7 +229,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
     fetchPolicy: "network-only",
   });
 
-  const [cobrarPedido] = useMutation(COBRAR_PEDIDO);
   const [acumularPuntos] = useMutation(ACUMULAR_PUNTOS);
   const [canjearPuntos] = useMutation(CANJEAR_PUNTOS);
   const [canjearCupon] = useMutation(CANJEAR_CUPON);
@@ -318,20 +319,7 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
         });
       }
 
-      // 3. Cobrar el pedido
-      const { data: cobro } = await cobrarPedido({
-        variables: {
-          id: pedido.id,
-          metodoPago,
-          totalCobrado: totalFinal,
-          descuentoCupon: descuentoCupon || null,
-          descuentoPuntos: descuentoPuntos || null,
-          cuponId: cuponValidado?.id ?? null,
-          puntosCanjados: puntosACanjear || null,
-        },
-      });
-      if (!cobro?.cobrarPedido?.id)
-        throw new Error("Error al registrar el cobro");
+      // 3. Entregar el pedido (LISTO → ENTREGADO)
 
       // 4. Acumular puntos al cliente
       if (clienteBuscado && puntosAGanar > 0) {
@@ -347,7 +335,13 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
       }
 
       // 5. Marcar como entregado
-      await entregarPedido({ variables: { id: pedido.id } });
+      await entregarPedido({
+        variables: {
+          id: pedido.id,
+          metodoPago,
+          descripcion: `Cobrado · ${METODOS_PAGO.find((m) => m.id === metodoPago)?.label ?? metodoPago}`,
+        },
+      });
 
       await Swal.fire({
         background: "#fff",
@@ -355,7 +349,7 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
         title: "¡Cobro exitoso!",
         html: `
           <div style="font-family:'DM Sans';color:#78716c;text-align:left;line-height:1.8">
-            <p>Pedido <b>#${pedido.id.slice(-8).toUpperCase()}</b></p>
+            <p>Pedido <b>${pedido.numeroDia ? `#${pedido.numeroDia}` : `#${pedido.id.slice(-8).toUpperCase()}`}</b></p>
             <p>Total cobrado: <b>${fmtMoney(totalFinal, moneda)}</b></p>
             <p>Método: <b>${METODOS_PAGO.find((m) => m.id === metodoPago)?.label}</b></p>
             ${
@@ -427,7 +421,9 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
                 className="text-sm font-dm font-bold"
                 style={{ color: G[900] }}
               >
-                Pedido #{pedido.id.slice(-8).toUpperCase()}
+                {pedido.numeroDia
+                  ? `Pedido #${pedido.numeroDia}`
+                  : `Pedido #${pedido.id.slice(-8).toUpperCase()}`}
               </span>
               <span className="text-[10px] font-dm text-stone-400">
                 {fmtHora(pedido.fechaCreacion)}
