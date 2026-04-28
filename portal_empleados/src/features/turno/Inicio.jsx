@@ -1,4 +1,12 @@
 // portal_empleados/src/features/turno/Inicio.jsx
+// FIX: El QR escaneado ahora llama registrarEntrada(qrToken) / registrarSalida(turnoId)
+// en lugar de iniciarTurno(turnoId) directamente.
+// Flujo correcto:
+//   ENTRADA: empleado escanea QR → registrarEntrada(qr_token) → backend valida token
+//            → crea RegistroAsistencia + marca turno ACTIVO
+//   SALIDA:  empleado escanea QR → registrarSalida(turno_id) → backend completa turno
+// El QR del supervisor contiene el qrToken del turno.
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@apollo/client/react";
@@ -7,6 +15,7 @@ import {
   GET_TURNOS,
   INICIAR_TURNO,
   REGISTRAR_SALIDA,
+  REGISTRAR_ENTRADA,
 } from "./graphql/operations";
 import QRScanner from "../../shared/components/QRScanner";
 import Swal from "sweetalert2";
@@ -27,7 +36,6 @@ const fmtHora = (iso) =>
 const minsHasta = (iso) =>
   iso ? Math.floor((new Date(iso) - Date.now()) / 60000) : null;
 
-// ── Estados — keys exactas del backend ────────────────────────────────────
 const ECFG = {
   programado: {
     label: "Programado",
@@ -63,7 +71,6 @@ const ROL_LABEL = {
   supervisor: "Supervisor",
 };
 
-/* ── Icons ──────────────────────────────────────────────────────────────── */
 const IcoQR = () => (
   <svg
     width="16"
@@ -150,7 +157,10 @@ export default function Inicio() {
     pollInterval: 30000,
   });
 
-  const [iniciarTurno] = useMutation(INICIAR_TURNO, {
+  // ── Mutations ──────────────────────────────────────────────────────────
+  // registrarEntrada: POST /asistencia/entrada/ con qr_token → valida token en BD
+  // registrarSalida:  POST /asistencia/salida/  con turno_id → completa turno
+  const [registrarEntrada] = useMutation(REGISTRAR_ENTRADA, {
     refetchQueries: ["GetTurnos"],
   });
   const [registrarSalida] = useMutation(REGISTRAR_SALIDA, {
@@ -167,28 +177,36 @@ export default function Inicio() {
   const esInit = turno?.estado === "programado";
   const esFin = turno?.estado === "activo";
 
-  // Ventana de salida: QR se habilita -15min antes del fechaFin
   const minsR = esFin ? minsHasta(turno?.fechaFin) : null;
   const enVentanaSalida = esFin && minsR !== null && minsR <= 15;
-  // Hora en que se activa el QR de salida (fechaFin - 15min)
   const horaActivacion = turno?.fechaFin
     ? fmtHora(
         new Date(new Date(turno.fechaFin).getTime() - 15 * 60000).toISOString(),
       )
     : null;
 
-  const onQR = async () => {
+  // ── onQR: llamado por QRScanner cuando detecta un token válido ─────────
+  // tokenEscaneado = qrToken del turno (UUID generado en iniciarTurno)
+  // Para ENTRADA: enviamos el token al backend → valida + crea RegistroAsistencia
+  // Para SALIDA:  el token ya fue validado en el scanner (coincide con turno.qrToken),
+  //               enviamos el turnoId para completar
+  const onQR = async (tokenEscaneado) => {
     setScanner(false);
     setBusy(true);
-    let exito = false;
     try {
       if (esInit) {
-        const { data: r } = await iniciarTurno({
-          variables: { turnoId: turno.id },
+        // ENTRADA: registrar via qrToken — el backend valida y activa el turno
+        const { data: r } = await registrarEntrada({
+          variables: {
+            qrToken: tokenEscaneado,
+            metodo: "qr",
+          },
         });
-        if (!r?.iniciarTurno?.ok)
-          throw new Error(r?.iniciarTurno?.errores ?? "Error al iniciar turno");
-        exito = true;
+        if (!r?.registrarEntrada?.ok)
+          throw new Error(
+            r?.registrarEntrada?.errores ?? "Error al registrar entrada",
+          );
+
         Swal.fire({
           background: "#fff",
           icon: "success",
@@ -200,6 +218,7 @@ export default function Inicio() {
           confirmButtonColor: G[900],
         });
       } else if (esFin) {
+        // SALIDA: registrar salida con turnoId
         const { data: r } = await registrarSalida({
           variables: { turnoId: turno.id },
         });
@@ -207,7 +226,7 @@ export default function Inicio() {
           throw new Error(
             r?.registrarSalida?.errores ?? "Error al registrar salida",
           );
-        exito = true;
+
         Swal.fire({
           background: "#fff",
           icon: "success",
@@ -233,7 +252,6 @@ export default function Inicio() {
       });
     } finally {
       setBusy(false);
-      // Refetch siempre, independiente del resultado — actualiza el estado
       try {
         refetch();
       } catch (_) {}
@@ -241,7 +259,6 @@ export default function Inicio() {
   };
 
   const abrirScanner = () => {
-    // Si está activo pero fuera de la ventana, informar
     if (esFin && !enVentanaSalida) {
       Swal.fire({
         background: "#fff",
@@ -333,7 +350,7 @@ export default function Inicio() {
         </div>
       </div>
 
-      {/* Card turno de hoy */}
+      {/* Card turno */}
       {loading ? (
         <div
           className="skeleton anim-fadein"
@@ -389,7 +406,7 @@ export default function Inicio() {
           className="card anim-fadeup d1"
           style={{ marginBottom: "12px", overflow: "hidden" }}
         >
-          {/* Badge estado + countdown */}
+          {/* Badge estado */}
           <div
             style={{
               padding: "16px 18px 10px",
@@ -429,7 +446,6 @@ export default function Inicio() {
               )}
               {cfg.label}
             </span>
-
             {esFin && minsR !== null && (
               <span
                 className="font-dm"
@@ -450,7 +466,7 @@ export default function Inicio() {
             )}
           </div>
 
-          {/* Horario grande */}
+          {/* Horario */}
           <div style={{ padding: "4px 18px 16px" }}>
             <div
               style={{
@@ -502,14 +518,13 @@ export default function Inicio() {
             </p>
           </div>
 
-          {/* Divider */}
           {(esInit || esFin) && (
             <div
               style={{ height: "1px", background: "#f0ede8", margin: "0 18px" }}
             />
           )}
 
-          {/* Botón acción */}
+          {/* Botón escanear */}
           {(esInit || esFin) && (
             <div style={{ padding: "14px 16px" }}>
               <button
@@ -522,12 +537,9 @@ export default function Inicio() {
                   ? "Procesando..."
                   : esInit
                     ? "Escanear para iniciar"
-                    : enVentanaSalida
-                      ? "Escanear para finalizar"
-                      : "Escanear para finalizar"}
+                    : "Escanear para finalizar"}
               </button>
 
-              {/* Aviso ventana de salida — solo cuando activo y fuera de ventana */}
               {esFin && !enVentanaSalida && horaActivacion && (
                 <div
                   className="anim-fadein"
@@ -576,7 +588,6 @@ export default function Inicio() {
             </div>
           )}
 
-          {/* Estado final */}
           {(turno.estado === "completado" || turno.estado === "cancelado") && (
             <div style={{ padding: "14px 18px 18px", textAlign: "center" }}>
               <p
@@ -592,7 +603,6 @@ export default function Inicio() {
         </div>
       )}
 
-      {/* Link ver turnos */}
       <button
         onClick={() => navigate("/turnos")}
         className="btn-ghost anim-fadeup d2"
@@ -601,7 +611,7 @@ export default function Inicio() {
         <IcoList /> Ver todos mis turnos
       </button>
 
-      {/* QR Scanner */}
+      {/* QR Scanner — pasa el qrToken del turno para validarlo */}
       {scanner && turno && (
         <QRScanner
           tokenEsperado={turno.qrToken}

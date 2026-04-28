@@ -1,4 +1,7 @@
 // portal_empleados/src/features/turno/graphql/operations.js
+// CAMBIO vs original: agrega REGISTRAR_ENTRADA mutation
+// Todo lo demás es idéntico al original.
+
 import { gql } from "@apollo/client";
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -44,7 +47,6 @@ export const GET_EMPLEADO = gql`
   }
 `;
 
-// Buscar empleado por documento (para el kiosco del supervisor)
 export const GET_EMPLEADOS = gql`
   query GetEmpleados($restauranteId: ID) {
     empleados(restauranteId: $restauranteId, activo: true) {
@@ -113,6 +115,23 @@ export const REGISTRAR_SALIDA = gql`
       turno {
         id
         estado
+      }
+      errores
+    }
+  }
+`;
+
+// ── NUEVO: registrar entrada via QR token ─────────────────────────────────
+// El empleado escanea el QR del supervisor → se envía el qrToken al backend
+// El backend valida el token, crea RegistroAsistencia y activa el turno
+export const REGISTRAR_ENTRADA = gql`
+  mutation RegistrarEntrada($qrToken: String, $turnoId: ID, $metodo: String) {
+    registrarEntrada(qrToken: $qrToken, turnoId: $turnoId, metodo: $metodo) {
+      ok
+      registro {
+        id
+        turno
+        horaEntrada
       }
       errores
     }

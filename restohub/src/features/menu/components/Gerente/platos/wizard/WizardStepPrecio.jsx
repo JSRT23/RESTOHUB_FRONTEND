@@ -1,12 +1,14 @@
 // src/features/menu/components/Gerente/platos/wizard/WizardStepPrecio.jsx
-// CAMBIOS vs original:
-// 1. Dos modos: "manual" (precio directo) y "margen" (% ganancia → precio calculado)
-// 2. Consulta GET_COSTO_PLATO cuando platoId existe (edición de plato existente)
-// 3. Vista de receta expandible con stock por ingrediente
-// En wizard de CREACIÓN platoId es undefined → solo modo manual disponible
-// En PlatoPrecios (edición) platoId llega → ambos modos disponibles
+//
+// CREACIÓN (platoId undefined, ings[] tiene los ingredientes del wizard):
+//   → Consulta GET_RECETAS sin filtro de plato → obtiene costoUnitario por ingredienteId
+//   → Calcula costo = Σ (costoUnitario × cantidad) para cada ing del wizard
+//   → Ambos modos (manual y por margen) disponibles desde el principio
+//
+// EDICIÓN (platoId existe):
+//   → Usa GET_COSTO_PLATO (igual que antes)
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@apollo/client/react";
 import { useAuth } from "../../../../../../app/auth/AuthContext";
 import {
@@ -22,26 +24,21 @@ import {
 } from "lucide-react";
 import { G, fmt, inputCls, fi, fb } from "../platoUtils";
 import { GET_COSTO_PLATO } from "../../graphql/operations";
+import { GET_RECETAS } from "../../../../../../features/inventory/graphql/queries";
 
-// Helpers
 const hoyLocal = () => {
   const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-// Botones de margen de 5% en 5% desde 5% hasta 100%
 const MARGENES = Array.from({ length: 20 }, (_, i) => (i + 1) * 5);
 
-// precio = costo / (1 - margen%)
 const calcularPrecio = (costo, margenPct) => {
   if (!costo || costo <= 0 || margenPct >= 100) return null;
   return Math.ceil(costo / (1 - margenPct / 100));
 };
 
-// ── Fila de ingrediente en vista de receta ────────────────────────────────
+// ── Fila de ingrediente ───────────────────────────────────────────────────
 function IngredienteRow({ ing }) {
   const agotado = ing.estaAgotado;
   const bajo = !agotado && ing.necesitaReposicion;
@@ -55,8 +52,8 @@ function IngredienteRow({ ing }) {
     >
       <FlaskConical
         size={12}
-        style={{ color: agotado ? "#dc2626" : bajo ? "#d97706" : G[300] }}
         className="shrink-0"
+        style={{ color: agotado ? "#dc2626" : bajo ? "#d97706" : G[300] }}
       />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-dm font-semibold text-stone-800 truncate">
@@ -64,15 +61,9 @@ function IngredienteRow({ ing }) {
         </p>
         <p className="text-[10px] font-dm text-stone-400">
           {ing.cantidadReceta} {ing.unidadMedida}
-          {ing.stockActual !== null && ing.stockActual !== undefined && (
+          {ing.stockActual != null && (
             <span
-              className={`ml-2 font-semibold ${
-                agotado
-                  ? "text-red-500"
-                  : bajo
-                    ? "text-amber-600"
-                    : "text-emerald-600"
-              }`}
+              className={`ml-2 font-semibold ${agotado ? "text-red-500" : bajo ? "text-amber-600" : "text-emerald-600"}`}
             >
               · stock: {parseFloat(ing.stockActual).toFixed(2)}{" "}
               {ing.unidadMedida}
@@ -82,16 +73,17 @@ function IngredienteRow({ ing }) {
       </div>
       <div className="text-right shrink-0">
         <p className="text-xs font-dm font-bold text-stone-700">
-          {fmt(ing.costoIngrediente, "COP")}
+          {ing.costoIngrediente > 0
+            ? fmt(ing.costoIngrediente, "COP")
+            : "Sin costo"}
         </p>
-        {ing.porcionesPosibles !== null &&
-          ing.porcionesPosibles !== undefined && (
-            <p
-              className={`text-[10px] font-dm font-semibold ${agotado ? "text-red-500" : "text-stone-400"}`}
-            >
-              {agotado ? "Agotado" : `~${ing.porcionesPosibles} porciones`}
-            </p>
-          )}
+        {ing.porcionesPosibles != null && (
+          <p
+            className={`text-[10px] font-dm font-semibold ${agotado ? "text-red-500" : "text-stone-400"}`}
+          >
+            {agotado ? "Agotado" : `~${ing.porcionesPosibles} porciones`}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -103,6 +95,7 @@ export default function WizardStepPrecio({
   setPrecio,
   moneda,
   platoId,
+  ings = [],
 }) {
   const { user } = useAuth();
   const restauranteId = user?.restauranteId;
@@ -111,22 +104,80 @@ export default function WizardStepPrecio({
   const [margenPct, setMargenPct] = useState(30);
   const [showReceta, setShowReceta] = useState(false);
 
-  // Solo consultar costoPlato si el plato ya existe (edición, no creación)
+  // ── MODO EDICIÓN: plato ya existe → GET_COSTO_PLATO ──────────────────
   const { data: costoData, loading: costoLoading } = useQuery(GET_COSTO_PLATO, {
     variables: { platoId, restauranteId },
     skip: !platoId || !restauranteId,
     fetchPolicy: "cache-and-network",
   });
 
+  // ── MODO CREACIÓN: sin platoId → GET_RECETAS para costoUnitario ───────
+  // GET_RECETAS sin filtro de plato devuelve todas las recetas del sistema.
+  // Tomamos el costoUnitario del ingrediente (es el mismo independiente del plato —
+  // proviene del último precio de la orden de compra).
+  const { data: recetasData, loading: recetasLoading } = useQuery(GET_RECETAS, {
+    skip: !!platoId || ings.length === 0,
+    fetchPolicy: "cache-and-network",
+  });
+
+  // Mapa: ingredienteId → costoUnitario (de cualquier receta que lo use)
+  const costoUnitarioMap = useMemo(() => {
+    const map = {};
+    (recetasData?.recetas ?? []).forEach((r) => {
+      if (!map[r.ingredienteId] && r.costoUnitario > 0) {
+        map[r.ingredienteId] = parseFloat(r.costoUnitario);
+      }
+    });
+    return map;
+  }, [recetasData]);
+
+  // Costo calculado desde los ings del wizard (modo creación)
+  const costoDesdeIngs = useMemo(() => {
+    if (platoId || ings.length === 0) return null;
+    const total = ings.reduce((acc, ing) => {
+      const cu = costoUnitarioMap[ing.ingredienteId] ?? 0;
+      return acc + cu * (ing.cantidad || 0);
+    }, 0);
+    return total > 0 ? total : null;
+  }, [ings, costoUnitarioMap, platoId]);
+
+  // Ingredientes para mostrar en el panel (modo creación)
+  const ingredientesCreacion = useMemo(() => {
+    if (platoId) return [];
+    return ings.map((ing) => {
+      const cu = costoUnitarioMap[ing.ingredienteId] ?? 0;
+      return {
+        nombreIngrediente: ing.nombre,
+        cantidadReceta: ing.cantidad,
+        unidadMedida: ing.unidadMedida,
+        costoUnitario: cu,
+        costoIngrediente: cu * ing.cantidad,
+        estaAgotado: false,
+        necesitaReposicion: false,
+        stockActual: null,
+        porcionesPosibles: null,
+      };
+    });
+  }, [ings, costoUnitarioMap, platoId]);
+
+  // Fuente de verdad: edición usa GET_COSTO_PLATO, creación usa cálculo local
   const costoPlato = costoData?.costoPlato;
-  const costoTotal = costoPlato?.costoTotal ?? null;
-  const porciones = costoPlato?.porcionesDisponibles;
-  const ingredientes = costoPlato?.ingredientes ?? [];
+  const costoTotal = platoId
+    ? (costoPlato?.costoTotal ?? null)
+    : costoDesdeIngs;
+  const porciones = platoId ? costoPlato?.porcionesDisponibles : null;
+  const ingredientes = platoId
+    ? (costoPlato?.ingredientes ?? [])
+    : ingredientesCreacion;
+  const loading = platoId ? costoLoading : recetasLoading;
   const tieneAgotados = ingredientes.some((i) => i.estaAgotado);
   const tieneBajo =
     !tieneAgotados && ingredientes.some((i) => i.necesitaReposicion);
+  const sinCostos = costoTotal === null || costoTotal === 0;
+  const algunSinCosto =
+    !platoId && ings.some((i) => !costoUnitarioMap[i.ingredienteId]);
 
-  // Cuando cambia margen o llega el costo → recalcular precio automáticamente
+  // Recalcular precio cuando cambia margen o llega el costo
   useEffect(() => {
     if (modo !== "margen" || costoTotal === null) return;
     const p = calcularPrecio(costoTotal, margenPct);
@@ -169,14 +220,13 @@ export default function WizardStepPrecio({
                 : { color: "#78716c" }
             }
           >
-            <Icon size={13} />
-            {label}
+            <Icon size={13} /> {label}
           </button>
         ))}
       </div>
 
-      {/* Panel de costo de producción (solo si el plato ya existe) */}
-      {platoId && (
+      {/* Panel de costo de producción */}
+      {(platoId || ings.length > 0) && (
         <div
           className="rounded-2xl border overflow-hidden"
           style={{
@@ -215,10 +265,10 @@ export default function WizardStepPrecio({
               >
                 Costo de producción
               </span>
-              {costoLoading && (
+              {loading && (
                 <Loader2 size={12} className="text-stone-400 animate-spin" />
               )}
-              {costoTotal !== null && !costoLoading && (
+              {costoTotal !== null && !loading && (
                 <span
                   className="font-dm font-bold text-sm"
                   style={{ color: G[300] }}
@@ -226,14 +276,24 @@ export default function WizardStepPrecio({
                   {fmt(costoTotal, moneda)}
                 </span>
               )}
-              {!costoTotal && !costoLoading && (
+              {!platoId && sinCostos && !loading && ings.length > 0 && (
+                <span className="text-xs font-dm text-stone-400 italic">
+                  Sin costos — recibe una orden de compra
+                </span>
+              )}
+              {!platoId && !sinCostos && algunSinCosto && (
+                <span className="text-[10px] font-dm text-amber-600 flex items-center gap-1">
+                  <AlertTriangle size={10} /> Algunos sin costo
+                </span>
+              )}
+              {platoId && !costoTotal && !loading && (
                 <span className="text-xs font-dm text-stone-400 italic">
                   Sin receta configurada
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {porciones !== null && porciones !== undefined && (
+              {porciones != null && (
                 <span
                   className="text-xs font-dm font-semibold px-2 py-0.5 rounded-lg"
                   style={
@@ -255,14 +315,16 @@ export default function WizardStepPrecio({
 
           {showReceta && ingredientes.length > 0 && (
             <div className="bg-white px-4 pb-4 pt-3 space-y-2">
-              {costoPlato?.advertencia && (
+              {/* Advertencia si hay costos vacíos */}
+              {(costoPlato?.advertencia || (!platoId && algunSinCosto)) && (
                 <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200">
                   <AlertTriangle
                     size={13}
                     className="text-amber-500 mt-0.5 shrink-0"
                   />
                   <p className="text-xs font-dm text-amber-700">
-                    {costoPlato.advertencia}
+                    {costoPlato?.advertencia ??
+                      "Algunos ingredientes tienen costo 0. Para verlos actualizados, recibe una orden de compra con sus precios."}
                   </p>
                 </div>
               )}
@@ -274,7 +336,7 @@ export default function WizardStepPrecio({
         </div>
       )}
 
-      {/* Modo margen — selector de % */}
+      {/* Modo margen */}
       {modo === "margen" && (
         <div className="space-y-4">
           <div>
@@ -299,7 +361,7 @@ export default function WizardStepPrecio({
             </div>
           </div>
 
-          {costoTotal !== null ? (
+          {costoTotal !== null && costoTotal > 0 ? (
             <div className="grid grid-cols-3 gap-3">
               {[
                 {
@@ -340,16 +402,16 @@ export default function WizardStepPrecio({
             <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
               <Info size={13} className="text-amber-500 shrink-0" />
               <p className="text-xs font-dm text-amber-700">
-                {!platoId
-                  ? "El costo estará disponible al editar el plato, una vez asignados sus ingredientes."
-                  : "Este plato no tiene ingredientes con costo. Agrega ingredientes y recibe una orden de compra."}
+                {ings.length === 0
+                  ? "Agrega ingredientes en el paso anterior para calcular el costo."
+                  : "Los ingredientes aún no tienen costo registrado. Recibe una orden de compra para actualizarlos."}
               </p>
             </div>
           )}
         </div>
       )}
 
-      {/* Inputs de precio y fecha (siempre visibles) */}
+      {/* Inputs de precio y fecha */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
@@ -376,7 +438,7 @@ export default function WizardStepPrecio({
           {gananciaReal !== null && (
             <p className="text-[11px] font-dm text-stone-400 flex items-center gap-1 mt-1">
               <TrendingUp size={10} style={{ color: G[300] }} />
-              Margen real:
+              Margen real:{" "}
               <span className="font-semibold" style={{ color: G[300] }}>
                 {gananciaReal}%
               </span>

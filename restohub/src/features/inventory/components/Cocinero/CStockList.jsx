@@ -1,10 +1,11 @@
 // src/features/inventory/components/Cocinero/CStockList.jsx
-// CAMBIOS vs original:
-// 1. Agrega tab "Recetas" — el cocinero puede consultar ingredientes de cada plato
-// 2. Cards de plato con imagen, expandibles, muestran receta completa
-// La tab "Stock" es idéntica a la versión original.
+// CAMBIOS:
+//  - Tab Stock: porcentaje calculado correctamente (igual que GStockList fix)
+//  - Tab Recetas: click en card abre MODAL con imagen grande + receta completa (en vez de expandir inline)
+//  - Modal de receta diseñado profesionalmente
 
 import { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@apollo/client/react";
 import { useAuth } from "../../../../app/auth/AuthContext";
 import {
@@ -15,10 +16,11 @@ import {
   XCircle,
   RefreshCw,
   FlaskConical,
-  ChevronDown,
-  ChevronUp,
   BookOpen,
   UtensilsCrossed,
+  X,
+  ChefHat,
+  Layers,
 } from "lucide-react";
 import {
   GET_STOCK,
@@ -31,7 +33,6 @@ import {
   PageHeader,
   EmptyState,
   Skeleton,
-  Badge,
 } from "../../../../shared/components/ui";
 
 const G = {
@@ -42,7 +43,6 @@ const G = {
   900: "#051F20",
 };
 
-// ── Barra de nivel ────────────────────────────────────────────────────────
 function NivelBar({ pct, agotado, bajo }) {
   const color = agotado ? "#ef4444" : bajo ? "#f59e0b" : G[300];
   const w = Math.min(100, Math.max(0, pct ?? 0));
@@ -55,19 +55,23 @@ function NivelBar({ pct, agotado, bajo }) {
         />
       </div>
       <span
-        className="text-[10px] font-dm font-semibold w-7 text-right"
+        className="text-[10px] font-dm font-semibold w-8 text-right"
         style={{ color }}
       >
-        {Math.round(w)}%
+        {w < 1 ? `${w.toFixed(1)}%` : `${Math.round(w)}%`}
       </span>
     </div>
   );
 }
 
-// ── Card de stock (idéntico al original) ──────────────────────────────────
 function StockCard({ item }) {
   const agotado = item.estaAgotado;
   const bajo = item.necesitaReposicion && !agotado;
+  // Calcular pct correctamente (backend redondea a 0)
+  const nivelMax = parseFloat(item.nivelMaximo) || 0;
+  const cantAct = parseFloat(item.cantidadActual) || 0;
+  const pct = nivelMax > 0 ? (cantAct / nivelMax) * 100 : 0;
+
   return (
     <div
       className="bg-white rounded-2xl border p-4 space-y-2 transition-all"
@@ -107,7 +111,7 @@ function StockCard({ item }) {
       </div>
       <div className="flex items-baseline gap-1">
         <span className="text-xl font-dm font-bold text-stone-800">
-          {parseFloat(item.cantidadActual).toFixed(2)}
+          {cantAct.toFixed(2)}
         </span>
         <span className="text-xs font-dm text-stone-400">
           {item.unidadMedida}
@@ -116,42 +120,176 @@ function StockCard({ item }) {
           mín: {parseFloat(item.nivelMinimo).toFixed(2)}
         </span>
       </div>
-      <NivelBar pct={item.porcentajeStock} agotado={agotado} bajo={bajo} />
+      <NivelBar pct={pct} agotado={agotado} bajo={bajo} />
     </div>
   );
 }
 
-// ── Card de plato con receta expandible ───────────────────────────────────
-function PlatoRecetaCard({ plato }) {
-  const [open, setOpen] = useState(false);
+// ── Modal de receta — profesional ─────────────────────────────────────────
+function ModalReceta({ plato, onClose }) {
   const [imgError, setImgError] = useState(false);
 
   const { data, loading } = useQuery(GET_RECETAS, {
     variables: { platoId: plato.id },
-    skip: !open,
     fetchPolicy: "cache-and-network",
   });
-
   const receta = data?.recetas ?? [];
 
-  return (
+  return createPortal(
     <div
-      className="bg-white rounded-2xl border overflow-hidden transition-all"
-      style={{
-        borderColor: "#e7e5e4",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-      }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: "rgba(5,31,32,0.65)", backdropFilter: "blur(8px)" }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      {/* Header clickeable */}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-4 p-4 text-left hover:bg-stone-50 transition-colors"
+      <div
+        className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col"
+        style={{
+          maxHeight: "92dvh",
+          boxShadow: "0 32px 80px rgba(5,31,32,0.3)",
+        }}
       >
-        {/* Imagen */}
-        <div
-          className="w-14 h-14 rounded-xl shrink-0 overflow-hidden flex items-center justify-center"
-          style={{ background: G[50] }}
-        >
+        {/* Imagen de cabecera */}
+        <div className="relative w-full h-52 shrink-0 bg-stone-100 overflow-hidden">
+          {plato.imagen && !imgError ? (
+            <img
+              src={plato.imagen}
+              alt={plato.nombre}
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div
+              className="w-full h-full flex items-center justify-center"
+              style={{
+                background: `linear-gradient(135deg,${G[900]},${G[500]})`,
+              }}
+            >
+              <UtensilsCrossed size={48} className="text-white/30" />
+            </div>
+          )}
+          {/* Gradiente bottom */}
+          <div
+            className="absolute inset-x-0 bottom-0 h-24"
+            style={{
+              background:
+                "linear-gradient(to top,rgba(255,255,255,0.95),transparent)",
+            }}
+          />
+          {/* Botón cerrar */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-black/30 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/50 transition-colors"
+          >
+            <X size={14} />
+          </button>
+          {/* Categoría badge */}
+          {plato.categoriaNombre && (
+            <span
+              className="absolute top-4 left-4 text-[10px] font-dm font-bold px-2.5 py-1 rounded-xl backdrop-blur-sm"
+              style={{ background: "rgba(255,255,255,0.85)", color: G[500] }}
+            >
+              {plato.categoriaNombre}
+            </span>
+          )}
+        </div>
+
+        {/* Contenido */}
+        <div className="overflow-y-auto flex-1">
+          {/* Info del plato */}
+          <div className="px-6 pt-5 pb-4 border-b border-stone-100">
+            <h2 className="font-playfair text-2xl font-bold text-stone-900 leading-tight">
+              {plato.nombre}
+            </h2>
+            {plato.descripcion && (
+              <p className="text-sm font-dm text-stone-500 mt-1.5 leading-relaxed">
+                {plato.descripcion}
+              </p>
+            )}
+          </div>
+
+          {/* Receta */}
+          <div className="px-6 py-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: G[50] }}
+              >
+                <ChefHat size={14} style={{ color: G[300] }} />
+              </div>
+              <p className="text-sm font-dm font-bold text-stone-800">Receta</p>
+              {!loading && (
+                <span className="text-[10px] font-dm text-stone-400 bg-stone-100 px-2 py-0.5 rounded-lg">
+                  {receta.length} ingrediente{receta.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-12 rounded-xl" />
+                ))}
+              </div>
+            ) : receta.length === 0 ? (
+              <div className="flex items-center gap-3 px-4 py-4 rounded-2xl border border-dashed border-stone-200 bg-stone-50">
+                <Layers size={16} className="text-stone-300 shrink-0" />
+                <p className="text-sm font-dm text-stone-400">
+                  Sin ingredientes registrados. El gerente debe configurar la
+                  receta.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {receta.map((r, idx) => (
+                  <div
+                    key={r.id}
+                    className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-stone-100 bg-stone-50/60"
+                  >
+                    <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-dm font-bold shrink-0 text-stone-400 bg-stone-100">
+                      {idx + 1}
+                    </span>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <FlaskConical
+                        size={12}
+                        style={{ color: G[300] }}
+                        className="shrink-0"
+                      />
+                      <p className="text-sm font-dm font-semibold text-stone-800 truncate">
+                        {r.nombreIngrediente}
+                      </p>
+                    </div>
+                    <span
+                      className="flex items-center gap-1 text-sm font-dm font-bold px-3 py-1 rounded-xl shrink-0"
+                      style={{ background: G[50], color: G[300] }}
+                    >
+                      {parseFloat(r.cantidad)}{" "}
+                      <span className="text-[10px] font-normal text-stone-400 ml-0.5">
+                        {r.unidadMedida}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ── Plato card (solo click, sin expand) ──────────────────────────────────
+function PlatoCard({ plato, onClick }) {
+  const [imgError, setImgError] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left bg-white rounded-2xl border border-stone-200 overflow-hidden hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 group"
+      style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
+    >
+      <div className="flex items-center gap-4 p-4">
+        <div className="w-16 h-16 rounded-2xl shrink-0 overflow-hidden flex items-center justify-center bg-stone-50 border border-stone-100">
           {plato.imagen && !imgError ? (
             <img
               src={plato.imagen}
@@ -163,85 +301,27 @@ function PlatoRecetaCard({ plato }) {
             <UtensilsCrossed size={22} style={{ color: G[100] }} />
           )}
         </div>
-
-        {/* Info */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-dm font-bold text-stone-800 truncate">
             {plato.nombre}
           </p>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {plato.categoriaNombre && (
-              <span className="text-[10px] font-dm text-stone-400 bg-stone-100 px-2 py-0.5 rounded-lg">
-                {plato.categoriaNombre}
-              </span>
-            )}
-          </div>
+          {plato.categoriaNombre && (
+            <span className="text-[10px] font-dm text-stone-400 bg-stone-100 px-2 py-0.5 rounded-lg inline-block mt-1">
+              {plato.categoriaNombre}
+            </span>
+          )}
           {plato.descripcion && (
             <p className="text-[11px] font-dm text-stone-400 mt-1 line-clamp-1 leading-snug">
               {plato.descripcion}
             </p>
           )}
         </div>
-
-        {/* Toggle */}
-        <div className="shrink-0 flex items-center gap-1">
-          <span className="text-[10px] font-dm text-stone-400">
-            {open ? "Ocultar" : "Ver receta"}
-          </span>
-          {open ? (
-            <ChevronUp size={14} className="text-stone-400" />
-          ) : (
-            <ChevronDown size={14} className="text-stone-400" />
-          )}
+        <div className="shrink-0 flex items-center gap-1 text-[11px] font-dm font-semibold text-stone-400 group-hover:text-stone-600 transition-colors">
+          Ver receta
+          <BookOpen size={12} />
         </div>
-      </button>
-
-      {/* Receta expandida */}
-      {open && (
-        <div className="border-t border-stone-100 px-4 pb-4 pt-3">
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-8 rounded-xl" />
-              ))}
-            </div>
-          ) : receta.length === 0 ? (
-            <p className="text-xs font-dm text-stone-400 italic text-center py-3">
-              Sin ingredientes registrados. El gerente debe agregar la receta.
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-dm font-semibold text-stone-400 uppercase tracking-wider mb-2">
-                Ingredientes · {receta.length} ítem
-                {receta.length !== 1 ? "s" : ""}
-              </p>
-              {receta.map((r) => (
-                <div
-                  key={r.id}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
-                  style={{ background: "#f8fafc", border: "1px solid #f1f5f9" }}
-                >
-                  <FlaskConical
-                    size={12}
-                    style={{ color: G[300] }}
-                    className="shrink-0"
-                  />
-                  <p className="flex-1 text-xs font-dm font-semibold text-stone-700 truncate">
-                    {r.nombreIngrediente}
-                  </p>
-                  <span
-                    className="text-xs font-dm font-bold px-2.5 py-1 rounded-xl shrink-0"
-                    style={{ background: G[50], color: G[300] }}
-                  >
-                    {parseFloat(r.cantidad)} {r.unidadMedida}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+      </div>
+    </button>
   );
 }
 
@@ -252,11 +332,12 @@ export default function CStockList() {
   const [tab, setTab] = useState("stock");
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState("todos");
+  const [recetaPlato, setRecetaPlato] = useState(null); // plato seleccionado para modal
 
-  // Stock
-  const { data: almData } = useQuery(GET_ALMACENES, {
+  const { data: almData, loading: almLoading } = useQuery(GET_ALMACENES, {
     variables: { restauranteId, activo: true },
     skip: !restauranteId,
+    fetchPolicy: "cache-and-network",
   });
   const almacenId = almData?.almacenes?.[0]?.id;
 
@@ -267,8 +348,9 @@ export default function CStockList() {
   } = useQuery(GET_STOCK, {
     variables: { almacenId },
     skip: !almacenId,
-    fetchPolicy: "cache-and-network",
+    fetchPolicy: "network-only", // siempre fresco — no cachear stock del cocinero
     pollInterval: 30000,
+    notifyOnNetworkStatusChange: true,
   });
 
   const { data: alertasData } = useQuery(GET_ALERTAS, {
@@ -276,7 +358,6 @@ export default function CStockList() {
     skip: !restauranteId,
   });
 
-  // Platos para tab recetas
   const {
     data: platosData,
     loading: platosLoading,
@@ -324,7 +405,7 @@ export default function CStockList() {
         description={
           tab === "stock"
             ? "Ingredientes disponibles en tu restaurante · actualización cada 30s."
-            : "Consulta los ingredientes de cada plato del menú."
+            : "Toca cualquier plato para ver su receta completa."
         }
         action={
           <button
@@ -355,13 +436,12 @@ export default function CStockList() {
                 : { color: "#78716c" }
             }
           >
-            <Icon size={13} />
-            {label}
+            <Icon size={13} /> {label}
           </button>
         ))}
       </div>
 
-      {/* Resumen de alertas (solo stock) */}
+      {/* Alertas (solo stock) */}
       {tab === "stock" && (alertasAgotado > 0 || alertasBajo > 0) && (
         <div className="flex items-center gap-3 flex-wrap">
           {alertasAgotado > 0 && (
@@ -439,7 +519,7 @@ export default function CStockList() {
 
       {/* Contenido */}
       {tab === "stock" ? (
-        stockLoading ? (
+        almLoading || stockLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Skeleton key={i} className="h-32 rounded-2xl" />
@@ -452,7 +532,7 @@ export default function CStockList() {
             description={
               filtro !== "todos"
                 ? "No hay ingredientes con este filtro."
-                : "No hay stock registrado. El gerente debe registrar el almacén y los ingredientes."
+                : "No hay stock registrado."
             }
           />
         ) : (
@@ -474,16 +554,25 @@ export default function CStockList() {
           title="Sin platos"
           description={
             search
-              ? "No hay platos que coincidan con la búsqueda."
-              : "No hay platos activos en el menú de este restaurante."
+              ? "No hay platos que coincidan."
+              : "No hay platos activos en el menú."
           }
         />
       ) : (
         <div className="space-y-3">
           {platosFiltrados.map((plato) => (
-            <PlatoRecetaCard key={plato.id} plato={plato} />
+            <PlatoCard
+              key={plato.id}
+              plato={plato}
+              onClick={() => setRecetaPlato(plato)}
+            />
           ))}
         </div>
+      )}
+
+      {/* Modal de receta */}
+      {recetaPlato && (
+        <ModalReceta plato={recetaPlato} onClose={() => setRecetaPlato(null)} />
       )}
     </div>
   );

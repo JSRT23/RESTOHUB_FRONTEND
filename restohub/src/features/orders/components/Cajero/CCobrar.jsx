@@ -52,6 +52,17 @@ import {
   EmptyState,
   Badge,
 } from "../../../../shared/components/ui";
+import { gql } from "@apollo/client";
+
+// Query ligera para obtener imágenes de platos (fallback si imagenPlato no viene en el detalle)
+const GET_PLATOS_IMG = gql`
+  query GetPlatosImg($disponibles: ID, $activo: Boolean) {
+    platos(disponibles: $disponibles, activo: $activo) {
+      id
+      imagen
+    }
+  }
+`;
 
 const G = {
   50: "#DAF1DE",
@@ -210,6 +221,20 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
     variables: { id: pedidoId },
     fetchPolicy: "cache-and-network",
   });
+
+  // Imágenes de platos — para mostrar en el detalle del pedido
+  const { data: platosImgData } = useQuery(GET_PLATOS_IMG, {
+    variables: { disponibles: restauranteId, activo: true },
+    skip: !restauranteId,
+    fetchPolicy: "cache-first",
+  });
+  const imagenMap = useMemo(() => {
+    const map = {};
+    (platosImgData?.platos ?? []).forEach((p) => {
+      map[p.id] = p.imagen;
+    });
+    return map;
+  }, [platosImgData]);
 
   // Puntos del cliente (si se buscó)
   const {
@@ -397,7 +422,7 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
   };
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5">
       {/* Volver */}
       <button
         onClick={onVolver}
@@ -429,23 +454,73 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
                 {fmtHora(pedido.fechaCreacion)}
               </span>
             </div>
-            <div className="p-4 space-y-3">
-              {pedido.detalles?.map((d) => (
-                <div key={d.id} className="flex items-center gap-3">
-                  <span
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold font-dm text-white shrink-0"
-                    style={{ background: G[300] }}
-                  >
-                    {d.cantidad}
-                  </span>
-                  <p className="flex-1 text-sm font-dm text-stone-800">
-                    {d.nombrePlato}
-                  </p>
-                  <p className="text-sm font-dm font-semibold text-stone-700 shrink-0">
-                    {fmtMoney(d.subtotal, moneda)}
-                  </p>
-                </div>
-              ))}
+            <div className="divide-y divide-stone-100">
+              {pedido.detalles?.map((d) => {
+                const img = d.imagenPlato || imagenMap[d.platoId];
+                return (
+                  <div key={d.id} className="flex items-stretch gap-0">
+                    {/* Imagen cuadrada grande */}
+                    <div
+                      className="w-24 h-24 shrink-0 overflow-hidden relative"
+                      style={{ background: "#f5f5f4" }}
+                    >
+                      {img ? (
+                        <img
+                          src={img}
+                          alt={d.nombrePlato}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full flex items-center justify-center"
+                          style={{
+                            background: `linear-gradient(135deg,${G[50]},${G[100]}33)`,
+                          }}
+                        >
+                          <span className="text-3xl">🍽</span>
+                        </div>
+                      )}
+                      {/* Badge cantidad sobre la imagen */}
+                      <span
+                        className="absolute top-2 left-2 w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold text-white shadow-sm"
+                        style={{ background: G[900] }}
+                      >
+                        {d.cantidad}
+                      </span>
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0 px-4 py-3 flex flex-col justify-between">
+                      <div>
+                        <p className="text-sm font-dm font-bold text-stone-900 leading-snug">
+                          {d.nombrePlato}
+                        </p>
+                        {d.notas && (
+                          <p className="text-[11px] font-dm text-amber-600 italic mt-0.5 truncate">
+                            "{d.notas}"
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-end justify-between gap-2 mt-1">
+                        <div>
+                          <p className="text-[11px] font-dm text-stone-400">
+                            {fmtMoney(d.precioUnitario, moneda)} c/u
+                          </p>
+                          {d.cantidad > 1 && (
+                            <p className="text-[10px] font-dm text-stone-400">
+                              {d.cantidad} ×{" "}
+                              {fmtMoney(d.precioUnitario, moneda)}
+                            </p>
+                          )}
+                        </div>
+                        <p className="font-playfair text-base font-bold text-stone-900 shrink-0">
+                          {fmtMoney(d.subtotal, moneda)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <div
               className="px-4 py-3 border-t border-stone-100 flex items-center justify-between"

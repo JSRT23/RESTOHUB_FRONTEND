@@ -50,6 +50,7 @@ import {
   CREAR_TURNO,
   INICIAR_TURNO,
   REGISTRAR_SALIDA,
+  COMPLETAR_TURNO,
 } from "../../graphql/mutations";
 import { toLocalISO, inicioHoy, finHoy } from "../../utils/turnoFechas";
 import {
@@ -160,10 +161,10 @@ const NIVEL_CFG = {
     icon: Info,
   },
   BAJA: {
-    bg: "#fafaf9",
-    text: "#78716c",
-    border: "#e7e5e4",
-    dot: "bg-stone-400",
+    bg: G[50],
+    text: G[300],
+    border: G[100],
+    dot: "bg-emerald-400",
     icon: Bell,
   },
 };
@@ -192,6 +193,9 @@ function ModalQR({ turno, modo, onClose }) {
     refetchQueries: ["GetTurnos"],
   });
   const [registrarSalida] = useMutation(REGISTRAR_SALIDA, {
+    refetchQueries: ["GetTurnos"],
+  });
+  const [completarTurno] = useMutation(COMPLETAR_TURNO, {
     refetchQueries: ["GetTurnos"],
   });
 
@@ -254,13 +258,27 @@ function ModalQR({ turno, modo, onClose }) {
           confirmButtonColor: G[900],
         });
       } else {
-        const { data } = await registrarSalida({
-          variables: { turnoId: turno.id },
-        });
-        if (!data?.registrarSalida?.ok)
-          throw new Error(
-            data?.registrarSalida?.errores ?? "Error al finalizar",
-          );
+        // Intentar completarTurno directo (endpoint /turnos/{id}/completar/)
+        // Si el gateway no lo tiene, fallback a registrarSalida (asistencia/salida)
+        let ok = false;
+        let errMsg = "";
+        try {
+          const { data: dc } = await completarTurno({
+            variables: { turnoId: turno.id },
+          });
+          ok = dc?.completarTurno?.ok ?? false;
+          errMsg = dc?.completarTurno?.errores ?? "";
+        } catch {
+          // gateway no tiene completarTurno → usar registrarSalida
+        }
+        if (!ok) {
+          const { data: ds } = await registrarSalida({
+            variables: { turnoId: turno.id },
+          });
+          ok = ds?.registrarSalida?.ok ?? false;
+          errMsg = ds?.registrarSalida?.errores ?? "Error al finalizar";
+        }
+        if (!ok) throw new Error(errMsg);
         Swal.fire({
           background: "#fff",
           icon: "success",
@@ -403,7 +421,7 @@ function ModalQR({ turno, modo, onClose }) {
                   <div
                     className={`flex items-center gap-2 text-xs font-dm font-semibold px-3 py-1.5 rounded-full ${
                       qrExpirado
-                        ? "bg-red-50 text-red-500"
+                        ? "bg-amber-50 text-amber-600"
                         : segundos !== null && segundos < 60
                           ? "bg-amber-50 text-amber-600"
                           : "bg-stone-100 text-stone-500"
@@ -411,7 +429,7 @@ function ModalQR({ turno, modo, onClose }) {
                   >
                     <Timer size={11} />
                     {qrExpirado
-                      ? "QR vencido — usa acción manual"
+                      ? "QR vencido — registra la salida manualmente abajo"
                       : `Expira en ${fmtExpira(segundos)}`}
                   </div>
                 )}
@@ -987,39 +1005,35 @@ function AlertaCard({ alerta }) {
     /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
     (uuid) => `…${uuid.slice(-8)}`,
   );
-  // Para orden_compra: limpiar UUIDs y total 0.0 — mostrar solo lo esencial
-  if (alerta.tipo === "orden_compra") {
+  // Si es una orden de compra con total 0, mejorar el mensaje
+  if (alerta.tipo === "orden_compra" && mensaje.includes("total 0.0")) {
     mensaje = mensaje.replace(/ \| total 0\.0 [A-Z]+/, "");
-    // El nombre real del proveedor no viene en el evento — usar referencia limpia
-    mensaje = mensaje.replace(/— proveedor …[0-9a-f]+/i, "");
-    mensaje = mensaje.trim().replace(/—\s*$/, "").trim();
   }
+  // Limpiar "proveedor …XXXXXXXX" por "proveedor"
+  // El nombre real no está en el evento — quitar el UUID residual
+  mensaje = mensaje.replace(/— proveedor …[0-9a-f]+/i, "— orden generada");
 
   const [expanded, setExpanded] = useState(false);
   const larga = mensaje.length > 80;
-  const esOrdenCompra = alerta.tipo === "orden_compra";
-  const cardBg = cfg.bg;
-  const cardBorder = cfg.border;
-  const cardText = cfg.text;
 
   return (
     <div
       className="rounded-2xl border overflow-hidden"
-      style={{ background: cardBg, borderColor: cardBorder }}
+      style={{ background: cfg.bg, borderColor: cfg.border }}
     >
       <div className="flex items-start gap-3 px-4 py-3">
         <div
           className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-          style={{ background: `${cardText}18` }}
+          style={{ background: `${cfg.text}18` }}
         >
-          <Icon size={14} style={{ color: cardText }} />
+          <Icon size={14} style={{ color: cfg.text }} />
         </div>
         <div className="flex-1 min-w-0">
           {/* Nivel + tipo */}
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span
               className="text-[10px] font-dm font-bold px-2 py-0.5 rounded-full"
-              style={{ background: `${cardText}18`, color: cardText }}
+              style={{ background: `${cfg.text}18`, color: cfg.text }}
             >
               {alerta.nivelDisplay ?? nivel}
             </span>
@@ -1037,7 +1051,7 @@ function AlertaCard({ alerta }) {
             <button
               onClick={() => setExpanded(!expanded)}
               className="text-[10px] font-dm font-semibold mt-1 flex items-center gap-0.5"
-              style={{ color: cardText }}
+              style={{ color: cfg.text }}
             >
               {expanded ? (
                 <>
@@ -1201,7 +1215,7 @@ export default function SStaffList() {
   }, [turnos, cancelarTurno]);
 
   // ── Ventana de salida: QR habilitado -15min antes del fechaFin ────────────
-  // Si turno ACTIVO pasa +15min de fechaFin sin registrar salida → cancelar
+  // Si turno ACTIVO pasa +30min de fechaFin sin registrar salida → cancelar
   const autoCancelSalidaRef = useRef(new Set());
   useEffect(() => {
     if (!qrModal) {
@@ -1218,12 +1232,12 @@ export default function SStaffList() {
       }
     }
 
-    // Auto-cancelar turnos activos que llevan +15min después de su fechaFin sin salida
+    // Auto-cancelar turnos activos que llevan +30min después de su fechaFin sin salida
     const vencidos = turnos.filter((t) => {
       if (t.estado !== "activo") return false;
       if (autoCancelSalidaRef.current.has(t.id)) return false;
       const pasados = minutosDesde(t.fechaFin);
-      return pasados !== null && pasados >= 15;
+      return pasados !== null && pasados >= 30;
     });
 
     vencidos.forEach(async (t) => {
@@ -1513,10 +1527,10 @@ export default function SStaffList() {
                       <tr className="border-b border-stone-100 bg-stone-50/50">
                         {[
                           "Empleado",
-                          "Entrada",
+                          "Inicio turno",
                           "Fin turno",
                           "Estado",
-                          "Trabajadas",
+                          "Horas",
                         ].map((l) => (
                           <th
                             key={l}
@@ -1553,16 +1567,13 @@ export default function SStaffList() {
                                 })}
                               </td>
                               <td className="py-3 px-3 text-sm font-dm text-stone-500">
-                                {new Date(t.fechaFin).toLocaleTimeString(
-                                  "es-CO",
-                                  { hour: "2-digit", minute: "2-digit" },
-                                )}
-                              </td>
-                              <td className="py-3 px-3">
                                 <span className="flex items-center gap-1 text-emerald-600 font-semibold text-xs">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                   En curso
                                 </span>
+                              </td>
+                              <td className="py-3 px-3 text-[10px] font-dm text-stone-400">
+                                Sin QR
                               </td>
                               <td className="py-3 pr-5 pl-3 text-sm font-dm font-semibold text-stone-700">
                                 {h > 0 ? `${h}h ${m}m` : `${m}m`}

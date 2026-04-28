@@ -180,6 +180,7 @@ export default function CreatePlatoWizard({
             precio={precio}
             setPrecio={setPrecio}
             moneda={moneda}
+            ings={ings}
           />
         )}
         {step === 2 && (

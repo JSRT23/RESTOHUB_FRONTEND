@@ -220,6 +220,20 @@ export const CANCELAR_TURNO = gql`
   }
 `;
 
+export const COMPLETAR_TURNO = gql`
+  mutation CompletarTurno($turnoId: ID!) {
+    completarTurno(turnoId: $turnoId) {
+      ok
+      turno {
+        id
+        estado
+        estadoDisplay
+      }
+      errores
+    }
+  }
+`;
+
 export const REGISTRAR_SALIDA = gql`
   mutation RegistrarSalida($turnoId: ID!) {
     registrarSalida(turnoId: $turnoId) {
