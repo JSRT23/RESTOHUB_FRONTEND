@@ -1,21 +1,16 @@
-// src/features/inventory/components/gerente/GOrdenesCompra.jsx
+// src/features/inventory/components/Gerente/GOrdenesCompra.jsx
 //
-// Gestión completa de órdenes de compra para gerente_local.
-// Flujo: Lista → Crear (wizard 3 pasos inline) → Detalle (modal) → Recepción
+// FLUJO COMPLETO:
+// 1. CREAR ORDEN  → elige proveedor + ingredientes + cantidades + precios → BORRADOR
+// 2. ENVIAR       → BORRADOR → ENVIADA (se notifica al proveedor)
+// 3. RECIBIR      → ENVIADA → llena nº lote + fecha vencimiento + cantidad real → RECIBIDA
+//                  → backend crea lotes, actualiza stock y actualiza costo_unitario en RecetaPlato
+//                  → ahora el cálculo de precio por margen usa costos reales
 //
-// Diferencias vs. OrdenesCompra del admin:
-//  · restauranteId se inyecta del JWT en el gateway — no se envía desde el frontend
-//  · Ingredientes = GET_INGREDIENTES_DISPONIBLES (globales + del restaurante)
-//  · Proveedores = los que el gateway filtra para el gerente (scope automático)
-//  · Design system verde (G[900]) en lugar de ámbar
-//  · Estados uppercase: BORRADOR | PENDIENTE | ENVIADA | RECIBIDA | CANCELADA
-//
-// Ruta: /gerente/ordenes
-// index.jsx:
-//   import GOrdenesCompra from "../../features/inventory/components/gerente/GOrdenesCompra";
-//   { path: "gerente/ordenes", element: <RoleRoute roles={["gerente_local"]}><GOrdenesCompra /></RoleRoute> }
+// FIX CRÍTICO: useState lazy init no capturaba orden (llegaba undefined en primer render)
+//              → reemplazado por useEffect que re-inicializa cuando orden.detalles llega
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { gql } from "@apollo/client";
 import { useQuery, useMutation } from "@apollo/client/react";
 import {
@@ -32,12 +27,13 @@ import {
   ArrowLeft,
   Coins,
   FlaskConical,
-  ChevronDown,
   CalendarDays,
   FileText,
   ReceiptText,
   AlertTriangle,
-  Eye,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import {
@@ -46,7 +42,6 @@ import {
   GET_PROVEEDORES,
 } from "../../graphql/queries";
 import {
-  CREAR_ORDEN_COMPRA,
   ENVIAR_ORDEN_COMPRA,
   RECIBIR_ORDEN_COMPRA,
   CANCELAR_ORDEN_COMPRA,
@@ -76,32 +71,41 @@ const G = {
   900: "#051F20",
 };
 
-// ── Config de estados ─────────────────────────────────────────────────────
 const ESTADOS = {
   BORRADOR: {
     label: "Borrador",
     variant: "default",
     icon: Clock,
     color: "#64748b",
+    tip: "Aún no enviada al proveedor. Puedes editarla.",
   },
   PENDIENTE: {
     label: "Pendiente",
     variant: "amber",
     icon: Clock,
     color: "#d97706",
+    tip: "En espera.",
   },
-  ENVIADA: { label: "Enviada", variant: "blue", icon: Truck, color: "#3b82f6" },
+  ENVIADA: {
+    label: "Enviada",
+    variant: "blue",
+    icon: Truck,
+    color: "#3b82f6",
+    tip: "Enviada al proveedor. Cuando llegue, registra la recepción.",
+  },
   RECIBIDA: {
     label: "Recibida",
     variant: "green",
     icon: CheckCircle2,
     color: "#16a34a",
+    tip: "Mercancía recibida. Stock y costos actualizados.",
   },
   CANCELADA: {
     label: "Cancelada",
     variant: "red",
     icon: XCircle,
     color: "#dc2626",
+    tip: "Cancelada.",
   },
 };
 
@@ -152,6 +156,36 @@ function Field({ icon: Icon, label, required, hint, children }) {
   );
 }
 
+// ── Mutation para gerente (sin $restauranteId — lo inyecta el gateway del JWT) ─
+const CREAR_ORDEN_GERENTE = gql`
+  mutation CrearOrdenCompraGerente(
+    $proveedorId: ID!
+    $moneda: String!
+    $detalles: [DetalleOrdenInput!]!
+    $fechaEntregaEstimada: String
+    $notas: String
+  ) {
+    crearOrdenCompra(
+      proveedorId: $proveedorId
+      moneda: $moneda
+      detalles: $detalles
+      fechaEntregaEstimada: $fechaEntregaEstimada
+      notas: $notas
+    ) {
+      ok
+      error
+      orden {
+        id
+        estado
+        totalEstimado
+        moneda
+        proveedorNombre
+        fechaCreacion
+      }
+    }
+  }
+`;
+
 // ── OrdenCard ─────────────────────────────────────────────────────────────
 function OrdenCard({ orden, onClick }) {
   const cfg = ESTADOS[orden.estado] ?? ESTADOS.BORRADOR;
@@ -165,7 +199,7 @@ function OrdenCard({ orden, onClick }) {
       <div
         className="h-1"
         style={{
-          background: `linear-gradient(90deg, ${cfg.color}99, ${cfg.color}44)`,
+          background: `linear-gradient(90deg,${cfg.color}99,${cfg.color}33)`,
         }}
       />
       <div className="p-5 space-y-3">
@@ -175,7 +209,7 @@ function OrdenCard({ orden, onClick }) {
               {orden.proveedorNombre}
             </p>
             <p className="text-[10px] font-dm text-stone-400 mt-0.5">
-              OC-{orden.id.slice(0, 8)}
+              OC-{orden.id.slice(0, 8).toUpperCase()}
             </p>
           </div>
           <Badge variant={cfg.variant} size="xs">
@@ -188,23 +222,19 @@ function OrdenCard({ orden, onClick }) {
             <p className="font-playfair text-xl font-bold text-stone-900">
               {fmt(orden.totalEstimado, orden.moneda)}
             </p>
-            <p className="text-[10px] font-dm text-stone-400">
-              {orden.moneda} · {orden.detalles?.length ?? 0} ítem(s)
-            </p>
+            <p className="text-[10px] font-dm text-stone-400">{orden.moneda}</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs font-dm text-stone-400">
-              {fmtDate(orden.fechaCreacion)}
-            </p>
-            {orden.fechaEntregaEstimada && (
-              <p className="text-[10px] font-dm text-stone-400">
-                Entrega: {fmtDate(orden.fechaEntregaEstimada)}
-              </p>
-            )}
-          </div>
+          <p className="text-xs font-dm text-stone-400">
+            {fmtDate(orden.fechaCreacion)}
+          </p>
         </div>
 
-        <div className="flex items-center justify-end pt-1 border-t border-stone-100">
+        {/* Tip del estado */}
+        <p className="text-[10px] font-dm text-stone-400 italic border-t border-stone-100 pt-2">
+          {cfg.tip}
+        </p>
+
+        <div className="flex items-center justify-end">
           <span
             className="text-xs font-dm font-semibold flex items-center gap-1 group-hover:gap-1.5 transition-all"
             style={{ color: G[300] }}
@@ -218,40 +248,51 @@ function OrdenCard({ orden, onClick }) {
 }
 
 // ── Modal Recepción ───────────────────────────────────────────────────────
+// FIX: useEffect re-inicializa cuando llegan los detalles (useState lazy init
+//      solo corría una vez y orden llegaba undefined)
 function ModalRecepcion({ open, onClose, orden, onDone }) {
-  const [recepcion, setRecepcion] = useState(
-    () =>
-      orden?.detalles?.map((d) => ({
-        detalleId: d.id,
-        nombreIngrediente: d.nombreIngrediente,
-        cantidadPedida: parseFloat(d.cantidad),
-        unidadMedida: d.unidadMedida,
-        cantidadRecibida: String(d.cantidad),
-        numeroLote: "",
-        fechaVencimiento: "",
-        fechaProduccion: "",
-      })) ?? [],
-  );
+  const buildRows = (ord) =>
+    ord?.detalles?.map((d) => ({
+      detalleId: d.id,
+      nombreIngrediente: d.nombreIngrediente,
+      unidadMedida: d.unidadMedida,
+      cantidadPedida: parseFloat(d.cantidad),
+      cantidadRecibida: String(d.cantidad), // pre-rellena con la cantidad pedida
+      numeroLote: "",
+      fechaVencimiento: "",
+      fechaProduccion: "",
+    })) ?? [];
+
+  const [rows, setRows] = useState([]);
   const [notas, setNotas] = useState("");
 
+  // ← ESTE es el fix: reinicializa cuando llegan los detalles
+  useEffect(() => {
+    if (orden?.detalles?.length) {
+      setRows(buildRows(orden));
+      setNotas("");
+    }
+  }, [orden?.id, orden?.detalles?.length]);
+
   const [recibir, { loading }] = useMutation(RECIBIR_ORDEN_COMPRA, {
-    refetchQueries: ["GetOrdenesCompra"],
+    refetchQueries: ["GetOrdenesCompra", "GetOrdenCompra"],
   });
 
-  const setField = (idx, k, v) =>
-    setRecepcion((r) => r.map((x, i) => (i === idx ? { ...x, [k]: v } : x)));
+  const set = (idx, k, v) =>
+    setRows((r) => r.map((x, i) => (i === idx ? { ...x, [k]: v } : x)));
 
-  const canSubmit = recepcion.every(
-    (r) => r.cantidadRecibida && r.numeroLote && r.fechaVencimiento,
-  );
+  const canSubmit =
+    rows.length > 0 &&
+    rows.every((r) => r.cantidadRecibida && r.numeroLote && r.fechaVencimiento);
 
   const handleSubmit = async () => {
+    if (!canSubmit) return;
     try {
       const { data } = await recibir({
         variables: {
           id: orden.id,
           notas: notas || null,
-          detalles: recepcion.map((r) => ({
+          detalles: rows.map((r) => ({
             detalleId: r.detalleId,
             cantidadRecibida: parseFloat(r.cantidadRecibida),
             numeroLote: r.numeroLote,
@@ -261,14 +302,19 @@ function ModalRecepcion({ open, onClose, orden, onDone }) {
         },
       });
       if (!data?.recibirOrdenCompra?.ok)
-        throw new Error(data?.recibirOrdenCompra?.error);
-      Swal.fire({
+        throw new Error(data?.recibirOrdenCompra?.error ?? "Error desconocido");
+
+      await Swal.fire({
         background: "#fff",
         icon: "success",
         title: "¡Mercancía recibida!",
-        html: `<span style="font-family:'DM Sans';color:#78716c">Los lotes han sido registrados en el almacén.</span>`,
+        html: `<span style="font-family:'DM Sans';color:#78716c">
+          Los lotes fueron registrados en el almacén.<br/>
+          El <b>costo unitario</b> de cada ingrediente se actualizó automáticamente.<br/>
+          Ahora puedes calcular el precio de los platos por margen de ganancia.
+        </span>`,
         confirmButtonColor: G[900],
-        timer: 2000,
+        timer: 3500,
         timerProgressBar: true,
       });
       onDone();
@@ -283,97 +329,136 @@ function ModalRecepcion({ open, onClose, orden, onDone }) {
     }
   };
 
-  if (!orden) return null;
+  if (!open) return null;
 
   return (
-    <Modal open={open} onClose={onClose} title="Registrar recepción" size="lg">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Registrar recepción de mercancía"
+      size="lg"
+    >
       <div className="space-y-4">
+        {/* Banner informativo */}
         <div
           className="flex items-start gap-2.5 p-3 rounded-xl border"
           style={{ background: "#eff6ff", borderColor: "#bfdbfe" }}
         >
-          <Package size={13} className="text-blue-500 mt-0.5 shrink-0" />
-          <p className="text-xs font-dm text-blue-700 leading-relaxed">
-            Completa los datos de recepción por cada ítem. Se crearán los lotes
-            automáticamente en tu almacén.
-          </p>
+          <Info size={14} className="text-blue-500 mt-0.5 shrink-0" />
+          <div className="text-xs font-dm text-blue-700 space-y-0.5">
+            <p className="font-semibold">¿Qué sucede al confirmar?</p>
+            <p>✓ Se crean los lotes en tu almacén con fecha de vencimiento</p>
+            <p>✓ El stock de cada ingrediente aumenta automáticamente</p>
+            <p>
+              ✓ El costo unitario en la receta de cada plato se actualiza con el
+              precio de esta orden
+            </p>
+          </div>
         </div>
 
-        <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1">
-          {recepcion.map((r, idx) => (
-            <div
-              key={r.detalleId}
-              className="bg-white rounded-xl border border-stone-200 p-4 space-y-3"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FlaskConical size={13} style={{ color: G[300] }} />
-                  <p className="text-sm font-dm font-semibold text-stone-800">
-                    {r.nombreIngrediente}
-                  </p>
+        {rows.length === 0 ? (
+          <div className="py-8 text-center">
+            <p className="text-sm font-dm text-stone-400">
+              Cargando ítems de la orden…
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1">
+            {rows.map((r, idx) => (
+              <div
+                key={r.detalleId}
+                className="bg-white rounded-xl border border-stone-200 p-4 space-y-3"
+              >
+                {/* Header del ítem */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center"
+                      style={{ background: G[50] }}
+                    >
+                      <FlaskConical size={13} style={{ color: G[300] }} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-dm font-semibold text-stone-800">
+                        {r.nombreIngrediente}
+                      </p>
+                      <p className="text-[10px] font-dm text-stone-400">
+                        {r.unidadMedida}
+                      </p>
+                    </div>
+                  </div>
                   <span className="text-xs font-dm text-stone-400">
-                    {r.unidadMedida}
+                    Pedido:{" "}
+                    <b className="text-stone-600">
+                      {r.cantidadPedida} {r.unidadMedida}
+                    </b>
                   </span>
                 </div>
-                <span className="text-xs font-dm text-stone-400">
-                  Pedido: <b className="text-stone-600">{r.cantidadPedida}</b>
-                </span>
+
+                {/* Campos */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <Field
+                    icon={Package}
+                    label="Cant. recibida"
+                    required
+                    hint={`Máx: ${r.cantidadPedida} ${r.unidadMedida}`}
+                  >
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      className={icls}
+                      onFocus={fi}
+                      onBlur={fb}
+                      value={r.cantidadRecibida}
+                      onChange={(e) =>
+                        set(idx, "cantidadRecibida", e.target.value)
+                      }
+                    />
+                  </Field>
+                  <Field icon={FileText} label="Nº de lote" required>
+                    <input
+                      className={icls}
+                      onFocus={fi}
+                      onBlur={fb}
+                      placeholder="LOTE-001"
+                      value={r.numeroLote}
+                      onChange={(e) => set(idx, "numeroLote", e.target.value)}
+                    />
+                  </Field>
+                  <Field icon={CalendarDays} label="Fecha vencimiento" required>
+                    <input
+                      type="date"
+                      className={icls}
+                      onFocus={fi}
+                      onBlur={fb}
+                      value={r.fechaVencimiento}
+                      onChange={(e) =>
+                        set(idx, "fechaVencimiento", e.target.value)
+                      }
+                    />
+                  </Field>
+                  <Field
+                    icon={CalendarDays}
+                    label="Fecha producción"
+                    hint="Opcional"
+                  >
+                    <input
+                      type="date"
+                      className={icls}
+                      onFocus={fi}
+                      onBlur={fb}
+                      value={r.fechaProduccion}
+                      onChange={(e) =>
+                        set(idx, "fechaProduccion", e.target.value)
+                      }
+                    />
+                  </Field>
+                </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <Field icon={Package} label="Cant. recibida" required>
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    className={icls}
-                    onFocus={fi}
-                    onBlur={fb}
-                    value={r.cantidadRecibida}
-                    onChange={(e) =>
-                      setField(idx, "cantidadRecibida", e.target.value)
-                    }
-                  />
-                </Field>
-                <Field icon={FileText} label="Nº de lote" required>
-                  <input
-                    className={icls}
-                    onFocus={fi}
-                    onBlur={fb}
-                    value={r.numeroLote}
-                    onChange={(e) =>
-                      setField(idx, "numeroLote", e.target.value)
-                    }
-                    placeholder="LOTE-001"
-                  />
-                </Field>
-                <Field icon={CalendarDays} label="Vencimiento" required>
-                  <input
-                    type="date"
-                    className={icls}
-                    onFocus={fi}
-                    onBlur={fb}
-                    value={r.fechaVencimiento}
-                    onChange={(e) =>
-                      setField(idx, "fechaVencimiento", e.target.value)
-                    }
-                  />
-                </Field>
-                <Field icon={CalendarDays} label="Producción">
-                  <input
-                    type="date"
-                    className={icls}
-                    onFocus={fi}
-                    onBlur={fb}
-                    value={r.fechaProduccion}
-                    onChange={(e) =>
-                      setField(idx, "fechaProduccion", e.target.value)
-                    }
-                  />
-                </Field>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <Field icon={FileText} label="Notas de recepción">
           <textarea
@@ -383,7 +468,7 @@ function ModalRecepcion({ open, onClose, orden, onDone }) {
             onBlur={fb}
             value={notas}
             onChange={(e) => setNotas(e.target.value)}
-            placeholder="Observaciones sobre el estado de la mercancía…"
+            placeholder="Ej: Carne en buen estado, temperatura correcta…"
           />
         </Field>
 
@@ -399,7 +484,7 @@ function ModalRecepcion({ open, onClose, orden, onDone }) {
           <Button
             size="sm"
             loading={loading}
-            disabled={!canSubmit}
+            disabled={!canSubmit || rows.length === 0}
             onClick={handleSubmit}
           >
             <CheckCircle2 size={13} /> Confirmar recepción
@@ -410,35 +495,36 @@ function ModalRecepcion({ open, onClose, orden, onDone }) {
   );
 }
 
-// ── Modal Detalle de orden ────────────────────────────────────────────────
+// ── Modal Detalle ─────────────────────────────────────────────────────────
 function ModalDetalle({ open, onClose, ordenId }) {
   const { data, loading } = useQuery(GET_ORDEN_COMPRA, {
     variables: { id: ordenId },
     skip: !ordenId || !open,
+    fetchPolicy: "cache-and-network",
   });
-  const [mostrarRecepcion, setMostrarRecepcion] = useState(false);
+  const [showRecepcion, setShowRecepcion] = useState(false);
 
   const [enviar, { loading: enviando }] = useMutation(ENVIAR_ORDEN_COMPRA, {
     refetchQueries: ["GetOrdenesCompra", "GetOrdenCompra"],
   });
   const [cancelar, { loading: cancelando }] = useMutation(
     CANCELAR_ORDEN_COMPRA,
-    { refetchQueries: ["GetOrdenesCompra", "GetOrdenCompra"] },
+    {
+      refetchQueries: ["GetOrdenesCompra", "GetOrdenCompra"],
+    },
   );
 
-  if (!open) return null;
   const orden = data?.ordenCompra;
   const cfg = orden
     ? (ESTADOS[orden.estado?.toUpperCase()] ?? ESTADOS.BORRADOR)
     : null;
-  const CIcon = cfg?.icon ?? Clock;
 
   const handleEnviar = async () => {
     const { isConfirmed } = await Swal.fire({
       background: "#fff",
       icon: "question",
       title: "¿Enviar orden al proveedor?",
-      html: `<span style="font-family:'DM Sans';color:#78716c">El estado cambiará a <b>ENVIADA</b>. El proveedor deberá confirmar entrega.</span>`,
+      html: `<span style="font-family:'DM Sans';color:#78716c">El estado cambiará a <b>ENVIADA</b>. Cuando llegue la mercancía regresa aquí y haz clic en <b>Registrar recepción</b>.</span>`,
       showCancelButton: true,
       confirmButtonColor: G[900],
       cancelButtonColor: "#e5e7eb",
@@ -449,17 +535,16 @@ function ModalDetalle({ open, onClose, ordenId }) {
     try {
       const { data: res } = await enviar({ variables: { id: ordenId } });
       if (!res?.enviarOrdenCompra?.ok)
-        throw new Error(res?.enviarOrdenCompra?.error ?? "Error desconocido");
+        throw new Error(res?.enviarOrdenCompra?.error);
       Swal.fire({
         background: "#fff",
         icon: "success",
         title: "¡Orden enviada!",
-        html: `<span style="font-family:'DM Sans';color:#78716c">La orden cambió a estado <b>ENVIADA</b>.</span>`,
+        html: `<span style="font-family:'DM Sans';color:#78716c">Ahora espera a que el proveedor entregue y registra la recepción.</span>`,
         confirmButtonColor: G[900],
-        timer: 1800,
+        timer: 2000,
         timerProgressBar: true,
       });
-      onClose();
     } catch (err) {
       Swal.fire({
         background: "#fff",
@@ -487,12 +572,11 @@ function ModalDetalle({ open, onClose, ordenId }) {
     try {
       const { data: res } = await cancelar({ variables: { id: ordenId } });
       if (!res?.cancelarOrdenCompra?.ok)
-        throw new Error(res?.cancelarOrdenCompra?.error ?? "Error desconocido");
+        throw new Error(res?.cancelarOrdenCompra?.error);
       Swal.fire({
         background: "#fff",
         icon: "success",
         title: "Orden cancelada",
-        html: `<span style="font-family:'DM Sans';color:#78716c">La orden fue cancelada correctamente.</span>`,
         confirmButtonColor: G[900],
         timer: 1800,
         timerProgressBar: true,
@@ -509,10 +593,13 @@ function ModalDetalle({ open, onClose, ordenId }) {
     }
   };
 
+  if (!open) return null;
+  const CIcon = cfg?.icon ?? Clock;
+
   return (
     <>
       <Modal
-        open={open && !mostrarRecepcion}
+        open={open && !showRecepcion}
         onClose={onClose}
         title="Detalle de orden de compra"
         size="lg"
@@ -531,14 +618,52 @@ function ModalDetalle({ open, onClose, ordenId }) {
                   {orden.proveedorNombre}
                 </p>
                 <p className="text-xs font-dm text-stone-400 mt-0.5">
-                  OC-{orden.id.slice(0, 8)} · {orden.moneda}
+                  OC-{orden.id.slice(0, 8).toUpperCase()} · {orden.moneda}
                   {orden.fechaCreacion && ` · ${fmtDate(orden.fechaCreacion)}`}
                 </p>
               </div>
-              <Badge variant={cfg.variant} size="md">
-                <CIcon size={11} /> {cfg.label}
-              </Badge>
+              <div className="flex flex-col items-end gap-1">
+                <Badge variant={cfg.variant} size="md">
+                  <CIcon size={11} /> {cfg.label}
+                </Badge>
+                <p className="text-[10px] font-dm text-stone-400 italic">
+                  {cfg.tip}
+                </p>
+              </div>
             </div>
+
+            {/* Banner flujo — guía al gerente */}
+            {orden.estado === "ENVIADA" && (
+              <div
+                className="flex items-start gap-2.5 p-3 rounded-xl border"
+                style={{ background: "#eff6ff", borderColor: "#bfdbfe" }}
+              >
+                <Truck size={14} className="text-blue-500 mt-0.5 shrink-0" />
+                <p className="text-xs font-dm text-blue-700">
+                  La orden fue enviada al proveedor. Cuando llegue la mercancía,
+                  haz clic en <strong>Registrar recepción</strong> para
+                  actualizar el stock y los costos.
+                </p>
+              </div>
+            )}
+            {orden.estado === "RECIBIDA" && (
+              <div
+                className="flex items-start gap-2.5 p-3 rounded-xl border"
+                style={{ background: G[50], borderColor: G[100] }}
+              >
+                <CheckCircle2
+                  size={14}
+                  style={{ color: G[300] }}
+                  className="mt-0.5 shrink-0"
+                />
+                <p className="text-xs font-dm" style={{ color: G[500] }}>
+                  ✓ Stock actualizado · ✓ Costos de producción actualizados · ✓
+                  Lotes registrados. Ahora puedes ir a{" "}
+                  <strong>Platos → Precio</strong> y calcular el precio por
+                  margen de ganancia.
+                </p>
+              </div>
+            )}
 
             {/* Ítems */}
             <div className="rounded-2xl border border-stone-200 overflow-hidden">
@@ -570,7 +695,7 @@ function ModalDetalle({ open, onClose, ordenId }) {
                         @ {fmt(d.precioUnitario, orden.moneda)}
                       </p>
                     </div>
-                    <div className="text-right shrink-0 min-w-[80px]">
+                    <div className="text-right shrink-0 min-w-[90px]">
                       <p className="text-sm font-playfair text-stone-900 font-bold">
                         {fmt(d.subtotal, orden.moneda)}
                       </p>
@@ -646,8 +771,7 @@ function ModalDetalle({ open, onClose, ordenId }) {
                 Cerrar
               </Button>
               <div className="flex gap-2">
-                {(orden.estado === "BORRADOR" ||
-                  orden.estado === "PENDIENTE") && (
+                {["BORRADOR", "PENDIENTE"].includes(orden.estado) && (
                   <>
                     <Button
                       variant="danger"
@@ -655,7 +779,7 @@ function ModalDetalle({ open, onClose, ordenId }) {
                       loading={cancelando}
                       onClick={handleCancelar}
                     >
-                      <XCircle size={13} /> Cancelar
+                      <XCircle size={13} /> Cancelar orden
                     </Button>
                     <Button size="sm" loading={enviando} onClick={handleEnviar}>
                       <Send size={13} /> Enviar al proveedor
@@ -663,7 +787,7 @@ function ModalDetalle({ open, onClose, ordenId }) {
                   </>
                 )}
                 {orden.estado === "ENVIADA" && (
-                  <Button size="sm" onClick={() => setMostrarRecepcion(true)}>
+                  <Button size="sm" onClick={() => setShowRecepcion(true)}>
                     <Package size={13} /> Registrar recepción
                   </Button>
                 )}
@@ -673,51 +797,19 @@ function ModalDetalle({ open, onClose, ordenId }) {
         )}
       </Modal>
 
-      {/* Modal de recepción encadenado */}
+      {/* Modal de recepción */}
       <ModalRecepcion
-        open={mostrarRecepcion}
-        onClose={() => setMostrarRecepcion(false)}
+        open={showRecepcion}
+        onClose={() => setShowRecepcion(false)}
         orden={data?.ordenCompra}
         onDone={() => {
-          setMostrarRecepcion(false);
+          setShowRecepcion(false);
           onClose();
         }}
       />
     </>
   );
 }
-
-// ── Mutation del gerente: sin restauranteId (el gateway lo inyecta del JWT) ─
-// NO usar CREAR_ORDEN_COMPRA de mutations.js — tiene $restauranteId: ID! como
-// requerido y Apollo rechaza la mutation localmente si no se pasa ese campo.
-const CREAR_ORDEN_COMPRA_GERENTE = gql`
-  mutation CrearOrdenCompraGerente(
-    $proveedorId: ID!
-    $moneda: String!
-    $detalles: [DetalleOrdenInput!]!
-    $fechaEntregaEstimada: String
-    $notas: String
-  ) {
-    crearOrdenCompra(
-      proveedorId: $proveedorId
-      moneda: $moneda
-      detalles: $detalles
-      fechaEntregaEstimada: $fechaEntregaEstimada
-      notas: $notas
-    ) {
-      ok
-      error
-      orden {
-        id
-        estado
-        totalEstimado
-        moneda
-        proveedorNombre
-        fechaCreacion
-      }
-    }
-  }
-`;
 
 // ── Wizard de creación ────────────────────────────────────────────────────
 function CreateOrdenWizard({
@@ -750,22 +842,17 @@ function CreateOrdenWizard({
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
-  const [crearOrden, { loading }] = useMutation(CREAR_ORDEN_COMPRA_GERENTE, {
+  const [crearOrden, { loading }] = useMutation(CREAR_ORDEN_GERENTE, {
     refetchQueries: ["GetOrdenesCompra"],
   });
 
   const proveedores = provData?.proveedores ?? [];
   const ingredientes = ingData?.ingredientes ?? [];
-
   const total = items.reduce(
-    (acc, i) =>
-      acc + (parseFloat(i.cantidad) || 0) * (parseFloat(i.precioUnitario) || 0),
+    (acc, i) => acc + i.cantidad * i.precioUnitario,
     0,
   );
   const proveedor = proveedores.find((p) => p.id === form.proveedorId);
-
-  const canNext0 = !!form.proveedorId && !!form.moneda;
-  const canNext1 = items.length > 0;
 
   const addItem = () => {
     if (
@@ -793,14 +880,11 @@ function CreateOrdenWizard({
     });
   };
 
-  const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
-
   const handleSubmit = async () => {
     try {
       const { data: res } = await crearOrden({
         variables: {
           proveedorId: form.proveedorId,
-          // restauranteId se inyecta del JWT en el gateway
           moneda: form.moneda,
           fechaEntregaEstimada: form.fechaEntregaEstimada || null,
           notas: form.notas || null,
@@ -819,7 +903,10 @@ function CreateOrdenWizard({
         background: "#fff",
         icon: "success",
         title: "¡Orden creada!",
-        html: `<span style="font-family:'DM Sans';color:#78716c">Total: ${fmt(total, form.moneda)} · ${items.length} ítem(s)<br/>La orden está en estado <b>BORRADOR</b>. Ábrela para enviarla.</span>`,
+        html: `<span style="font-family:'DM Sans';color:#78716c">
+          Total: <b>${fmt(total, form.moneda)}</b> · ${items.length} ítem(s)<br/>
+          Ahora ábrela y haz clic en <b>Enviar al proveedor</b>.
+        </span>`,
         confirmButtonColor: G[900],
         confirmButtonText: "Ver órdenes",
       });
@@ -837,7 +924,7 @@ function CreateOrdenWizard({
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header del wizard */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -866,7 +953,19 @@ function CreateOrdenWizard({
 
       <StepIndicator steps={STEPS} current={step} />
 
-      {/* Card del paso */}
+      {/* Banner guía */}
+      <div
+        className="flex items-start gap-2.5 p-3 rounded-xl border"
+        style={{ background: "#eff6ff", borderColor: "#bfdbfe" }}
+      >
+        <Info size={13} className="text-blue-500 mt-0.5 shrink-0" />
+        <p className="text-xs font-dm text-blue-700">
+          <strong>Flujo:</strong> Crea la orden → Envíala al proveedor → Cuando
+          llegue la mercancía, regresa y registra la recepción → Stock y costos
+          se actualizan automáticamente.
+        </p>
+      </div>
+
       <div
         className="bg-white rounded-2xl border border-stone-200 p-6 space-y-5"
         style={{
@@ -882,7 +981,7 @@ function CreateOrdenWizard({
                 Proveedor y configuración
               </h3>
               <p className="text-stone-400 text-sm mt-0.5 font-dm">
-                Selecciona el proveedor y la moneda de la orden.
+                Selecciona a quién le vas a comprar y en qué moneda.
               </p>
             </div>
 
@@ -899,10 +998,17 @@ function CreateOrdenWizard({
                 <option value="">Selecciona un proveedor…</option>
                 {proveedores.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.nombre} {p.ciudad ? `· ${p.ciudad}` : ""}
+                    {p.nombre}
+                    {p.ciudad ? ` · ${p.ciudad}` : ""}
                   </option>
                 ))}
               </select>
+              {proveedores.length === 0 && (
+                <p className="text-[11px] font-dm text-amber-600 mt-1 flex items-center gap-1">
+                  <AlertTriangle size={10} /> Sin proveedores. Crea uno en{" "}
+                  <b>Inventario → Proveedores</b>.
+                </p>
+              )}
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
@@ -943,7 +1049,7 @@ function CreateOrdenWizard({
                 onBlur={fb}
                 value={form.notas}
                 onChange={(e) => setForm({ ...form, notas: e.target.value })}
-                placeholder="Instrucciones especiales de entrega, empaque, etc."
+                placeholder="Instrucciones de entrega, empaque, calidad esperada…"
               />
             </Field>
           </div>
@@ -957,19 +1063,20 @@ function CreateOrdenWizard({
                 Ítems de la orden
               </h3>
               <p className="text-stone-400 text-sm mt-0.5 font-dm">
-                Agrega los ingredientes que necesitas comprar.
+                Agrega los ingredientes. El precio por unidad que pongas aquí se
+                usará para calcular el costo de producción de los platos.
               </p>
             </div>
 
-            {/* Formulario de agregar ítem */}
+            {/* Formulario de ítem */}
             <div
               className="rounded-2xl border border-stone-200 p-4 space-y-3"
               style={{ background: "#fafaf9" }}
             >
               <p className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
-                Agregar ítem
+                Agregar ingrediente
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px_110px] gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px_120px] gap-3">
                 <Field icon={FlaskConical} label="Ingrediente">
                   <select
                     className={icls + " appearance-none cursor-pointer"}
@@ -1017,6 +1124,7 @@ function CreateOrdenWizard({
                 <Field
                   icon={Coins}
                   label={`Precio/${itemForm.unidadMedida || "und"}`}
+                  hint="Precio que pagas al proveedor"
                 >
                   <input
                     type="number"
@@ -1095,14 +1203,15 @@ function CreateOrdenWizard({
                       {fmt(item.cantidad * item.precioUnitario, form.moneda)}
                     </p>
                     <button
-                      onClick={() => removeItem(idx)}
+                      onClick={() =>
+                        setItems(items.filter((_, i) => i !== idx))
+                      }
                       className="w-7 h-7 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center text-red-400 hover:bg-red-100 transition shrink-0"
                     >
                       <XCircle size={12} />
                     </button>
                   </div>
                 ))}
-                {/* Total */}
                 <div
                   className="flex justify-end px-4 py-3 rounded-xl border"
                   style={{ background: G[50], borderColor: G[100] }}
@@ -1167,6 +1276,14 @@ function CreateOrdenWizard({
                       {form.moneda}
                     </p>
                   </div>
+                  <div>
+                    <p className="text-[10px] font-dm text-stone-400 uppercase tracking-wider">
+                      Ítems
+                    </p>
+                    <p className="font-dm text-stone-900 font-semibold mt-0.5">
+                      {items.length}
+                    </p>
+                  </div>
                   {form.fechaEntregaEstimada && (
                     <div>
                       <p className="text-[10px] font-dm text-stone-400 uppercase tracking-wider">
@@ -1177,14 +1294,6 @@ function CreateOrdenWizard({
                       </p>
                     </div>
                   )}
-                  <div>
-                    <p className="text-[10px] font-dm text-stone-400 uppercase tracking-wider">
-                      Ítems
-                    </p>
-                    <p className="font-dm text-stone-900 font-semibold mt-0.5">
-                      {items.length}
-                    </p>
-                  </div>
                 </div>
                 <Divider label="Resumen de ítems" />
                 <div className="space-y-1.5">
@@ -1224,14 +1333,19 @@ function CreateOrdenWizard({
             </div>
 
             <div
-              className="flex items-center gap-2.5 px-4 py-3 rounded-xl border"
+              className="flex items-start gap-2.5 px-4 py-3 rounded-xl border"
               style={{ background: "#eff6ff", borderColor: "#bfdbfe" }}
             >
-              <Truck size={14} className="text-blue-500 shrink-0" />
-              <p className="text-xs font-dm text-blue-700">
-                La orden se creará en estado <strong>BORRADOR</strong>. Podrás
-                enviarla al proveedor desde el detalle.
-              </p>
+              <Truck size={14} className="text-blue-500 shrink-0 mt-0.5" />
+              <div className="text-xs font-dm text-blue-700">
+                <p>
+                  La orden se creará en estado <strong>BORRADOR</strong>.
+                </p>
+                <p className="mt-0.5">
+                  Siguiente paso: ábrela en la lista y haz clic en{" "}
+                  <strong>Enviar al proveedor</strong>.
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -1244,13 +1358,16 @@ function CreateOrdenWizard({
           size="sm"
           onClick={() => (step === 0 ? onCancel() : setStep(step - 1))}
         >
-          <ArrowLeft size={13} />
-          {step === 0 ? "Cancelar" : "Atrás"}
+          <ArrowLeft size={13} /> {step === 0 ? "Cancelar" : "Atrás"}
         </Button>
         {step < 2 ? (
           <Button
             size="sm"
-            disabled={step === 0 ? !canNext0 : !canNext1}
+            disabled={
+              step === 0
+                ? !form.proveedorId || !form.moneda
+                : items.length === 0
+            }
             onClick={() => setStep(step + 1)}
           >
             Siguiente <ArrowRight size={13} />
@@ -1270,10 +1387,10 @@ export default function GOrdenesCompra() {
   const { user } = useAuth();
   const restauranteId = user?.restauranteId;
 
-  const [vista, setVista] = useState("lista"); // lista | crear
+  const [vista, setVista] = useState("lista");
   const [ordenSel, setOrdenSel] = useState(null);
   const [search, setSearch] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState("all");
+  const [filtro, setFiltro] = useState("all");
 
   const { data: rData } = useQuery(GET_MI_RESTAURANTE, {
     variables: { id: restauranteId },
@@ -1282,10 +1399,7 @@ export default function GOrdenesCompra() {
   const monedaRestaurante = rData?.restaurante?.moneda ?? "COP";
 
   const { data, loading } = useQuery(GET_ORDENES_COMPRA, {
-    variables: {
-      restauranteId,
-      estado: filtroEstado === "all" ? undefined : filtroEstado,
-    },
+    variables: { restauranteId, estado: filtro === "all" ? undefined : filtro },
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
@@ -1293,11 +1407,14 @@ export default function GOrdenesCompra() {
   const ordenes = data?.ordenesCompra ?? [];
   const cnt = (e) => ordenes.filter((o) => o.estado === e).length;
 
-  const filtered = ordenes.filter((o) =>
-    (o.proveedorNombre ?? "").toLowerCase().includes(search.toLowerCase()),
+  const filtered = useMemo(
+    () =>
+      ordenes.filter((o) =>
+        (o.proveedorNombre ?? "").toLowerCase().includes(search.toLowerCase()),
+      ),
+    [ordenes, search],
   );
 
-  // ── Vista Crear ──────────────────────────────────────────────────────────
   if (vista === "crear")
     return (
       <CreateOrdenWizard
@@ -1308,19 +1425,17 @@ export default function GOrdenesCompra() {
       />
     );
 
-  // ── Vista Lista ──────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Inventario"
         title="Órdenes de compra"
-        description="Gestiona el ciclo completo de compras: crear → enviar → recibir mercancía."
+        description="Flujo: Crear → Enviar al proveedor → Registrar recepción → Stock y costos actualizados."
         action={
-          <div className="flex items-center gap-2">
-            {/* KPIs rápidos */}
+          <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-3 text-xs font-dm text-stone-500">
               {[
-                { e: "ENVIADA", l: "Enviadas", c: "#3b82f6" },
+                { e: "ENVIADA", l: "Esperando", c: "#3b82f6" },
                 { e: "RECIBIDA", l: "Recibidas", c: G[300] },
                 { e: "BORRADOR", l: "Borrador", c: "#94a3b8" },
               ].map(({ e, l, c }) => (
@@ -1342,7 +1457,7 @@ export default function GOrdenesCompra() {
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div
-          className="flex items-center gap-2.5 flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 transition-all"
+          className="flex items-center gap-2.5 flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200"
           style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
           onFocusCapture={(e) =>
             (e.currentTarget.style.boxShadow = `0 0 0 2px ${G[300]}`)
@@ -1372,16 +1487,16 @@ export default function GOrdenesCompra() {
           {[
             { v: "all", l: "Todas" },
             { v: "BORRADOR", l: "Borrador" },
-            { v: "ENVIADA", l: "Enviada" },
-            { v: "RECIBIDA", l: "Recibida" },
-            { v: "CANCELADA", l: "Cancelada" },
+            { v: "ENVIADA", l: "Enviadas" },
+            { v: "RECIBIDA", l: "Recibidas" },
+            { v: "CANCELADA", l: "Canceladas" },
           ].map(({ v, l }) => (
             <button
               key={v}
-              onClick={() => setFiltroEstado(v)}
+              onClick={() => setFiltro(v)}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-dm font-semibold transition-all whitespace-nowrap"
               style={
-                filtroEstado === v
+                filtro === v
                   ? { background: G[900], color: "#fff" }
                   : { color: "#78716c" }
               }
@@ -1391,7 +1506,7 @@ export default function GOrdenesCompra() {
                 <span
                   className="px-1 py-0.5 rounded-full text-[9px] font-bold"
                   style={
-                    filtroEstado === v
+                    filtro === v
                       ? { background: "rgba(255,255,255,0.18)", color: "#fff" }
                       : { background: "#f5f5f4", color: "#a8a29e" }
                   }
@@ -1418,7 +1533,7 @@ export default function GOrdenesCompra() {
           description={
             search
               ? `No hay órdenes que coincidan con "${search}".`
-              : "Crea la primera orden de compra para tu restaurante."
+              : "Crea tu primera orden. El ciclo: Crear → Enviar → Recibir actualiza el stock y los costos automáticamente."
           }
           action={
             !search && (

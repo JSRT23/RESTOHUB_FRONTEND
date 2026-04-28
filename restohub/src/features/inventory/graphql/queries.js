@@ -161,7 +161,6 @@ export const GET_LOTES = gql`
     lotes(estado: $estado, almacenId: $almacenId, porVencer: $porVencer) {
       id
       ingredienteId
-      ingredienteNombre
       almacen
       almacenNombre
       proveedor
@@ -203,16 +202,6 @@ export const GET_ORDENES_COMPRA = gql`
       fechaEntregaEstimada
       fechaRecepcion
       notas
-      detalles {
-        id
-        ingredienteId
-        nombreIngrediente
-        unidadMedida
-        cantidad
-        cantidadRecibida
-        precioUnitario
-        subtotal
-      }
     }
   }
 `;
@@ -279,6 +268,32 @@ export const GET_RECETAS = gql`
       costoUnitario
       costoIngrediente
       fechaActualizacion
+    }
+  }
+`;
+
+// ── COSTO DE PRODUCCIÓN ────────────────────────────────────────────────────
+export const GET_COSTO_PLATO = gql`
+  query GetCostoPlato($platoId: ID!, $restauranteId: ID) {
+    costoPlato(platoId: $platoId, restauranteId: $restauranteId) {
+      platoId
+      costoTotal
+      tieneCostosVacios
+      porcionesDisponibles
+      advertencia
+      ingredientes {
+        ingredienteId
+        nombreIngrediente
+        cantidadReceta
+        unidadMedida
+        costoUnitario
+        costoIngrediente
+        stockActual
+        estaAgotado
+        necesitaReposicion
+        porcionesPosibles
+        fechaCostoActualizado
+      }
     }
   }
 `;

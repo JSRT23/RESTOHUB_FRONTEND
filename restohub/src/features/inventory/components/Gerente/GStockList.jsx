@@ -30,6 +30,7 @@ import {
   SlidersHorizontal,
   RefreshCw,
   ChevronRight,
+  Trash2,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import {
@@ -478,11 +479,23 @@ function ModalMovimientos({ open, onClose, item }) {
   });
   const detalle = data?.stockItem;
 
+  // tipo → { signo: +1 ingreso / -1 egreso, color, label }
   const TIPO_CFG = {
-    entrada: { icon: ArrowUp, color: "#16a34a", label: "Entrada" },
-    salida: { icon: ArrowDown, color: "#dc2626", label: "Salida" },
-    ajuste: { icon: SlidersHorizontal, color: "#d97706", label: "Ajuste" },
-    recepcion: { icon: Package, color: "#3b82f6", label: "Recepción" },
+    ENTRADA: { icon: ArrowUp, color: "#16a34a", label: "Entrada", signo: +1 },
+    DEVOLUCION: {
+      icon: ArrowUp,
+      color: "#3b82f6",
+      label: "Devolución",
+      signo: +1,
+    },
+    SALIDA: { icon: ArrowDown, color: "#dc2626", label: "Venta", signo: -1 },
+    VENCIMIENTO: { icon: Trash2, color: "#7c3aed", label: "Retiro", signo: -1 },
+    AJUSTE: {
+      icon: SlidersHorizontal,
+      color: "#d97706",
+      label: "Ajuste",
+      signo: null,
+    },
   };
 
   return (
@@ -547,11 +560,22 @@ function ModalMovimientos({ open, onClose, item }) {
                   label: m.tipoMovimiento,
                 };
                 const Icon = cfg.icon;
-                const delta = parseFloat(m.cantidad);
+                // cantidad en BD es siempre positiva — el signo lo da el tipo
+                const cantidad = parseFloat(m.cantidad);
+                const signo =
+                  cfg.signo !== null
+                    ? cfg.signo
+                    : parseFloat(m.cantidadDespues) >=
+                        parseFloat(m.cantidadAntes)
+                      ? +1
+                      : -1;
+                const conSigno = signo * cantidad;
+                const esIngreso = signo >= 0;
                 return (
                   <div
                     key={m.id}
                     className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-stone-100"
+                    style={{ borderLeft: `3px solid ${cfg.color}` }}
                   >
                     <div
                       className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
@@ -572,13 +596,14 @@ function ModalMovimientos({ open, onClose, item }) {
                     <div className="text-right shrink-0">
                       <p
                         className="text-sm font-dm font-bold"
-                        style={{ color: delta >= 0 ? G[300] : "#dc2626" }}
+                        style={{ color: esIngreso ? G[300] : "#dc2626" }}
                       >
-                        {delta >= 0 ? "+" : ""}
-                        {delta.toFixed(2)}
+                        {esIngreso ? "+" : "−"}
+                        {cantidad.toFixed(2)}
                       </p>
                       <p className="text-[10px] font-dm text-stone-400">
-                        {parseFloat(m.cantidadDespues).toFixed(2)} total
+                        {parseFloat(m.cantidadDespues).toFixed(2)}{" "}
+                        {detalle.unidadMedida}
                       </p>
                     </div>
                     <div className="text-right shrink-0 min-w-[60px]">
@@ -605,7 +630,11 @@ function ModalMovimientos({ open, onClose, item }) {
 
 // ── StockCard ─────────────────────────────────────────────────────────────
 function StockCard({ item, onAjustar, onVerMovimientos }) {
-  const pct = item.porcentajeStock ?? 0;
+  const nivelMax = parseFloat(item.nivelMaximo) || 0;
+  const cantAct = parseFloat(item.cantidadActual) || 0;
+  const pct = nivelMax > 0 ? (cantAct / nivelMax) * 100 : 0;
+  const pctLabel =
+    nivelMax === 0 ? "Sin máx" : pct < 1 ? `${pct.toFixed(1)}%` : `${pctLabel}`;
   const estado = item.estaAgotado
     ? "agotado"
     : item.necesitaReposicion

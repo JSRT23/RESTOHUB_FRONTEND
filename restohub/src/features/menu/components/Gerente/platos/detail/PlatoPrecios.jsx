@@ -1,7 +1,11 @@
 // src/features/menu/components/Gerente/platos/detail/PlatoPrecios.jsx
+// CAMBIOS vs original:
+// 1. Form de nuevo precio usa WizardStepPrecio → tiene modo manual Y modo margen
+// 2. El formulario inline se reemplaza por WizardStepPrecio cuando showForm=true
+// La lógica de crear/desactivar precios (handleCrear) queda igual.
 
 import { useState, useEffect } from "react";
-import { useMutation } from "@apollo/client/react";
+import { useQuery, useMutation } from "@apollo/client/react";
 import { CheckCircle2, XCircle, Plus, Loader2 } from "lucide-react";
 import Swal from "sweetalert2";
 
@@ -12,6 +16,7 @@ import {
   DESACTIVAR_PRECIO,
 } from "../../graphql/operations";
 import { G, fmt, inputCls, fi, fb } from "../platoUtils";
+import WizardStepPrecio from "../wizard/WizardStepPrecio";
 
 const hoyLocal = () => {
   const d = new Date();
@@ -21,8 +26,6 @@ const hoyLocal = () => {
   return `${y}-${m}-${day}`;
 };
 
-// Si la fecha es hoy → now()+2min para pasar validación del backend
-// Si es futuro      → mediodía UTC, safe para cualquier TZ
 const buildFechaInicio = (fechaDate) => {
   const hoy = hoyLocal();
   if (!fechaDate || fechaDate === hoy) {
@@ -40,10 +43,11 @@ const buildFechaInicio = (fechaDate) => {
 export default function PlatoPrecios({
   platoId,
   restauranteId,
-  precios, // ya filtrados por restauranteId desde PlatoDetailModal
+  precios,
   moneda,
 }) {
   const [showForm, setShowForm] = useState(false);
+  // precioForm compatible con WizardStepPrecio: { valor, fechaInicio }
   const [precioForm, setPrecioForm] = useState({
     valor: "",
     fechaInicio: hoyLocal(),
@@ -51,7 +55,7 @@ export default function PlatoPrecios({
   const [toggling, setToggling] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // Resetear form con fecha de hoy cada vez que se abre
+  // Resetear form cada vez que se abre
   useEffect(() => {
     if (showForm) {
       setPrecioForm({ valor: "", fechaInicio: hoyLocal() });
@@ -64,9 +68,7 @@ export default function PlatoPrecios({
   const [activarPrecio] = useMutation(ACTIVAR_PRECIO, {
     refetchQueries: ["GetPlatoDetalle", "GetPlatosGerente"],
   });
-  const [desactivarPrecio] = useMutation(DESACTIVAR_PRECIO, {
-    // Sin refetchQueries aquí — el crearPrecio ya lo dispara al final
-  });
+  const [desactivarPrecio] = useMutation(DESACTIVAR_PRECIO);
 
   const handleCrear = async () => {
     if (!precioForm.valor || !precioForm.fechaInicio) {
@@ -80,7 +82,7 @@ export default function PlatoPrecios({
     }
     setSaving(true);
     try {
-      // 1. Desactivar todos los precios activos de este restaurante en paralelo
+      // 1. Desactivar precios activos actuales
       const preciosActivos = precios.filter((p) => p.activo);
       if (preciosActivos.length > 0) {
         await Promise.all(
@@ -89,8 +91,7 @@ export default function PlatoPrecios({
           ),
         );
       }
-
-      // 2. Crear el nuevo precio — el refetch aquí refresca todo de una vez
+      // 2. Crear nuevo precio
       const { data } = await crearPrecio({
         variables: {
           platoId,
@@ -138,6 +139,7 @@ export default function PlatoPrecios({
           </p>
         )}
 
+        {/* Lista de precios existentes */}
         {precios.map((p) => (
           <div
             key={p.id}
@@ -178,37 +180,23 @@ export default function PlatoPrecios({
               {p.estaVigente && p.activo && (
                 <span
                   className="text-[9px] font-dm font-bold px-2 py-1 rounded-full"
-                  style={{
-                    background: G[50],
-                    color: G[500],
-                    border: `1px solid ${G[100]}`,
-                  }}
+                  style={{ background: G[50], color: G[300] }}
                 >
-                  VIGENTE
-                </span>
-              )}
-              {!p.activo && (
-                <span className="text-[9px] font-dm font-bold px-2 py-1 rounded-full bg-stone-100 text-stone-400 border border-stone-200">
-                  INACTIVO
+                  Vigente
                 </span>
               )}
               <button
                 onClick={() => handleToggle(p)}
                 disabled={toggling === p.id}
-                title={p.activo ? "Desactivar precio" : "Activar precio"}
-                className="w-6 h-6 rounded-lg flex items-center justify-center border transition-all"
+                className="w-6 h-6 rounded-lg flex items-center justify-center transition-all hover:opacity-80"
                 style={
                   p.activo
-                    ? {
-                        background: "#fef2f2",
-                        borderColor: "#fecaca",
-                        color: "#dc2626",
-                      }
-                    : { background: G[50], borderColor: G[100], color: G[300] }
+                    ? { background: "#fef2f2", color: "#dc2626" }
+                    : { background: G[50], color: G[300] }
                 }
               >
                 {toggling === p.id ? (
-                  <Loader2 size={9} className="animate-spin" />
+                  <Loader2 size={10} className="animate-spin" />
                 ) : p.activo ? (
                   <XCircle size={10} />
                 ) : (
@@ -219,13 +207,12 @@ export default function PlatoPrecios({
           </div>
         ))}
 
-        {/* Form nuevo precio */}
+        {/* Form nuevo precio — usa WizardStepPrecio con modo margen */}
         {showForm ? (
-          <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 space-y-3">
-            <p className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
-              {nActivos > 0 ? "Reemplazar precio" : "Nuevo precio"}
-            </p>
-
+          <div
+            className="rounded-2xl border border-stone-200 bg-white p-4 space-y-4"
+            style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
+          >
             {nActivos > 0 && (
               <div
                 className="flex items-start gap-2 px-3 py-2 rounded-xl text-[10px] font-dm"
@@ -243,59 +230,15 @@ export default function PlatoPrecios({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-dm text-stone-400">
-                  Precio ({moneda})
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={precioForm.valor}
-                  onChange={(e) =>
-                    setPrecioForm((f) => ({ ...f, valor: e.target.value }))
-                  }
-                  placeholder="25000"
-                  className={`${inputCls} text-xs`}
-                  onFocus={fi}
-                  onBlur={fb}
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-dm text-stone-400">
-                  Vigente desde
-                </label>
-                <input
-                  type="date"
-                  value={precioForm.fechaInicio}
-                  min={hoyLocal()}
-                  onChange={(e) =>
-                    setPrecioForm((f) => ({
-                      ...f,
-                      fechaInicio: e.target.value,
-                    }))
-                  }
-                  className={`${inputCls} text-xs`}
-                  onFocus={fi}
-                  onBlur={fb}
-                />
-              </div>
-            </div>
+            {/* WizardStepPrecio — incluye modo manual y modo margen con costo de producción */}
+            <WizardStepPrecio
+              precio={precioForm}
+              setPrecio={setPrecioForm}
+              moneda={moneda}
+              platoId={platoId}
+            />
 
-            {precioForm.valor && (
-              <p className="text-xs font-dm text-stone-500">
-                Se registrará:{" "}
-                <strong style={{ color: G[500] }}>
-                  {fmt(parseFloat(precioForm.valor || 0), moneda)}
-                </strong>
-                {precioForm.fechaInicio === hoyLocal() && (
-                  <span className="text-stone-400 ml-1">· vigente hoy</span>
-                )}
-              </p>
-            )}
-
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-1">
               <button
                 onClick={() => setShowForm(false)}
                 className="px-3 py-1.5 text-xs font-dm text-stone-500 hover:text-stone-700 transition"

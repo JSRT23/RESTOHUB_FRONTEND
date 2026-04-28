@@ -160,10 +160,10 @@ const NIVEL_CFG = {
     icon: Info,
   },
   BAJA: {
-    bg: G[50],
-    text: G[300],
-    border: G[100],
-    dot: "bg-emerald-400",
+    bg: "#fafaf9",
+    text: "#78716c",
+    border: "#e7e5e4",
+    dot: "bg-stone-400",
     icon: Bell,
   },
 };
@@ -980,34 +980,46 @@ function AlertaCard({ alerta }) {
   const tipo =
     TIPO_LABEL[alerta.tipo] ?? alerta.tipoDisplay ?? alerta.tipo ?? "General";
 
-  // Truncar el mensaje UUID para hacerlo legible
+  // Limpiar el mensaje para hacerlo legible
   let mensaje = alerta.mensaje ?? "";
+  // Reemplazar UUIDs completos con versión corta
   mensaje = mensaje.replace(
     /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
     (uuid) => `…${uuid.slice(-8)}`,
   );
+  // Para orden_compra: limpiar UUIDs y total 0.0 — mostrar solo lo esencial
+  if (alerta.tipo === "orden_compra") {
+    mensaje = mensaje.replace(/ \| total 0\.0 [A-Z]+/, "");
+    // El nombre real del proveedor no viene en el evento — usar referencia limpia
+    mensaje = mensaje.replace(/— proveedor …[0-9a-f]+/i, "");
+    mensaje = mensaje.trim().replace(/—\s*$/, "").trim();
+  }
 
   const [expanded, setExpanded] = useState(false);
   const larga = mensaje.length > 80;
+  const esOrdenCompra = alerta.tipo === "orden_compra";
+  const cardBg = cfg.bg;
+  const cardBorder = cfg.border;
+  const cardText = cfg.text;
 
   return (
     <div
       className="rounded-2xl border overflow-hidden"
-      style={{ background: cfg.bg, borderColor: cfg.border }}
+      style={{ background: cardBg, borderColor: cardBorder }}
     >
       <div className="flex items-start gap-3 px-4 py-3">
         <div
           className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-          style={{ background: `${cfg.text}18` }}
+          style={{ background: `${cardText}18` }}
         >
-          <Icon size={14} style={{ color: cfg.text }} />
+          <Icon size={14} style={{ color: cardText }} />
         </div>
         <div className="flex-1 min-w-0">
           {/* Nivel + tipo */}
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span
               className="text-[10px] font-dm font-bold px-2 py-0.5 rounded-full"
-              style={{ background: `${cfg.text}18`, color: cfg.text }}
+              style={{ background: `${cardText}18`, color: cardText }}
             >
               {alerta.nivelDisplay ?? nivel}
             </span>
@@ -1025,7 +1037,7 @@ function AlertaCard({ alerta }) {
             <button
               onClick={() => setExpanded(!expanded)}
               className="text-[10px] font-dm font-semibold mt-1 flex items-center gap-0.5"
-              style={{ color: cfg.text }}
+              style={{ color: cardText }}
             >
               {expanded ? (
                 <>
@@ -1474,11 +1486,102 @@ export default function SStaffList() {
         {asistLoading ? (
           <Skeleton className="h-28 rounded-2xl" />
         ) : asistencia.length === 0 ? (
-          <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl border border-stone-200 bg-stone-50">
-            <LogIn size={14} className="text-stone-300" />
-            <p className="text-sm font-dm text-stone-400">
-              Ningún empleado ha registrado entrada hoy.
-            </p>
+          <div className="space-y-2">
+            {/* Si hay turnos activos pero sin registro QR, mostrarlos igual */}
+            {turnos.filter((t) => t.estado === "activo").length > 0 ? (
+              <>
+                <div
+                  className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs font-dm"
+                  style={{
+                    background: "#eff6ff",
+                    borderColor: "#bfdbfe",
+                    color: "#3b82f6",
+                  }}
+                >
+                  <Info size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    El turno fue iniciado manualmente — el registro formal de
+                    asistencia se crea al escanear el QR.
+                  </span>
+                </div>
+                <div
+                  className="bg-white border border-stone-200 rounded-2xl overflow-hidden"
+                  style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
+                >
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-stone-100 bg-stone-50/50">
+                        {[
+                          "Empleado",
+                          "Entrada",
+                          "Fin turno",
+                          "Estado",
+                          "Trabajadas",
+                        ].map((l) => (
+                          <th
+                            key={l}
+                            className="py-2.5 px-3 text-left text-[10px] font-dm font-semibold text-stone-400 uppercase tracking-wide first:pl-5 last:pr-5"
+                          >
+                            {l}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {turnos
+                        .filter((t) => t.estado === "activo")
+                        .map((t) => {
+                          const inicio = new Date(t.fechaInicio);
+                          const ahora = new Date();
+                          const mins = Math.floor((ahora - inicio) / 60000);
+                          const h = Math.floor(mins / 60);
+                          const m = mins % 60;
+                          return (
+                            <tr
+                              key={t.id}
+                              className="border-b border-stone-100 last:border-0"
+                            >
+                              <td className="py-3 pl-5 pr-3">
+                                <p className="text-sm font-dm font-semibold text-stone-800">
+                                  {t.empleadoNombre}
+                                </p>
+                              </td>
+                              <td className="py-3 px-3 text-sm font-dm text-stone-600">
+                                {inicio.toLocaleTimeString("es-CO", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </td>
+                              <td className="py-3 px-3 text-sm font-dm text-stone-500">
+                                {new Date(t.fechaFin).toLocaleTimeString(
+                                  "es-CO",
+                                  { hour: "2-digit", minute: "2-digit" },
+                                )}
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="flex items-center gap-1 text-emerald-600 font-semibold text-xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  En curso
+                                </span>
+                              </td>
+                              <td className="py-3 pr-5 pl-3 text-sm font-dm font-semibold text-stone-700">
+                                {h > 0 ? `${h}h ${m}m` : `${m}m`}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl border border-stone-200 bg-stone-50">
+                <LogIn size={14} className="text-stone-300" />
+                <p className="text-sm font-dm text-stone-400">
+                  Ningún empleado ha registrado entrada hoy.
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div

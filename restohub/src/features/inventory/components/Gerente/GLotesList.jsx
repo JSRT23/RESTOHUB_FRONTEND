@@ -170,9 +170,8 @@ function LoteCard({ lote, onRetirar, retirando }) {
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            {/* FIX: nombre del ingrediente, no el UUID */}
             <p className="font-playfair text-stone-900 font-semibold text-sm leading-tight truncate">
-              {lote.ingredienteNombre ?? `Lote ${lote.numeroLote}`}
+              {lote.proveedorNombre ?? "Lote"}
             </p>
             <p className="text-[10px] font-dm text-stone-400 font-mono mt-0.5">
               #{lote.numeroLote}
@@ -523,7 +522,6 @@ export default function GLotesList() {
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("all");
   const [porVencer, setPorVencer] = useState("");
-  const [modalRegistrar, setModalRegistrar] = useState(false);
   const [retirando, setRetirando] = useState(null);
 
   // Obtener el almacén principal del restaurante
@@ -552,7 +550,7 @@ export default function GLotesList() {
       icon: "warning",
       title: "¿Retirar este lote?",
       html: `<span style="font-family:'DM Sans';color:#78716c">
-        Lote <b>${lote.numeroLote}</b> de <b>${lote.ingredienteNombre ?? ""}</b> será marcado como retirado.
+        Lote <b>${lote.numeroLote}</b> de <b>${lote.almacenNombre ?? ""}</b> será marcado como retirado.
         Esta acción no se puede deshacer.
       </span>`,
       showCancelButton: true,
@@ -601,7 +599,6 @@ export default function GLotesList() {
     const q = search.toLowerCase();
     return (
       (l.numeroLote ?? "").toLowerCase().includes(q) ||
-      (l.ingredienteNombre ?? "").toLowerCase().includes(q) ||
       (l.proveedorNombre ?? "").toLowerCase().includes(q) ||
       (l.almacenNombre ?? "").toLowerCase().includes(q)
     );
@@ -620,7 +617,7 @@ export default function GLotesList() {
       <PageHeader
         eyebrow="Inventario"
         title="Lotes"
-        description="Trazabilidad completa por lote — proveedor, vencimiento y cantidades disponibles."
+        description="Los lotes se generan automáticamente al registrar la recepción de una orden de compra."
         action={
           <div className="flex items-center gap-2">
             {/* KPIs */}
@@ -645,9 +642,7 @@ export default function GLotesList() {
                 </span>
               )}
             </div>
-            <Button onClick={() => setModalRegistrar(true)}>
-              <Plus size={14} /> Registrar lote
-            </Button>
+            {/* Lotes se crean automáticamente al recibir una orden de compra */}
           </div>
         }
       />
@@ -764,7 +759,7 @@ export default function GLotesList() {
               ? `No hay lotes que coincidan con "${search}".`
               : filtroEstado !== "all"
                 ? `No hay lotes con estado ${filtroEstado.toLowerCase()}.`
-                : "Registra el primer lote de ingrediente o recibe una orden de compra."
+                : "Los lotes se crean automáticamente al recibir una orden de compra en Inventario → Órdenes."
           }
           action={
             !search && (
@@ -794,12 +789,6 @@ export default function GLotesList() {
       )}
 
       {/* ── Modal ────────────────────────────────────────────────────────── */}
-      <ModalRegistrarLote
-        open={modalRegistrar}
-        onClose={() => setModalRegistrar(false)}
-        almacenId={almacen?.id}
-        restauranteId={restauranteId}
-      />
     </div>
   );
 }

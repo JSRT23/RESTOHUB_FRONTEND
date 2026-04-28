@@ -30,6 +30,7 @@ import {
   GET_MI_RESTAURANTE,
 } from "../../../menu/components/Gerente/graphql/operations";
 import { CREAR_PEDIDO } from "../../graphql/operations";
+import { GET_STOCK, GET_ALMACENES } from "../../../inventory/graphql/queries";
 import { EmptyState, Skeleton, Badge } from "../../../../shared/components/ui";
 
 const G = {
@@ -48,15 +49,29 @@ const fmtMoney = (n, moneda = "COP") =>
   }).format(n ?? 0);
 
 // ── Tarjeta de plato ───────────────────────────────────────────────────────
-function PlatoCard({ plato, precio, moneda, cantidad, onAgregar, onQuitar }) {
+function PlatoCard({
+  plato,
+  precio,
+  moneda,
+  cantidad,
+  onAgregar,
+  onQuitar,
+  stockStatus,
+}) {
   const [notaOpen, setNotaOpen] = useState(false);
+
+  // stockStatus: "ok" | "bajo" | "agotado" | null (sin info de stock)
+  const agotado = stockStatus === "agotado";
+  const bajo = stockStatus === "bajo";
 
   return (
     <div
       className={`bg-white rounded-2xl border overflow-hidden transition-all duration-200 ${
         cantidad > 0
           ? "border-stone-300 shadow-md -translate-y-0.5"
-          : "border-stone-200"
+          : agotado
+            ? "border-red-200 opacity-75"
+            : "border-stone-200"
       }`}
       style={{
         boxShadow:
@@ -84,6 +99,19 @@ function PlatoCard({ plato, precio, moneda, cantidad, onAgregar, onQuitar }) {
             style={{ background: G[300] }}
           >
             {cantidad}
+          </div>
+        )}
+        {/* Badge de disponibilidad por stock */}
+        {stockStatus && stockStatus !== "ok" && (
+          <div
+            className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-dm font-bold"
+            style={
+              agotado
+                ? { background: "rgba(220,38,38,0.9)", color: "#fff" }
+                : { background: "rgba(217,119,6,0.9)", color: "#fff" }
+            }
+          >
+            {agotado ? "Agotado" : "Stock bajo"}
           </div>
         )}
         {plato.categoriaNombre && (
@@ -116,7 +144,7 @@ function PlatoCard({ plato, precio, moneda, cantidad, onAgregar, onQuitar }) {
         </div>
 
         {/* Controles */}
-        {precio ? (
+        {precio && !agotado ? (
           <div className="flex items-center gap-2">
             {cantidad > 0 ? (
               <div className="flex items-center gap-2 flex-1">
@@ -141,11 +169,15 @@ function PlatoCard({ plato, precio, moneda, cantidad, onAgregar, onQuitar }) {
               <button
                 onClick={() => onAgregar(plato, precio, moneda)}
                 className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-dm font-bold text-white transition-all hover:opacity-90 active:scale-95"
-                style={{ background: G[900] }}
+                style={{ background: bajo ? "#d97706" : G[900] }}
               >
-                <Plus size={12} /> Agregar
+                <Plus size={12} /> {bajo ? "Agregar (stock bajo)" : "Agregar"}
               </button>
             )}
+          </div>
+        ) : agotado ? (
+          <div className="py-2 text-center text-[10px] font-dm text-red-400 rounded-xl bg-red-50 border border-red-100">
+            Sin stock disponible
           </div>
         ) : (
           <div className="py-2 text-center text-[10px] font-dm text-stone-300 rounded-xl bg-stone-50">
@@ -245,6 +277,43 @@ function CarritoItem({ item, onMas, onMenos, onNota, onEliminar }) {
 export default function MNuevoPedido() {
   const { user } = useAuth();
   const restauranteId = user?.restauranteId;
+
+  // Stock del restaurante — para mostrar disponibilidad en el menú
+  const { data: almData } = useQuery(GET_ALMACENES, {
+    variables: { restauranteId, activo: true },
+    skip: !restauranteId,
+  });
+  const almacenId = almData?.almacenes?.[0]?.id;
+
+  const { data: stockData } = useQuery(GET_STOCK, {
+    variables: { almacenId },
+    skip: !almacenId,
+    fetchPolicy: "cache-and-network",
+    pollInterval: 30000,
+  });
+
+  // stockMap: ingredienteId → { agotado, bajo }
+  const stockMap = useMemo(() => {
+    const m = {};
+    (stockData?.stock ?? []).forEach((s) => {
+      m[s.ingredienteId] = {
+        agotado: s.estaAgotado,
+        bajo: s.necesitaReposicion && !s.estaAgotado,
+      };
+    });
+    return m;
+  }, [stockData]);
+
+  // Función para determinar el estado de stock de un plato
+  const getStockStatus = (plato) => {
+    const ings = plato.ingredientes ?? [];
+    if (!ings.length || !Object.keys(stockMap).length) return null;
+    const tieneAgotado = ings.some((i) => stockMap[i.ingredienteId]?.agotado);
+    if (tieneAgotado) return "agotado";
+    const tieneBajo = ings.some((i) => stockMap[i.ingredienteId]?.bajo);
+    if (tieneBajo) return "bajo";
+    return "ok";
+  };
 
   const [search, setSearch] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState("all");
@@ -522,6 +591,7 @@ export default function MNuevoPedido() {
                   cantidad={cantidadEnCarrito(plato.id)}
                   onAgregar={agregarAlCarrito}
                   onQuitar={quitarDelCarrito}
+                  stockStatus={getStockStatus(plato)}
                 />
               ))}
             </div>

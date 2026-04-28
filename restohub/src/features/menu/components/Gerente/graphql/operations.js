@@ -353,7 +353,6 @@ export const DESACTIVAR_PRECIO = gql`
     }
   }
 `;
-
 // ── Platos disponibles para mesero (globales + del restaurante) ───────────
 export const GET_PLATOS_DISPONIBLES = gql`
   query GetPlatosDisponibles($disponibles: ID!, $activo: Boolean) {
@@ -369,3 +368,6 @@ export const GET_PLATOS_DISPONIBLES = gql`
     }
   }
 `;
+
+// ── Re-exportar queries de inventory para uso en wizard de precio ─────────
+export { GET_COSTO_PLATO } from "../../../../inventory/graphql/queries";
