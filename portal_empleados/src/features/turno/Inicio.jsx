@@ -1,11 +1,10 @@
 // portal_empleados/src/features/turno/Inicio.jsx
-// FIX: El QR escaneado ahora llama registrarEntrada(qrToken) / registrarSalida(turnoId)
-// en lugar de iniciarTurno(turnoId) directamente.
-// Flujo correcto:
-//   ENTRADA: empleado escanea QR → registrarEntrada(qr_token) → backend valida token
-//            → crea RegistroAsistencia + marca turno ACTIVO
-//   SALIDA:  empleado escanea QR → registrarSalida(turno_id) → backend completa turno
-// El QR del supervisor contiene el qrToken del turno.
+// Flujo QR correcto:
+//   ENTRADA: empleado escanea QR del supervisor → QRScanner valida token localmente
+//            → iniciarTurno(turnoId) → programado → activo
+//   SALIDA:  empleado escanea QR del supervisor → QRScanner valida token localmente
+//            → registrarSalida(turnoId) → activo → completado
+// El QRScanner ya garantiza que el token escaneado === turno.qrToken antes de llamar onQR.
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,7 +14,6 @@ import {
   GET_TURNOS,
   INICIAR_TURNO,
   REGISTRAR_SALIDA,
-  REGISTRAR_ENTRADA,
 } from "./graphql/operations";
 import QRScanner from "../../shared/components/QRScanner";
 import Swal from "sweetalert2";
@@ -157,10 +155,7 @@ export default function Inicio() {
     pollInterval: 30000,
   });
 
-  // ── Mutations ──────────────────────────────────────────────────────────
-  // registrarEntrada: POST /asistencia/entrada/ con qr_token → valida token en BD
-  // registrarSalida:  POST /asistencia/salida/  con turno_id → completa turno
-  const [registrarEntrada] = useMutation(REGISTRAR_ENTRADA, {
+  const [iniciarTurno] = useMutation(INICIAR_TURNO, {
     refetchQueries: ["GetTurnos"],
   });
   const [registrarSalida] = useMutation(REGISTRAR_SALIDA, {
@@ -185,28 +180,21 @@ export default function Inicio() {
       )
     : null;
 
-  // ── onQR: llamado por QRScanner cuando detecta un token válido ─────────
-  // tokenEscaneado = qrToken del turno (UUID generado en iniciarTurno)
-  // Para ENTRADA: enviamos el token al backend → valida + crea RegistroAsistencia
-  // Para SALIDA:  el token ya fue validado en el scanner (coincide con turno.qrToken),
-  //               enviamos el turnoId para completar
-  const onQR = async (tokenEscaneado) => {
+  // onQR: llamado por QRScanner cuando detecta el token correcto
+  // El QR del supervisor contiene turno.qrToken
+  // QRScanner ya validó que tokenEscaneado === turno.qrToken antes de llamar onQR
+  // ENTRADA: iniciarTurno(turnoId) → programado→activo
+  // SALIDA:  registrarSalida(turnoId) → activo→completado
+  const onQR = async (_tokenEscaneado) => {
     setScanner(false);
     setBusy(true);
     try {
       if (esInit) {
-        // ENTRADA: registrar via qrToken — el backend valida y activa el turno
-        const { data: r } = await registrarEntrada({
-          variables: {
-            qrToken: tokenEscaneado,
-            metodo: "qr",
-          },
+        const { data: r } = await iniciarTurno({
+          variables: { turnoId: turno.id },
         });
-        if (!r?.registrarEntrada?.ok)
-          throw new Error(
-            r?.registrarEntrada?.errores ?? "Error al registrar entrada",
-          );
-
+        if (!r?.iniciarTurno?.ok)
+          throw new Error(r?.iniciarTurno?.errores ?? "Error al iniciar turno");
         Swal.fire({
           background: "#fff",
           icon: "success",
@@ -218,15 +206,18 @@ export default function Inicio() {
           confirmButtonColor: G[900],
         });
       } else if (esFin) {
-        // SALIDA: registrar salida con turnoId
         const { data: r } = await registrarSalida({
           variables: { turnoId: turno.id },
         });
-        if (!r?.registrarSalida?.ok)
-          throw new Error(
-            r?.registrarSalida?.errores ?? "Error al registrar salida",
-          );
-
+        const errMsg = r?.registrarSalida?.errores ?? "";
+        // "Ya se registró" o "no está activo" = ya fue completado = éxito para el empleado
+        const yaCompletado =
+          !r?.registrarSalida?.ok &&
+          (errMsg.toLowerCase().includes("ya se registró") ||
+            errMsg.toLowerCase().includes("no está activo") ||
+            errMsg.toLowerCase().includes("no encontrado"));
+        if (!r?.registrarSalida?.ok && !yaCompletado)
+          throw new Error(errMsg || "Error al registrar salida");
         Swal.fire({
           background: "#fff",
           icon: "success",

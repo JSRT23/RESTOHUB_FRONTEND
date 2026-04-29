@@ -22,12 +22,7 @@ import {
   ChefHat,
   Layers,
 } from "lucide-react";
-import {
-  GET_STOCK,
-  GET_ALMACENES,
-  GET_ALERTAS,
-  GET_RECETAS,
-} from "../../graphql/queries";
+import { GET_STOCK, GET_ALERTAS, GET_RECETAS } from "../../graphql/queries";
 import { GET_PLATOS_CON_RECETA } from "../../graphql/queries_cocinero";
 import {
   PageHeader,
@@ -334,23 +329,17 @@ export default function CStockList() {
   const [filtro, setFiltro] = useState("todos");
   const [recetaPlato, setRecetaPlato] = useState(null); // plato seleccionado para modal
 
-  const { data: almData, loading: almLoading } = useQuery(GET_ALMACENES, {
-    variables: { restauranteId, activo: true },
-    skip: !restauranteId,
-    fetchPolicy: "cache-and-network",
-  });
-  const almacenId = almData?.almacenes?.[0]?.id;
-
+  // Cocinero no tiene permiso a GET_ALMACENES (❌ en tabla de permisos)
+  // GET_STOCK sin almacenId → el gateway usa JWT restauranteId del cocinero
   const {
     data: stockData,
     loading: stockLoading,
     refetch: refetchStock,
   } = useQuery(GET_STOCK, {
-    variables: { almacenId },
-    skip: !almacenId,
-    fetchPolicy: "network-only", // siempre fresco — no cachear stock del cocinero
+    variables: { restauranteId }, // gateway filtra stock del restaurante del cocinero
+    skip: !restauranteId,
+    fetchPolicy: "network-only",
     pollInterval: 30000,
-    notifyOnNetworkStatusChange: true,
   });
 
   const { data: alertasData } = useQuery(GET_ALERTAS, {
@@ -519,7 +508,7 @@ export default function CStockList() {
 
       {/* Contenido */}
       {tab === "stock" ? (
-        almLoading || stockLoading ? (
+        stockLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Skeleton key={i} className="h-32 rounded-2xl" />

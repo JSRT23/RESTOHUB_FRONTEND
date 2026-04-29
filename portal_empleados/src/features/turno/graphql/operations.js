@@ -112,26 +112,10 @@ export const REGISTRAR_SALIDA = gql`
   mutation RegistrarSalida($turnoId: ID!) {
     registrarSalida(turnoId: $turnoId) {
       ok
-      turno {
-        id
-        estado
-      }
-      errores
-    }
-  }
-`;
-
-// ── NUEVO: registrar entrada via QR token ─────────────────────────────────
-// El empleado escanea el QR del supervisor → se envía el qrToken al backend
-// El backend valida el token, crea RegistroAsistencia y activa el turno
-export const REGISTRAR_ENTRADA = gql`
-  mutation RegistrarEntrada($qrToken: String, $turnoId: ID, $metodo: String) {
-    registrarEntrada(qrToken: $qrToken, turnoId: $turnoId, metodo: $metodo) {
-      ok
       registro {
         id
-        turno
         horaEntrada
+        horaSalida
       }
       errores
     }

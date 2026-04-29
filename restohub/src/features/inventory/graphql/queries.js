@@ -1,4 +1,7 @@
 // src/features/inventory/graphql/queries.js
+// CAMBIO vs original: GET_STOCK agrega $restauranteId como parámetro opcional
+// Todo lo demás es IDÉNTICO al original.
+
 import { gql } from "@apollo/client";
 
 // ── PROVEEDORES ───────────────────────────────────────────────────────────
@@ -105,8 +108,18 @@ export const GET_STOCK_ALMACEN = gql`
 
 // ── STOCK ─────────────────────────────────────────────────────────────────
 export const GET_STOCK = gql`
-  query GetStock($almacenId: ID, $bajoMinimo: Boolean, $agotado: Boolean) {
-    stock(almacenId: $almacenId, bajoMinimo: $bajoMinimo, agotado: $agotado) {
+  query GetStock(
+    $almacenId: ID
+    $restauranteId: ID
+    $bajoMinimo: Boolean
+    $agotado: Boolean
+  ) {
+    stock(
+      almacenId: $almacenId
+      restauranteId: $restauranteId
+      bajoMinimo: $bajoMinimo
+      agotado: $agotado
+    ) {
       id
       ingredienteId
       nombreIngrediente
