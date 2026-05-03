@@ -302,10 +302,9 @@ function ModalQR({ turno, modo, onClose }) {
     }
   };
 
-  const accentColor = esIniciar ? "#3b82f6" : G[300];
-  const accentBg = esIniciar ? "#eff6ff" : G[50];
-  const accentBorder = esIniciar ? "#bfdbfe" : G[100];
-
+  const accentColor = esIniciar ? "#4a9e6b" : G[300];
+  const accentBg = esIniciar ? "#edf7f1" : G[50];
+  const accentBorder = esIniciar ? "#a8d5b8" : G[100];
   return (
     <Modal
       open={true}

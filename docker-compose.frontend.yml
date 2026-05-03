@@ -39,6 +39,28 @@ services:
     networks:
       - restohub_network
 
+  # ── App cliente (consumidores) ────────────────────────────────────────────
+  # restohub_app: web pública para clientes externos.
+  # Puerto 5175. Vite + React + Tailwind CSS v3.
+  restohub_app_frontend:
+    image: node:20-alpine
+    container_name: restohub_app_frontend
+    working_dir: /app
+    ports:
+      - "5175:5175"
+    volumes:
+      - ./restohub_app:/app
+      - /app/node_modules
+    environment:
+      # El browser resuelve localhost desde el host.
+      # En celular de la misma red WiFi usa la IP LAN (ej: 192.168.1.X).
+      - VITE_API_URL=http://localhost:8000/api/graphql/
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    command: sh -c "npm install && npm run dev -- --host --port 5175"
+    networks:
+      - restohub_network
+
 networks:
   restohub_network:
     external: true
