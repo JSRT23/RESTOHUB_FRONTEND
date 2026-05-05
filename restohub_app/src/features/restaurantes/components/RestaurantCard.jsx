@@ -1,26 +1,33 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
-export default function RestaurantCard({ restaurante, index = 0 }) {
-  const {
-    id,
-    nombre,
-    descripcion,
-    ciudad,
-    activo,
-    tieneMenu,
-    calificacion,
-    reseñas,
-    imagen,
-  } = restaurante;
+// Imágenes placeholder mientras no haya imagen real del backend
+const PLACEHOLDER_IMGS = [
+  "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=700&q=90",
+  "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=700&q=90",
+  "https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?w=700&q=90",
+  "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=700&q=90",
+  "https://images.unsplash.com/photo-1424847651672-bf20a4b0982b?w=700&q=90",
+  "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=700&q=90",
+];
+const getImg = (id) => {
+  if (!id) return PLACEHOLDER_IMGS[0];
+  return PLACEHOLDER_IMGS[
+    parseInt(id.replace(/-/g, "").slice(0, 8), 16) % PLACEHOLDER_IMGS.length
+  ];
+};
+
+export default function RestaurantCard({
+  restaurante,
+  tieneMenu = false,
+  index = 0,
+}) {
+  const { id, nombre, ciudad, activo } = restaurante;
   const [hovered, setHovered] = useState(false);
   const navigate = useNavigate();
 
-  const handleClick = (e) => {
-    if (!tieneMenu) {
-      e.preventDefault();
-      return;
-    }
+  const handleClick = () => {
+    if (!tieneMenu) return;
     navigate(`/restaurante/${id}`);
   };
 
@@ -30,7 +37,6 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display: "block",
         background: "#fff",
         borderRadius: "20px",
         overflow: "hidden",
@@ -41,15 +47,14 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
         transform: hovered && tieneMenu ? "translateY(-6px)" : "translateY(0)",
         boxShadow:
           hovered && tieneMenu ? "0 20px 56px rgba(10,56,40,0.14)" : "none",
-        opacity: !activo && !tieneMenu ? 0.82 : 1,
       }}
     >
-      {/* ── Imagen ── */}
+      {/* Image */}
       <div
         style={{ position: "relative", height: "230px", overflow: "hidden" }}
       >
         <img
-          src={imagen}
+          src={getImg(id)}
           alt={nombre}
           style={{
             width: "100%",
@@ -57,11 +62,11 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
             objectFit: "cover",
             transition: "transform 0.7s ease",
             transform: hovered && tieneMenu ? "scale(1.08)" : "scale(1)",
-            filter: !tieneMenu ? "brightness(0.85)" : "brightness(1)",
+            filter: !tieneMenu
+              ? "brightness(0.82) saturate(0.8)"
+              : "brightness(1)",
           }}
         />
-
-        {/* Gradiente base */}
         <div
           style={{
             position: "absolute",
@@ -71,13 +76,13 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
           }}
         />
 
-        {/* ── OVERLAY "Próximamente" — aparece en hover si no tiene menú ── */}
+        {/* Overlay Próximamente — aparece en hover si no tiene menú */}
         {!tieneMenu && (
           <div
             style={{
               position: "absolute",
               inset: 0,
-              background: "rgba(7,45,32,0.72)",
+              background: "rgba(7,45,32,0.75)",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -89,19 +94,19 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
           >
             <div
               style={{
-                width: 48,
-                height: 48,
+                width: 52,
+                height: 52,
                 borderRadius: "50%",
                 background: "rgba(255,250,202,0.15)",
-                border: "1.5px solid rgba(255,250,202,0.4)",
+                border: "1.5px solid rgba(255,250,202,0.45)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
               <svg
-                width="20"
-                height="20"
+                width="22"
+                height="22"
                 fill="none"
                 stroke="var(--cream)"
                 strokeWidth="2"
@@ -114,10 +119,9 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
             <span
               style={{
                 fontFamily: "Playfair Display, serif",
-                fontSize: "18px",
+                fontSize: "19px",
                 fontWeight: 700,
                 color: "#fff",
-                letterSpacing: "-0.01em",
               }}
             >
               Próximamente
@@ -128,19 +132,19 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
           </div>
         )}
 
-        {/* ── Badge marca de agua "Próximamente" — siempre visible si no tiene menú ── */}
+        {/* Marca de agua — visible cuando no hay hover y no tiene menú */}
         {!tieneMenu && (
           <div
             style={{
               position: "absolute",
               top: "50%",
               left: "50%",
-              transform: "translate(-50%, -50%) rotate(-15deg)",
+              transform: "translate(-50%,-50%) rotate(-15deg)",
               border: "2px solid rgba(255,250,202,0.45)",
               borderRadius: "8px",
               padding: "6px 16px",
               pointerEvents: "none",
-              opacity: hovered ? 0 : 0.7,
+              opacity: hovered ? 0 : 0.72,
               transition: "opacity 0.3s ease",
             }}
           >
@@ -160,7 +164,7 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
           </div>
         )}
 
-        {/* Badge estado (Abierto/Cerrado) */}
+        {/* Badge estado */}
         <span
           style={{
             position: "absolute",
@@ -209,7 +213,7 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
           {ciudad}
         </span>
 
-        {/* Flecha — solo si tiene menú */}
+        {/* Flecha solo si tiene menú */}
         {tieneMenu && (
           <span
             style={{
@@ -241,7 +245,7 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
         )}
       </div>
 
-      {/* ── Body ── */}
+      {/* Body */}
       <div style={{ padding: "16px 18px 18px" }}>
         <h3
           style={{
@@ -249,7 +253,7 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
             fontSize: "17px",
             fontWeight: 700,
             color: "var(--text)",
-            marginBottom: "4px",
+            marginBottom: "8px",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -257,18 +261,6 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
         >
           {nombre}
         </h3>
-        <p
-          style={{
-            fontSize: "12px",
-            color: "var(--text2)",
-            marginBottom: "10px",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {descripcion}
-        </p>
         <div
           style={{
             display: "flex",
@@ -276,35 +268,9 @@ export default function RestaurantCard({ restaurante, index = 0 }) {
             justifyContent: "space-between",
           }}
         >
-          {/* Estrellas */}
-          <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-            {[1, 2, 3, 4, 5].map((s) => (
-              <svg
-                key={s}
-                width="12"
-                height="12"
-                fill={
-                  s <= Math.round(calificacion) ? "var(--green)" : "#D8D8CC"
-                }
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-              </svg>
-            ))}
-            <span
-              style={{
-                fontSize: "11px",
-                color: "var(--text3)",
-                marginLeft: "4px",
-              }}
-            >
-              {calificacion.toFixed(1)}
-              {reseñas > 0 && (
-                <span style={{ color: "var(--text3)" }}> ({reseñas})</span>
-              )}
-            </span>
-          </div>
-          {/* Chip */}
+          <span style={{ fontSize: "12px", color: "var(--text2)" }}>
+            {restaurante.direccion || restaurante.ciudad}
+          </span>
           {tieneMenu ? (
             <span
               style={{
@@ -354,13 +320,9 @@ export function RestaurantCardSkeleton() {
       <div style={{ padding: "16px 18px" }}>
         <div
           className="skeleton"
-          style={{ height: "20px", width: "70%", marginBottom: "6px" }}
+          style={{ height: "20px", width: "70%", marginBottom: "8px" }}
         />
-        <div
-          className="skeleton"
-          style={{ height: "13px", width: "90%", marginBottom: "10px" }}
-        />
-        <div className="skeleton" style={{ height: "13px", width: "40%" }} />
+        <div className="skeleton" style={{ height: "13px", width: "50%" }} />
       </div>
     </div>
   );

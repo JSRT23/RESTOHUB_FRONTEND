@@ -1,64 +1,106 @@
-import { useState, useMemo } from "react";
-import { useLocation } from "../contexts/LocationContext";
-import { RESTAURANTS } from "../data/restaurants";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@apollo/client/react";
+import { useLocation } from "../../../app/auth/LocationContext";
+import { GET_RESTAURANTES } from "../queries";
 import RestaurantCard, {
   RestaurantCardSkeleton,
 } from "../components/RestaurantCard";
 
-const CATEGORIES = [
-  "Todos",
-  "Colombiana",
-  "Internacional",
-  "Parrilla",
-  "Mariscos",
-  "Fusión",
-  "Café",
-  "Mexicana",
-];
-
-// Derivar estadísticas reales del catálogo
-const totalConMenu = RESTAURANTS.filter((r) => r.tieneMenu).length;
-const totalPaises = [...new Set(RESTAURANTS.map((r) => r.pais))].length;
-const avgCalif = (
-  RESTAURANTS.reduce((s, r) => s + r.calificacion, 0) / RESTAURANTS.length
-).toFixed(1);
+// Normalizar pais del gateway → código ISO
+const PAIS_ALIASES = {
+  COLOMBIA: "CO",
+  MEXICO: "MX",
+  MÉXICO: "MX",
+  PERU: "PE",
+  PERÚ: "PE",
+  ARGENTINA: "AR",
+  BRASIL: "BR",
+  BRAZIL: "BR",
+  CHILE: "CL",
+  ECUADOR: "EC",
+  VENEZUELA: "VE",
+  ESPAÑA: "ES",
+  ESPANA: "ES",
+  "ESTADOS UNIDOS": "US",
+  USA: "US",
+};
+const resolveCode = (raw) => {
+  if (!raw) return "";
+  const up = raw.toUpperCase().trim();
+  return PAIS_ALIASES[up] || up;
+};
 
 export default function HomePage() {
-  const { confirmed, city, country, setShowPicker } = useLocation();
+  const { confirmed, city, country, setShowPicker, setRestaurants } =
+    useLocation();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("Todos");
   const [onlyOpen, setOnlyOpen] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [categoria, setCategoria] = useState("Todos");
+
+  const { data, loading, error } = useQuery(GET_RESTAURANTES, {
+    variables: { activo: true },
+    fetchPolicy: "cache-and-network",
+  });
+
+  useEffect(() => {
+    if (data?.restaurantes) setRestaurants(data.restaurantes);
+  }, [data, setRestaurants]);
+
+  const allRestaurants = data?.restaurantes || [];
+  const withMenuFlag = (r) => Boolean(r.moneda);
+
+  // Categorías dinámicas = ciudades únicas de los restaurantes filtrados por país
+  // Usamos ciudad como "categoría geográfica" hasta que el gateway exponga categorías
+  // PERO según las imágenes las categorías del menú vienen en el menuRestaurante
+  // Para el home usamos ciudades como agrupación si hay varias, sino no mostramos filtro
+  const ciudades = useMemo(() => {
+    const set = new Set(
+      allRestaurants
+        .filter(
+          (r) => !confirmed || !country || resolveCode(r.pais) === country.code,
+        )
+        .map((r) => r.ciudad)
+        .filter(Boolean),
+    );
+    return ["Todos", ...set];
+  }, [allRestaurants, confirmed, country]);
 
   const filtered = useMemo(
     () =>
-      RESTAURANTS.filter((r) => {
-        if (confirmed && country && r.pais !== country.code) return false;
-        if (confirmed && city && r.ciudad !== city) return false;
+      allRestaurants.filter((r) => {
+        if (confirmed && country && resolveCode(r.pais) !== country.code)
+          return false;
+        if (
+          confirmed &&
+          city &&
+          r.ciudad?.toLowerCase().trim() !== city?.toLowerCase().trim()
+        )
+          return false;
         if (onlyOpen && !r.activo) return false;
-        if (category !== "Todos" && r.categoria !== category) return false;
+        if (categoria !== "Todos" && r.ciudad !== categoria) return false;
         if (
           search &&
-          !r.nombre.toLowerCase().includes(search.toLowerCase()) &&
-          !r.descripcion.toLowerCase().includes(search.toLowerCase())
+          !r.nombre?.toLowerCase().includes(search.toLowerCase()) &&
+          !r.ciudad?.toLowerCase().includes(search.toLowerCase())
         )
           return false;
         return true;
       }),
-    [confirmed, country, city, search, category, onlyOpen],
+    [allRestaurants, confirmed, country, city, onlyOpen, search, categoria],
   );
 
-  // Ordenar: primero los que tienen menú, luego los próximos
   const sorted = useMemo(
     () => [
-      ...filtered.filter((r) => r.tieneMenu),
-      ...filtered.filter((r) => !r.tieneMenu),
+      ...filtered.filter((r) => withMenuFlag(r)),
+      ...filtered.filter((r) => !withMenuFlag(r)),
     ],
     [filtered],
   );
 
-  const conMenu = filtered.filter((r) => r.tieneMenu).length;
-  const sinMenu = filtered.filter((r) => !r.tieneMenu).length;
+  const conMenu = sorted.filter((r) => withMenuFlag(r)).length;
+  const sinMenu = sorted.filter((r) => !withMenuFlag(r)).length;
+  const totalAll = allRestaurants.length;
+  const showCiudadFilter = ciudades.length > 2; // solo si hay >1 ciudad
 
   return (
     <div>
@@ -117,7 +159,6 @@ export default function HomePage() {
           style={{ position: "relative", zIndex: 1, paddingTop: "80px" }}
         >
           <div style={{ maxWidth: "620px" }}>
-            {/* Eyebrow / pill ubicación */}
             {confirmed && city ? (
               <button
                 onClick={() => setShowPicker(true)}
@@ -257,54 +298,58 @@ export default function HomePage() {
                     viewBox="0 0 24 24"
                   >
                     <circle cx="12" cy="12" r="3" />
-                    <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+                    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
                   </svg>
                   Detectar mi ubicación
                 </button>
               )}
             </div>
 
-            {/* Stats reales */}
-            <div
-              style={{
-                display: "flex",
-                gap: "36px",
-                marginTop: "52px",
-                paddingTop: "40px",
-                borderTop: "1px solid rgba(255,255,255,0.1)",
-                animation: "fadeUp 0.6s 0.4s ease both",
-              }}
-            >
-              {[
-                [totalConMenu + "+", "Restaurantes activos"],
-                [totalPaises, "Países"],
-                [avgCalif + "★", "Calificación media"],
-              ].map(([n, l]) => (
-                <div key={l}>
-                  <div
-                    style={{
-                      fontFamily: "Playfair Display, serif",
-                      fontSize: "26px",
-                      fontWeight: 700,
-                      color: "var(--cream)",
-                    }}
-                  >
-                    {n}
+            {!loading && totalAll > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "36px",
+                  marginTop: "52px",
+                  paddingTop: "40px",
+                  borderTop: "1px solid rgba(255,255,255,0.1)",
+                  animation: "fadeUp 0.6s 0.4s ease both",
+                }}
+              >
+                {[
+                  [conMenu + "+", "Con menú activo"],
+                  [
+                    [...new Set(allRestaurants.map((r) => r.pais))].length,
+                    "Países",
+                  ],
+                  [totalAll + "+", "Restaurantes"],
+                ].map(([n, l]) => (
+                  <div key={l}>
+                    <div
+                      style={{
+                        fontFamily: "Playfair Display, serif",
+                        fontSize: "26px",
+                        fontWeight: 700,
+                        color: "var(--cream)",
+                      }}
+                    >
+                      {n}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "rgba(255,255,255,0.45)",
+                        fontWeight: 500,
+                        letterSpacing: "0.06em",
+                        marginTop: "2px",
+                      }}
+                    >
+                      {l}
+                    </div>
                   </div>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "rgba(255,255,255,0.45)",
-                      fontWeight: 500,
-                      letterSpacing: "0.06em",
-                      marginTop: "2px",
-                    }}
-                  >
-                    {l}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -388,7 +433,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── SECCIÓN RESTAURANTES ── */}
+      {/* ── RESTAURANTES ── */}
       <section
         id="restaurants"
         style={{ padding: "80px 0 100px", background: "var(--bg)" }}
@@ -400,7 +445,7 @@ export default function HomePage() {
               display: "flex",
               alignItems: "flex-end",
               justifyContent: "space-between",
-              marginBottom: "36px",
+              marginBottom: "28px",
               flexWrap: "wrap",
               gap: "16px",
             }}
@@ -435,32 +480,33 @@ export default function HomePage() {
                     : "Todos los restaurantes"}
                 </span>
               </div>
-              <h2
-                style={{
-                  fontFamily: "Playfair Display, serif",
-                  fontSize: "clamp(26px,4vw,38px)",
-                  fontWeight: 700,
-                  color: "var(--text)",
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                {conMenu} con menú
-                {sinMenu > 0 && (
-                  <span
-                    style={{
-                      fontSize: "0.55em",
-                      color: "var(--text3)",
-                      fontFamily: "DM Sans, sans-serif",
-                      fontWeight: 500,
-                      marginLeft: "12px",
-                    }}
-                  >
-                    + {sinMenu} próximamente
-                  </span>
-                )}
-              </h2>
+              {!loading && (
+                <h2
+                  style={{
+                    fontFamily: "Playfair Display, serif",
+                    fontSize: "clamp(24px,4vw,38px)",
+                    fontWeight: 700,
+                    color: "var(--text)",
+                    letterSpacing: "-0.02em",
+                  }}
+                >
+                  {conMenu} con menú
+                  {sinMenu > 0 && (
+                    <span
+                      style={{
+                        fontSize: "0.55em",
+                        color: "var(--text3)",
+                        fontFamily: "DM Sans, sans-serif",
+                        fontWeight: 500,
+                        marginLeft: "12px",
+                      }}
+                    >
+                      + {sinMenu} sin menú
+                    </span>
+                  )}
+                </h2>
+              )}
             </div>
-            {/* Toggle solo abiertos */}
             <button
               onClick={() => setOnlyOpen((o) => !o)}
               style={{
@@ -491,7 +537,7 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Search + categorías */}
+          {/* Búsqueda + filtro ciudad */}
           <div
             style={{
               display: "flex",
@@ -503,8 +549,8 @@ export default function HomePage() {
           >
             <div
               style={{
-                flex: "1",
-                minWidth: "180px",
+                flex: 1,
+                minWidth: "200px",
                 maxWidth: "320px",
                 display: "flex",
                 alignItems: "center",
@@ -529,7 +575,7 @@ export default function HomePage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar restaurante o cocina..."
+                placeholder="Buscar restaurante o ciudad..."
                 style={{
                   flex: 1,
                   padding: "11px 0",
@@ -553,32 +599,89 @@ export default function HomePage() {
                 </button>
               )}
             </div>
-            <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}>
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setCategory(cat)}
-                  style={{
-                    padding: "7px 14px",
-                    background: category === cat ? "var(--green)" : "#fff",
-                    border: `1.5px solid ${category === cat ? "var(--green)" : "var(--border2)"}`,
-                    borderRadius: "20px",
-                    color: category === cat ? "#fff" : "var(--text2)",
-                    fontSize: "12px",
-                    fontWeight: category === cat ? 700 : 500,
-                    cursor: "pointer",
-                    fontFamily: "DM Sans, sans-serif",
-                    transition: "all 0.2s",
-                  }}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
+
+            {/* Filtro por ciudad — solo si hay más de 1 ciudad */}
+            {showCiudadFilter && (
+              <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}>
+                {ciudades.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setCategoria(cat)}
+                    style={{
+                      padding: "7px 14px",
+                      background: categoria === cat ? "var(--green)" : "#fff",
+                      border: `1.5px solid ${categoria === cat ? "var(--green)" : "var(--border2)"}`,
+                      borderRadius: "20px",
+                      color: categoria === cat ? "#fff" : "var(--text2)",
+                      fontSize: "12px",
+                      fontWeight: categoria === cat ? 700 : 500,
+                      cursor: "pointer",
+                      fontFamily: "DM Sans, sans-serif",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Grid */}
-          {sorted.length === 0 ? (
+          {loading ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))",
+                gap: "24px",
+              }}
+            >
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <RestaurantCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : error ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "72px 20px",
+                background: "#fff",
+                borderRadius: "var(--r-lg)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <div style={{ fontSize: "44px", marginBottom: "14px" }}>⚠️</div>
+              <h3
+                style={{
+                  fontFamily: "Playfair Display, serif",
+                  fontSize: "22px",
+                  marginBottom: "10px",
+                  color: "var(--text)",
+                }}
+              >
+                No pudimos cargar los restaurantes
+              </h3>
+              <p style={{ color: "var(--text2)", marginBottom: "24px" }}>
+                Verifica que el gateway esté corriendo en{" "}
+                <code
+                  style={{
+                    background: "var(--bg2)",
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    fontSize: "12px",
+                  }}
+                >
+                  localhost:8000/api/graphql/
+                </code>
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="btn-green"
+              >
+                Reintentar
+              </button>
+            </div>
+          ) : sorted.length === 0 ? (
             <div
               style={{
                 textAlign: "center",
@@ -602,13 +705,13 @@ export default function HomePage() {
               <p style={{ color: "var(--text2)", marginBottom: "24px" }}>
                 {confirmed && city
                   ? `Aún no hay restaurantes en ${city}. ¡Pronto llegamos!`
-                  : "Prueba ajustando los filtros."}
+                  : "Prueba ajustando los filtros o la ubicación."}
               </p>
               <button
                 onClick={() => {
                   setSearch("");
-                  setCategory("Todos");
                   setOnlyOpen(false);
+                  setCategoria("Todos");
                 }}
                 className="btn-green"
               >
@@ -624,7 +727,12 @@ export default function HomePage() {
               }}
             >
               {sorted.map((r, i) => (
-                <RestaurantCard key={r.id} restaurante={r} index={i} />
+                <RestaurantCard
+                  key={r.id}
+                  restaurante={r}
+                  tieneMenu={withMenuFlag(r)}
+                  index={i}
+                />
               ))}
             </div>
           )}

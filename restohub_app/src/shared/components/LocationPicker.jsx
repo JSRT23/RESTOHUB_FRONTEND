@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { useLocation } from "../contexts/LocationContext";
-import { COMING_COUNTRIES } from "../data/restaurants";
+import { useLocation } from "../../app/auth/LocationContext";
+import { useNavigate } from "react-router-dom";
+import { useCart } from "../../features/cart/context/CartContext";
 
 export default function LocationPicker() {
   const {
     showPicker,
     confirm,
-    COUNTRIES,
+    countries,
+    comingCountries,
     country: savedCountry,
     city: savedCity,
     geoLoading,
@@ -15,17 +17,20 @@ export default function LocationPicker() {
     detectLocation,
   } = useLocation();
 
+  const navigate = useNavigate();
+  const { clear } = useCart();
   const [step, setStep] = useState(1);
   const [selected, setSelected] = useState(null);
   const [query, setQuery] = useState("");
 
   if (!showPicker) return null;
 
-  const filteredActive = COUNTRIES.filter((c) =>
-    c.name.toLowerCase().includes(query.toLowerCase()),
+  const q = query.toLowerCase();
+  const filteredActive = countries.filter((c) =>
+    c.name.toLowerCase().includes(q),
   );
-  const filteredComing = COMING_COUNTRIES.filter((c) =>
-    c.name.toLowerCase().includes(query.toLowerCase()),
+  const filteredComing = comingCountries.filter((c) =>
+    c.name.toLowerCase().includes(q),
   );
 
   const handleCountry = (c) => {
@@ -35,7 +40,13 @@ export default function LocationPicker() {
     setGeoError(null);
   };
   const handleCity = (ci) => {
+    clear();
     confirm(selected, ci);
+    navigate("/");
+  };
+  const handleKeep = () => {
+    confirm(savedCountry, savedCity);
+    navigate("/");
   };
   const handleBack = () => {
     setStep(1);
@@ -43,33 +54,164 @@ export default function LocationPicker() {
     setQuery("");
   };
 
+  // Chip de país ACTIVO — bandera + código + nombre, clickeable, sin "Pronto"
+  const btnActive = (c) => (
+    <button
+      key={c.code}
+      onClick={() => handleCountry(c)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "7px",
+        padding: "8px 13px",
+        background: "var(--bg2)",
+        border: "1px solid var(--border)",
+        borderRadius: "10px",
+        color: "var(--text)",
+        fontSize: "13px",
+        fontWeight: 500,
+        cursor: "pointer",
+        transition: "all 0.15s",
+        fontFamily: "DM Sans, sans-serif",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "var(--green-dim2)";
+        e.currentTarget.style.borderColor = "rgba(10,56,40,0.3)";
+        e.currentTarget.style.color = "var(--green)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "var(--bg2)";
+        e.currentTarget.style.borderColor = "var(--border)";
+        e.currentTarget.style.color = "var(--text)";
+      }}
+    >
+      {/* código en cajita — igual que los "Pronto" para consistencia visual */}
+      <span
+        style={{
+          fontSize: "9px",
+          fontWeight: 800,
+          letterSpacing: "0.06em",
+          background: "var(--green-dim2)",
+          color: "var(--green)",
+          border: "1px solid rgba(10,56,40,0.15)",
+          borderRadius: "5px",
+          padding: "2px 5px",
+          minWidth: "24px",
+          textAlign: "center",
+        }}
+      >
+        {c.code}
+      </span>
+      {c.flag && (
+        <span style={{ fontSize: "16px", lineHeight: 1 }}>{c.flag}</span>
+      )}
+      {c.name}
+    </button>
+  );
+
+  // Chip de país PRÓXIMO — gris, no clickeable, con badge "Pronto"
+  const chipComing = (c) => (
+    <div
+      key={c.code}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "7px",
+        padding: "8px 13px",
+        background: "var(--bg3)",
+        border: "1px dashed var(--border2)",
+        borderRadius: "10px",
+        color: "var(--text3)",
+        fontSize: "13px",
+        fontWeight: 500,
+        fontFamily: "DM Sans, sans-serif",
+        opacity: 0.65,
+        cursor: "not-allowed",
+      }}
+    >
+      <span
+        style={{
+          fontSize: "9px",
+          fontWeight: 800,
+          letterSpacing: "0.06em",
+          background: "var(--bg2)",
+          color: "var(--text3)",
+          border: "1px solid var(--border2)",
+          borderRadius: "5px",
+          padding: "2px 5px",
+          minWidth: "24px",
+          textAlign: "center",
+        }}
+      >
+        {c.code}
+      </span>
+      {c.flag && (
+        <span style={{ fontSize: "16px", lineHeight: 1 }}>{c.flag}</span>
+      )}
+      {c.name}
+      <span
+        style={{
+          fontSize: "10px",
+          fontWeight: 700,
+          background: "var(--green-dim)",
+          color: "var(--green-lt)",
+          padding: "2px 7px",
+          borderRadius: "6px",
+          marginLeft: "2px",
+        }}
+      >
+        Pronto
+      </span>
+    </div>
+  );
+
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
         zIndex: 9999,
-        background: "rgba(7,45,32,0.94)",
-        backdropFilter: "blur(16px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: "20px",
-        animation: "fadeIn 0.25s ease",
       }}
     >
+      {/* Fondo: imagen de restaurante con overlay verde */}
       <div
         style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage:
+            "url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1600&q=85')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "rgba(7,45,32,0.82)",
+          backdropFilter: "blur(3px)",
+        }}
+      />
+
+      {/* Modal */}
+      <div
+        style={{
+          position: "relative",
+          zIndex: 1,
           background: "#fff",
           borderRadius: "24px",
           width: "100%",
           maxWidth: "520px",
           overflow: "hidden",
-          boxShadow: "0 40px 80px rgba(0,0,0,0.35)",
+          boxShadow: "0 40px 80px rgba(0,0,0,0.45)",
           animation: "fadeUp 0.3s ease",
         }}
       >
-        {/* Header */}
+        {/* Header verde */}
         <div style={{ background: "var(--green)", padding: "26px 28px 22px" }}>
           <div
             style={{
@@ -119,7 +261,6 @@ export default function LocationPicker() {
               </h2>
             </div>
           </div>
-          {/* Progress */}
           <div
             style={{
               height: "3px",
@@ -139,7 +280,7 @@ export default function LocationPicker() {
           </div>
         </div>
 
-        {/* Botón geolocalización — solo paso 1 */}
+        {/* Geolocalización — solo paso 1 */}
         {step === 1 && (
           <div style={{ padding: "16px 24px 0" }}>
             <button
@@ -199,7 +340,6 @@ export default function LocationPicker() {
                   >
                     <circle cx="12" cy="12" r="3" />
                     <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
-                    <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8" />
                   </svg>
                   Usar mi ubicación actual
                 </>
@@ -245,7 +385,7 @@ export default function LocationPicker() {
           </div>
         )}
 
-        {/* Search */}
+        {/* Buscador */}
         <div style={{ padding: "12px 24px 0" }}>
           <div
             style={{
@@ -299,64 +439,42 @@ export default function LocationPicker() {
           </div>
         </div>
 
-        {/* List */}
+        {/* Listas */}
         <div
           style={{
-            maxHeight: "280px",
+            maxHeight: "300px",
             overflowY: "auto",
             padding: "12px 24px 6px",
           }}
         >
           {step === 1 && (
             <>
-              {/* Países activos */}
+              {/* Activos — sin badge "Pronto", con código + bandera */}
               {filteredActive.length > 0 && (
                 <div
                   style={{
                     display: "flex",
                     flexWrap: "wrap",
                     gap: "8px",
-                    marginBottom: "10px",
+                    marginBottom: "14px",
                   }}
                 >
-                  {filteredActive.map((c) => (
-                    <button
-                      key={c.code}
-                      onClick={() => handleCountry(c)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "9px 14px",
-                        background: "var(--bg2)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "10px",
-                        color: "var(--text)",
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        cursor: "pointer",
-                        transition: "all 0.15s",
-                        fontFamily: "DM Sans, sans-serif",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "var(--green-dim2)";
-                        e.currentTarget.style.borderColor =
-                          "rgba(10,56,40,0.3)";
-                        e.currentTarget.style.color = "var(--green)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "var(--bg2)";
-                        e.currentTarget.style.borderColor = "var(--border)";
-                        e.currentTarget.style.color = "var(--text)";
-                      }}
-                    >
-                      <span style={{ fontSize: "19px" }}>{c.flag}</span>{" "}
-                      {c.name}
-                    </button>
-                  ))}
+                  {filteredActive.map(btnActive)}
                 </div>
               )}
-              {/* Países próximos */}
+              {countries.length === 0 && (
+                <p
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--text3)",
+                    textAlign: "center",
+                    padding: "10px 0",
+                  }}
+                >
+                  Cargando países disponibles...
+                </p>
+              )}
+              {/* Próximamente — solo los que NO tienen restaurantes */}
               {filteredComing.length > 0 && (
                 <>
                   <p
@@ -367,7 +485,6 @@ export default function LocationPicker() {
                       letterSpacing: "0.1em",
                       textTransform: "uppercase",
                       marginBottom: "8px",
-                      marginTop: "4px",
                     }}
                   >
                     Próximamente
@@ -375,41 +492,7 @@ export default function LocationPicker() {
                   <div
                     style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}
                   >
-                    {filteredComing.map((c) => (
-                      <div
-                        key={c.code}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          padding: "9px 14px",
-                          background: "var(--bg3)",
-                          border: "1px dashed var(--border2)",
-                          borderRadius: "10px",
-                          color: "var(--text3)",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          fontFamily: "DM Sans, sans-serif",
-                          opacity: 0.7,
-                          cursor: "not-allowed",
-                        }}
-                      >
-                        <span style={{ fontSize: "19px" }}>{c.flag}</span>{" "}
-                        {c.name}
-                        <span
-                          style={{
-                            fontSize: "10px",
-                            background: "var(--green-dim)",
-                            color: "var(--green-lt)",
-                            padding: "2px 7px",
-                            borderRadius: "6px",
-                            fontWeight: 700,
-                          }}
-                        >
-                          Pronto
-                        </span>
-                      </div>
-                    ))}
+                    {filteredComing.map(chipComing)}
                   </div>
                 </>
               )}
@@ -418,8 +501,8 @@ export default function LocationPicker() {
 
           {step === 2 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {selected?.cities
-                .filter((ci) => ci.toLowerCase().includes(query.toLowerCase()))
+              {(selected?.cities || [])
+                .filter((ci) => ci.toLowerCase().includes(q))
                 .map((ci) => (
                   <button
                     key={ci}
@@ -465,6 +548,17 @@ export default function LocationPicker() {
                     {ci}
                   </button>
                 ))}
+              {(selected?.cities || []).length === 0 && (
+                <p
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--text3)",
+                    padding: "12px 0",
+                  }}
+                >
+                  No hay ciudades disponibles aún en {selected?.name}.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -498,7 +592,7 @@ export default function LocationPicker() {
           )}
           {savedCountry && savedCity && (
             <button
-              onClick={() => confirm(savedCountry, savedCity)}
+              onClick={handleKeep}
               style={{
                 width: "100%",
                 padding: "8px",

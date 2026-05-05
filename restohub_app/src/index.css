@@ -47,6 +47,33 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Solo inputs y textareas permiten selección */
+input,
+textarea,
+[contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+/* Texto normal: cursor default, no seleccionable */
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+span,
+li,
+label,
+td,
+th {
+  cursor: default;
 }
 
 body {
