@@ -1,3 +1,9 @@
+// src/shared/components/Navbar.jsx
+// CAMBIO: Los links del dropdown de usuario apuntan a rutas específicas del dashboard
+//   Mi cuenta   → /perfil  (dashboard)
+//   Mis cupones → /cupones (tab cupones)
+//   Mis puntos  → /puntos  (tab puntos)
+//   Mis pedidos → /perfil  (tab dashboard, donde se ven últimos movimientos)
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation as useRouterLocation } from "react-router-dom";
 import { useCart } from "../../features/cart/context/CartContext";
@@ -64,7 +70,6 @@ export default function Navbar() {
 
   const darkBg = !isHome || scrolled;
 
-  // Logout sin confirmación — AuthContext ya limpia sesión + ubicación + recarga
   const handleLogout = () => {
     setUserOpen(false);
     logout();
@@ -101,6 +106,77 @@ export default function Navbar() {
       <path d="M6 9l6 6 6-6" />
     </svg>
   );
+
+  // Opciones del dropdown de usuario — ahora con rutas correctas
+  const USER_MENU = [
+    {
+      to: "/perfil",
+      label: "Mi cuenta",
+      icon: (
+        <svg
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      ),
+    },
+    {
+      to: "/puntos",
+      label: "Mis puntos",
+      icon: (
+        <svg
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+      ),
+    },
+    {
+      to: "/cupones",
+      label: "Mis cupones",
+      icon: (
+        <svg
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <rect x="2" y="6" width="20" height="12" rx="2" />
+          <path d="M2 10h20" />
+        </svg>
+      ),
+    },
+    {
+      to: "/perfil",
+      label: "Mis pedidos",
+      icon: (
+        <svg
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+          <rect x="9" y="3" width="6" height="4" rx="1" />
+        </svg>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -314,6 +390,7 @@ export default function Navbar() {
                       zIndex: 200,
                     }}
                   >
+                    {/* Header dropdown */}
                     <div
                       style={{
                         padding: "14px 16px",
@@ -340,72 +417,10 @@ export default function Navbar() {
                         {user?.email}
                       </p>
                     </div>
+
+                    {/* Links */}
                     <div style={{ padding: "6px" }}>
-                      {[
-                        [
-                          "/perfil",
-                          <svg
-                            key="a"
-                            width="14"
-                            height="14"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                            <circle cx="12" cy="7" r="4" />
-                          </svg>,
-                          "Mi cuenta",
-                        ],
-                        [
-                          "/perfil",
-                          <svg
-                            key="b"
-                            width="14"
-                            height="14"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            viewBox="0 0 24 24"
-                          >
-                            <rect x="2" y="6" width="20" height="12" rx="2" />
-                            <path d="M2 10h20" />
-                          </svg>,
-                          "Mis cupones",
-                        ],
-                        [
-                          "/perfil",
-                          <svg
-                            key="c"
-                            width="14"
-                            height="14"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            viewBox="0 0 24 24"
-                          >
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                          </svg>,
-                          "Mis puntos",
-                        ],
-                        [
-                          "/pedidos",
-                          <svg
-                            key="d"
-                            width="14"
-                            height="14"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-                            <rect x="9" y="3" width="6" height="4" rx="1" />
-                          </svg>,
-                          "Mis pedidos",
-                        ],
-                      ].map(([to, icon, label]) => (
+                      {USER_MENU.map(({ to, label, icon }) => (
                         <NavLink
                           key={label}
                           to={to}
@@ -572,8 +587,11 @@ export default function Navbar() {
                 <NavLink to="/perfil" onClick={() => setMenuOpen(false)}>
                   Mi cuenta
                 </NavLink>
-                <NavLink to="/pedidos" onClick={() => setMenuOpen(false)}>
-                  Mis pedidos
+                <NavLink to="/puntos" onClick={() => setMenuOpen(false)}>
+                  Mis puntos
+                </NavLink>
+                <NavLink to="/cupones" onClick={() => setMenuOpen(false)}>
+                  Mis cupones
                 </NavLink>
                 <button
                   onClick={handleLogout}
@@ -610,6 +628,7 @@ export default function Navbar() {
           </div>
         )}
       </nav>
+
       <style>{`
         @media (max-width: 640px) {
           .nav-hamburger { display: flex !important; }
