@@ -10,6 +10,7 @@ export const GET_RESTAURANTE = gql`
       direccion
       moneda
       activo
+      imagen
     }
   }
 `;
@@ -37,7 +38,7 @@ export const GET_PLATOS_RESTAURANTE = gql`
   }
 `;
 
-// También mantenemos el menuRestaurante como fallback
+// menuRestaurante como fallback — ahora incluye imagen del restaurante
 export const GET_MENU_RESTAURANTE = gql`
   query GetMenuRestaurante($restauranteId: ID!) {
     menuRestaurante(restauranteId: $restauranteId) {
@@ -46,6 +47,7 @@ export const GET_MENU_RESTAURANTE = gql`
       ciudad
       pais
       moneda
+      imagen
       categorias {
         categoriaId
         nombre

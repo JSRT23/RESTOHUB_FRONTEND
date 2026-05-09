@@ -2,12 +2,12 @@
 //
 // Admin Central — Gestión de cuentas de usuario
 // ──────────────────────────────────────────────
-// Cruza auth_service (cuentas) con staff_service (empleados) por email.
-// Detecta y resuelve desincronías: cuenta activa + empleado inactivo y vice-versa.
-// Acciones disponibles:
-//   • Activar / desactivar cuenta auth
-//   • Vincular empleado_id si quedó vacío (autovinculado desde la vista)
-// Sin creación de usuarios (eso lo hace el gerente o el wizard de restaurante).
+// CAMBIOS:
+// - rol 'cliente': getSyncStatus → "ok" (no necesita perfil staff)
+// - rol 'cliente': columna "Perfil staff" → "No aplica" (italic gris)
+// - rol 'cliente': no se muestra botón "Vincular" (no aplica)
+// - ROLES_FILTRO y ROLES_LABEL incluyen "cliente" / "Cliente App"
+// - ROL_VARIANT: cliente → "green" (badge verde igual que el portal)
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useLazyQuery } from "@apollo/client/react";
@@ -95,6 +95,7 @@ const ROLES_LABEL = {
   cajero: "Cajero",
   repartidor: "Repartidor",
   auxiliar: "Auxiliar",
+  cliente: "cliente", // usuario de la app restohub
 };
 
 const ROL_VARIANT = {
@@ -106,6 +107,7 @@ const ROL_VARIANT = {
   cajero: "default",
   repartidor: "default",
   auxiliar: "muted",
+  cliente: "green", // badge verde para clientes de la app
 };
 
 const ROLES_FILTRO = [
@@ -118,12 +120,25 @@ const ROLES_FILTRO = [
   { value: "cajero", label: "Cajero" },
   { value: "repartidor", label: "Repartidor" },
   { value: "auxiliar", label: "Auxiliar" },
+  { value: "cliente", label: "Cliente App" }, // usuarios de restohub_app
 ];
+
+// Roles que SÍ requieren perfil en staff_service
+const ROLES_CON_STAFF = new Set([
+  "gerente_local",
+  "supervisor",
+  "cajero",
+  "mesero",
+  "cocinero",
+  "repartidor",
+  "auxiliar",
+]);
 
 // Estado de sincronía entre auth y staff
 const getSyncStatus = (usuario, empleado) => {
-  // admin_central no tiene empleado en staff — siempre sincronizado
+  // admin_central y cliente no son empleados de staff — siempre sincronizados
   if (usuario.rol === "admin_central") return "ok";
+  if (usuario.rol === "cliente") return "ok"; // clientes de la app no necesitan perfil staff
 
   if (!empleado) {
     // Cuenta sin empleado vinculado (empleadoId vacío y no encontrado por email)
@@ -245,6 +260,7 @@ function UsuarioRow({
   const meta = SYNC_META[sync];
   const SyncIcon = meta.icon;
   const tieneEmpleado = !!empleado;
+  const esCliente = usuario.rol === "cliente";
 
   return (
     <tr className="border-b border-stone-100 hover:bg-stone-50/60 transition-colors">
@@ -262,8 +278,7 @@ function UsuarioRow({
               {usuario.nombre}
             </p>
             <p className="text-xs text-stone-400 font-dm flex items-center gap-1">
-              <Mail size={10} />
-              {usuario.email}
+              <Mail size={10} /> {usuario.email}
             </p>
           </div>
         </div>
@@ -276,7 +291,7 @@ function UsuarioRow({
         </Badge>
       </td>
 
-      {/* Restaurante (solo para roles scoped) */}
+      {/* Restaurante */}
       <td className="py-3.5 px-3">
         {empleado?.restauranteNombre ? (
           <div className="flex items-center gap-1.5 text-xs text-stone-500 font-dm">
@@ -315,8 +330,11 @@ function UsuarioRow({
 
       {/* Estado staff / vínculo */}
       <td className="py-3.5 px-3">
-        {usuario.rol === "admin_central" ? (
-          <span className="text-xs text-stone-300 font-dm">N/A</span>
+        {/* Clientes y admin_central no son empleados de staff */}
+        {usuario.rol === "admin_central" || esCliente ? (
+          <span className="text-xs text-stone-300 font-dm italic">
+            No aplica
+          </span>
         ) : tieneEmpleado ? (
           <div className="flex flex-col gap-1">
             <span
@@ -350,15 +368,16 @@ function UsuarioRow({
           className={`inline-flex items-center gap-1.5 text-xs font-dm font-medium px-2.5 py-1 rounded-full ${meta.bg} ${meta.color}`}
         >
           <SyncIcon size={11} />
-          {meta.label}
+          {/* Para clientes, en vez de "Sincronizado" mostramos "App cliente" */}
+          {esCliente ? "App cliente" : meta.label}
         </span>
       </td>
 
       {/* Acciones */}
       <td className="py-3.5 pr-5 pl-3">
         <div className="flex items-center gap-2 justify-end">
-          {/* Vincular empleado_id si falta */}
-          {!usuario.empleadoId && tieneEmpleado && (
+          {/* Vincular empleado_id — NO aplica para clientes */}
+          {!esCliente && !usuario.empleadoId && tieneEmpleado && (
             <button
               onClick={() => onVincular(usuario, empleado)}
               disabled={vinculando === usuario.id}
@@ -428,7 +447,7 @@ export default function AdminUsuariosList() {
     loading: loadingE,
     refetch: refetchE,
   } = useQuery(GET_EMPLEADOS, {
-    variables: {}, // admin → sin restricción → todos
+    variables: {},
     fetchPolicy: "cache-and-network",
   });
 
@@ -451,7 +470,10 @@ export default function AdminUsuariosList() {
   const usuarios = useMemo(() => {
     return (dataUsuarios?.usuarios ?? []).map((u) => ({
       usuario: u,
-      empleado: empleadosByEmail[u.email?.toLowerCase()] ?? null,
+      // Clientes no tienen empleado en staff — null intencionalmente
+      empleado: ROLES_CON_STAFF.has(u.rol)
+        ? (empleadosByEmail[u.email?.toLowerCase()] ?? null)
+        : null,
     }));
   }, [dataUsuarios, empleadosByEmail]);
 
@@ -470,6 +492,8 @@ export default function AdminUsuariosList() {
       if (syncFiltro === "desincronizados") {
         const s = getSyncStatus(usuario, empleado);
         if (s === "ok") return false;
+        // Excluir clientes del filtro "desincronizados" — no aplica para ellos
+        if (usuario.rol === "cliente") return false;
       }
       return true;
     });
@@ -479,16 +503,15 @@ export default function AdminUsuariosList() {
   const totalActivos = (dataUsuarios?.usuarios ?? []).filter(
     (u) => u.activo,
   ).length;
-  const totalDesincronizados = usuarios.filter(
-    ({ usuario, empleado }) => getSyncStatus(usuario, empleado) !== "ok",
-  ).length;
+  const totalDesincronizados = usuarios.filter(({ usuario, empleado }) => {
+    if (usuario.rol === "cliente") return false; // clientes no cuentan como desincronizados
+    return getSyncStatus(usuario, empleado) !== "ok";
+  }).length;
 
   // ── Handlers ──────────────────────────────────────────────────────────
   const handleToggleAuth = async (usuario, empleado) => {
     const accion = usuario.activo ? "desactivar" : "activar";
     const sinc = getSyncStatus(usuario, empleado);
-
-    // Alerta de advertencia si hay desincronía
     const advertencia =
       sinc !== "ok" && sinc !== "sin_empleado"
         ? `<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
@@ -606,11 +629,10 @@ export default function AdminUsuariosList() {
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Header */}
       <PageHeader
         eyebrow="Admin Central"
         title="Usuarios del sistema"
-        description="Cuentas de acceso · estado auth vs. perfil staff"
+        description="Cuentas de acceso · estado auth vs. perfil staff. Clientes de la app no requieren perfil staff."
         action={
           <Button variant="ghost" size="sm" onClick={refetch} title="Recargar">
             <RefreshCw size={14} />
@@ -661,7 +683,6 @@ export default function AdminUsuariosList() {
 
       {/* Controles */}
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-        {/* Búsqueda */}
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search
             size={14}
@@ -685,7 +706,6 @@ export default function AdminUsuariosList() {
           />
         </div>
 
-        {/* Filtro rol */}
         <SelectFilter
           value={rolFiltro}
           onChange={setRolFiltro}
@@ -693,7 +713,6 @@ export default function AdminUsuariosList() {
           icon={Briefcase}
         />
 
-        {/* Filtro sincronía */}
         <div className="flex items-center gap-1 bg-white border border-stone-200 rounded-xl p-1 shadow-sm">
           {[
             { v: "todos", l: "Todos" },
@@ -705,9 +724,7 @@ export default function AdminUsuariosList() {
               style={
                 syncFiltro === v ? { background: A[900], color: "white" } : {}
               }
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-dm font-semibold transition-all ${
-                syncFiltro === v ? "" : "text-stone-500 hover:bg-stone-50"
-              }`}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-dm font-semibold transition-all ${syncFiltro === v ? "" : "text-stone-500 hover:bg-stone-50"}`}
             >
               {l}
             </button>
@@ -755,7 +772,7 @@ export default function AdminUsuariosList() {
           }
           description={
             syncFiltro === "desincronizados"
-              ? "Todas las cuentas están sincronizadas con staff ✓"
+              ? "Todas las cuentas de empleados están sincronizadas con staff ✓"
               : "Ajusta los filtros para ver resultados"
           }
           action={
@@ -819,8 +836,7 @@ export default function AdminUsuariosList() {
             const Icon = m.icon;
             return (
               <span key={k} className={`flex items-center gap-1.5 ${m.color}`}>
-                <Icon size={11} />
-                {m.label}
+                <Icon size={11} /> {m.label}
               </span>
             );
           })}

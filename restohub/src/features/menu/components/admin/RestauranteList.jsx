@@ -13,6 +13,7 @@ import {
   Loader2,
   Building2,
   ArrowRight,
+  ImageOff,
 } from "lucide-react";
 import {
   PageHeader,
@@ -69,11 +70,52 @@ function getInitials(nombre = "") {
     : nombre.slice(0, 2).toUpperCase();
 }
 
+// ── Cover del restaurante — imagen si existe, iniciales si no ──────────────
+function RestauranteCover({ r }) {
+  const [imgError, setImgError] = useState(false);
+  const showImg = r.imagen && !imgError;
+
+  if (showImg) {
+    return (
+      <div className="relative h-44 shrink-0 overflow-hidden">
+        <img
+          src={r.imagen}
+          alt={r.nombre}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          onError={() => setImgError(true)}
+        />
+        {/* Degradado sutil para legibilidad del badge */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="relative h-44 shrink-0 overflow-hidden flex items-center justify-center"
+      style={{
+        background: `linear-gradient(135deg, ${G[50]} 0%, ${G[100]}44 100%)`,
+      }}
+    >
+      <div
+        className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-sm"
+        style={{
+          background: "white",
+          color: G[500],
+          border: `2px solid ${G[100]}`,
+          fontFamily: "'Playfair Display', serif",
+        }}
+      >
+        {getInitials(r.nombre)}
+      </div>
+    </div>
+  );
+}
+
 // ── Card ───────────────────────────────────────────────────────────────────
 function RestauranteCard({ r, onToggle, onEdit, toggling }) {
   const navigate = useNavigate();
   const flag = PAIS_FLAG[r.pais] || "🌎";
-  const initials = getInitials(r.nombre);
 
   return (
     <div
@@ -81,27 +123,12 @@ function RestauranteCard({ r, onToggle, onEdit, toggling }) {
                  hover:-translate-y-1 transition-all duration-300 group"
       style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.07)" }}
     >
-      {/* ── COVER — iniciales siempre, imagen si el modelo la tiene ────── */}
-      <div
-        className="relative h-44 shrink-0 overflow-hidden"
-        style={{ background: G[50] }}
-      >
-        {/* Si el restaurante tiene imagen: <img src={r.imagen} className="w-full h-full object-cover" /> */}
-        <div className="w-full h-full flex items-center justify-center">
-          <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-sm"
-            style={{
-              background: "white",
-              color: G[500],
-              border: `2px solid ${G[100]}`,
-            }}
-          >
-            {initials}
-          </div>
-        </div>
+      {/* Cover */}
+      <div className="relative">
+        <RestauranteCover r={r} />
 
         {/* Badge estado */}
-        <div className="absolute top-3 right-3">
+        <div className="absolute top-3 right-3 z-10">
           <span
             style={
               r.activo
@@ -116,14 +143,14 @@ function RestauranteCard({ r, onToggle, onEdit, toggling }) {
                     border: "1px solid #e5e7eb",
                   }
             }
-            className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide"
+            className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide backdrop-blur-sm"
           >
             {r.activo ? "ACTIVO" : "INACTIVO"}
           </span>
         </div>
 
-        {/* Acciones — visibles al hover */}
-        <div className="absolute top-3 left-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200">
+        {/* Acciones hover */}
+        <div className="absolute top-3 left-3 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200">
           <button
             onClick={() => onEdit(r)}
             className="w-8 h-8 rounded-xl bg-white border border-stone-200 shadow-sm
@@ -157,9 +184,8 @@ function RestauranteCard({ r, onToggle, onEdit, toggling }) {
         </div>
       </div>
 
-      {/* ── CONTENT ───────────────────────────────────────────────────── */}
+      {/* Content */}
       <div className="flex flex-col flex-1 p-5">
-        {/* Nombre */}
         <h3
           className="text-[22px] font-bold text-stone-900 leading-tight mb-2"
           style={{ fontFamily: "'Playfair Display', serif" }}
@@ -167,13 +193,11 @@ function RestauranteCard({ r, onToggle, onEdit, toggling }) {
           {r.nombre}
         </h3>
 
-        {/* País */}
         <div className="flex items-center gap-1.5 mb-2">
           <span className="text-base leading-none">{flag}</span>
           <span className="text-xs font-dm text-stone-400">{r.pais}</span>
         </div>
 
-        {/* Dirección */}
         <div className="flex items-start gap-1.5 mb-3">
           <MapPin size={12} className="text-stone-300 shrink-0 mt-0.5" />
           <p className="text-sm font-dm text-stone-500 leading-snug line-clamp-2">
@@ -181,7 +205,6 @@ function RestauranteCard({ r, onToggle, onEdit, toggling }) {
           </p>
         </div>
 
-        {/* Moneda */}
         <div className="flex items-center gap-1.5">
           <Coins size={12} style={{ color: G[300] }} />
           <span
@@ -192,7 +215,6 @@ function RestauranteCard({ r, onToggle, onEdit, toggling }) {
           </span>
         </div>
 
-        {/* Ver detalle */}
         <div className="mt-auto pt-4 flex justify-end border-t border-stone-100">
           <button
             onClick={() => navigate(`/restaurantes/${r.id}`)}
@@ -211,13 +233,15 @@ function RestauranteCard({ r, onToggle, onEdit, toggling }) {
   );
 }
 
-// ── Modal Editar ───────────────────────────────────────────────────────────
+// ── Modal Editar — ahora incluye campo imagen ──────────────────────────────
 function EditarModal({ restaurante: r, onClose, onSaved }) {
   const [form, setForm] = useState({
     nombre: r.nombre,
     ciudad: r.ciudad || "",
     direccion: r.direccion || "",
+    imagen: r.imagen || "",
   });
+  const [imgPreviewError, setImgPreviewError] = useState(false);
   const [error, setError] = useState("");
   const [actualizar, { loading }] = useMutation(ACTUALIZAR_RESTAURANTE);
 
@@ -242,6 +266,12 @@ function EditarModal({ restaurante: r, onClose, onSaved }) {
     onSaved();
   };
 
+  const fields = [
+    { label: "Nombre", key: "nombre", ph: "Nombre del restaurante" },
+    { label: "Ciudad", key: "ciudad", ph: "Ciudad" },
+    { label: "Dirección", key: "direccion", ph: "Dirección completa" },
+  ];
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -255,8 +285,8 @@ function EditarModal({ restaurante: r, onClose, onSaved }) {
         <div className="h-1" style={{ background: G[900] }} />
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
           <h2
-            className="font-semibold text-stone-900 text-lg"
             style={{ fontFamily: "'Playfair Display', serif" }}
+            className="font-semibold text-stone-900 text-lg"
           >
             Editar restaurante
           </h2>
@@ -268,11 +298,7 @@ function EditarModal({ restaurante: r, onClose, onSaved }) {
           </button>
         </div>
         <div className="p-5 space-y-4">
-          {[
-            { label: "Nombre", key: "nombre", ph: "Nombre del restaurante" },
-            { label: "Ciudad", key: "ciudad", ph: "Ciudad" },
-            { label: "Dirección", key: "direccion", ph: "Dirección completa" },
-          ].map((f) => (
+          {fields.map((f) => (
             <div key={f.key} className="space-y-1.5">
               <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
                 {f.label}
@@ -287,6 +313,51 @@ function EditarModal({ restaurante: r, onClose, onSaved }) {
               />
             </div>
           ))}
+
+          {/* Campo imagen con preview */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
+              URL Imagen{" "}
+              <span className="font-normal text-stone-300 normal-case">
+                (opcional)
+              </span>
+            </label>
+            <input
+              value={form.imagen}
+              onChange={(e) => {
+                setForm({ ...form, imagen: e.target.value });
+                setImgPreviewError(false);
+              }}
+              placeholder="https://..."
+              className={cls}
+              onFocus={fi}
+              onBlur={fb}
+            />
+            {/* Preview inline */}
+            {form.imagen && !imgPreviewError && (
+              <div className="relative h-28 rounded-xl overflow-hidden border border-stone-200 mt-1">
+                <img
+                  src={form.imagen}
+                  alt="preview"
+                  className="w-full h-full object-cover"
+                  onError={() => setImgPreviewError(true)}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+                <span className="absolute bottom-2 left-3 text-[10px] font-dm text-white/80">
+                  Vista previa
+                </span>
+              </div>
+            )}
+            {form.imagen && imgPreviewError && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-100 mt-1">
+                <ImageOff size={12} className="text-red-400" />
+                <p className="text-[11px] font-dm text-red-500">
+                  URL inválida o imagen no disponible.
+                </p>
+              </div>
+            )}
+          </div>
+
           {error && (
             <div className="px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
               <p className="text-xs font-dm text-red-600">{error}</p>
@@ -373,7 +444,6 @@ export default function RestaurantesList() {
         }
       />
 
-      {/* Stats */}
       {!loading && todos.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">
           {[
@@ -412,7 +482,6 @@ export default function RestaurantesList() {
         </div>
       )}
 
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative max-w-sm flex-1">
           <Search
@@ -448,7 +517,6 @@ export default function RestaurantesList() {
         </div>
       </div>
 
-      {/* Grid */}
       {loading ? (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {[...Array(8)].map((_, i) => (

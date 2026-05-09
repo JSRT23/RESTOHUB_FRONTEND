@@ -1,4 +1,7 @@
 // src/features/menu/components/Gerente/dashboard/GerenteDashboard.jsx
+// CAMBIO: hero del restaurante muestra imagen como fondo si existe.
+// Las iniciales, nombre y moneda quedan encima con overlay.
+import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -45,7 +48,6 @@ const PAIS_FLAG = {
   "Estados Unidos": "🇺🇸",
   Brasil: "🇧🇷",
 };
-
 const MONEDA_NOMBRE = {
   COP: "Peso colombiano",
   USD: "Dólar americano",
@@ -106,7 +108,6 @@ function KpiCard({ icon: Icon, label, value, sub, accent, onClick }) {
   );
 }
 
-// precioVigenteIdx viene del padre — platoId → precio vigente
 function PlatoRow({ plato, moneda, precioVigenteIdx }) {
   const precio = precioVigenteIdx[plato.id];
   return (
@@ -159,6 +160,160 @@ function PlatoRow({ plato, moneda, precioVigenteIdx }) {
   );
 }
 
+// ── Hero del restaurante ──────────────────────────────────────────────────
+// Si tiene imagen: fondo foto + overlay oscuro + iniciales/nombre/moneda encima
+// Si no tiene imagen: gradiente verde oscuro (comportamiento original)
+function RestauranteHero({ r }) {
+  const [imgError, setImgError] = useState(false);
+  const flag = PAIS_FLAG[r.pais] || "🌎";
+  const initials = getInitials(r.nombre);
+  const showImg = r.imagen && !imgError;
+
+  return (
+    <div
+      className="rounded-2xl overflow-hidden"
+      style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}
+    >
+      <div
+        className="relative h-36 flex items-center px-8 gap-6"
+        style={
+          showImg
+            ? undefined
+            : {
+                background: `linear-gradient(135deg, ${G[900]} 0%, ${G[500]} 100%)`,
+              }
+        }
+      >
+        {/* Imagen de fondo */}
+        {showImg && (
+          <>
+            <img
+              src={r.imagen}
+              alt={r.nombre}
+              className="absolute inset-0 w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+            {/* Overlay oscuro para legibilidad */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(5,31,32,0.82) 0%, rgba(22,56,50,0.72) 100%)",
+              }}
+            />
+          </>
+        )}
+
+        {/* Efecto decorativo sutil (solo sin imagen) */}
+        {!showImg && (
+          <div
+            className="absolute inset-0 opacity-10"
+            style={{
+              backgroundImage: `radial-gradient(circle at 80% 50%, ${G[50]} 0%, transparent 60%)`,
+            }}
+          />
+        )}
+
+        {/* Iniciales */}
+        <div
+          className="relative w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shrink-0"
+          style={{
+            background: G[50],
+            color: G[500],
+            fontFamily: "'Playfair Display', serif",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+          }}
+        >
+          {initials}
+        </div>
+
+        {/* Nombre y datos */}
+        <div className="relative">
+          <p
+            className="text-[10px] font-dm font-bold tracking-[0.2em] uppercase mb-1"
+            style={{ color: G[100] }}
+          >
+            {flag} {r.pais}
+          </p>
+          <h2
+            className="text-2xl font-bold text-white leading-tight"
+            style={{ fontFamily: "'Playfair Display', serif" }}
+          >
+            {r.nombre}
+          </h2>
+          <p
+            className="text-sm font-dm mt-0.5"
+            style={{ color: `${G[100]}cc` }}
+          >
+            {[r.ciudad, r.direccion].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+
+        {/* Moneda */}
+        <div className="ml-auto relative">
+          <div
+            className="text-right px-4 py-2 rounded-xl border"
+            style={{
+              borderColor: `${G[300]}66`,
+              background: showImg ? "rgba(5,31,32,0.5)" : `${G[900]}88`,
+              backdropFilter: showImg ? "blur(4px)" : undefined,
+            }}
+          >
+            <p
+              className="text-[9px] font-dm uppercase tracking-widest"
+              style={{ color: G[100] }}
+            >
+              Moneda
+            </p>
+            <p className="text-lg font-bold font-dm text-white">{r.moneda}</p>
+            <p className="text-[9px] font-dm" style={{ color: `${G[100]}99` }}>
+              {MONEDA_NOMBRE[r.moneda] || r.moneda}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Barra inferior */}
+      <div className="bg-white border-t border-stone-100 px-8 py-3 flex items-center gap-6 flex-wrap">
+        {[
+          { icon: MapPin, label: r.ciudad || "—" },
+          { icon: Building2, label: r.direccion || "—" },
+          {
+            icon: Coins,
+            label: `${r.moneda} · ${MONEDA_NOMBRE[r.moneda] || r.moneda}`,
+          },
+        ].map(({ icon: Icon, label }) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <Icon size={12} style={{ color: G[300] }} />
+            <span className="text-xs font-dm text-stone-500">{label}</span>
+          </div>
+        ))}
+        <div className="ml-auto">
+          <span
+            className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide"
+            style={
+              r.activo
+                ? {
+                    background: G[50],
+                    color: G[500],
+                    border: `1px solid ${G[100]}`,
+                  }
+                : {
+                    background: "#f3f4f6",
+                    color: "#6b7280",
+                    border: "1px solid #e5e7eb",
+                  }
+            }
+          >
+            {r.activo ? "ACTIVO" : "INACTIVO"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────
 export default function GerenteDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -173,7 +328,6 @@ export default function GerenteDashboard() {
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
-  // FIX: precios por separado — el endpoint de lista no los incluye en platos
   const { data: preciosData } = useQuery(GET_PRECIOS_RESTAURANTE, {
     variables: { restauranteId },
     skip: !restauranteId,
@@ -191,23 +345,12 @@ export default function GerenteDashboard() {
   const cats = cData?.categorias ?? [];
   const activos = platos.filter((p) => p.activo).length;
 
-  // Índice platoId → precio vigente activo — fuente única de verdad para precios
   const precioVigenteIdx = {};
   for (const p of preciosData?.precios ?? []) {
-    if (p.estaVigente && p.activo) {
-      precioVigenteIdx[p.platoId] = p;
-    }
+    if (p.estaVigente && p.activo) precioVigenteIdx[p.platoId] = p;
   }
   const conPrecio = platos.filter((p) => !!precioVigenteIdx[p.id]).length;
-
   const ingsActivos = ings.filter((i) => i.activo).length;
-
-  // "Usados en platos": ingredientes que aparecen en al menos un precio vigente
-  // No podemos leer plato.ingredientes desde la lista, así que usamos los
-  // ingredientes activos del restaurante como proxy razonable hasta tener
-  // el endpoint de detalle. Si querés el número exacto, abrí el detalle.
-  // Por ahora mostramos los activos como indicador de disponibilidad.
-  const ingsUsados = ingsActivos;
 
   if (rLoading)
     return (
@@ -249,118 +392,7 @@ export default function GerenteDashboard() {
       </div>
 
       {/* Hero restaurante */}
-      {r && (
-        <div
-          className="rounded-2xl overflow-hidden"
-          style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}
-        >
-          <div
-            className="relative h-36 flex items-center px-8 gap-6"
-            style={{
-              background: `linear-gradient(135deg, ${G[900]} 0%, ${G[500]} 100%)`,
-            }}
-          >
-            <div
-              className="absolute inset-0 opacity-10"
-              style={{
-                backgroundImage: `radial-gradient(circle at 80% 50%, ${G[50]} 0%, transparent 60%)`,
-              }}
-            />
-            <div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shrink-0 relative"
-              style={{
-                background: G[50],
-                color: G[500],
-                fontFamily: "'Playfair Display', serif",
-                boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-              }}
-            >
-              {getInitials(r.nombre)}
-            </div>
-            <div className="relative">
-              <p
-                className="text-[10px] font-dm font-bold tracking-[0.2em] uppercase mb-1"
-                style={{ color: G[100] }}
-              >
-                {PAIS_FLAG[r.pais] || "🌎"} {r.pais}
-              </p>
-              <h2
-                className="text-2xl font-bold text-white leading-tight"
-                style={{ fontFamily: "'Playfair Display', serif" }}
-              >
-                {r.nombre}
-              </h2>
-              <p
-                className="text-sm font-dm mt-0.5"
-                style={{ color: `${G[100]}cc` }}
-              >
-                {[r.ciudad, r.direccion].filter(Boolean).join(" · ")}
-              </p>
-            </div>
-            <div className="ml-auto relative">
-              <div
-                className="text-right px-4 py-2 rounded-xl border"
-                style={{
-                  borderColor: `${G[300]}66`,
-                  background: `${G[900]}88`,
-                }}
-              >
-                <p
-                  className="text-[9px] font-dm uppercase tracking-widest"
-                  style={{ color: G[100] }}
-                >
-                  Moneda
-                </p>
-                <p className="text-lg font-bold font-dm text-white">
-                  {r.moneda}
-                </p>
-                <p
-                  className="text-[9px] font-dm"
-                  style={{ color: `${G[100]}99` }}
-                >
-                  {MONEDA_NOMBRE[r.moneda] || r.moneda}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border-t border-stone-100 px-8 py-3 flex items-center gap-6 flex-wrap">
-            {[
-              { icon: MapPin, label: r.ciudad || "—" },
-              { icon: Building2, label: r.direccion || "—" },
-              {
-                icon: Coins,
-                label: `${r.moneda} · ${MONEDA_NOMBRE[r.moneda] || r.moneda}`,
-              },
-            ].map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <Icon size={12} style={{ color: G[300] }} />
-                <span className="text-xs font-dm text-stone-500">{label}</span>
-              </div>
-            ))}
-            <div className="ml-auto">
-              <span
-                className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide"
-                style={
-                  r.activo
-                    ? {
-                        background: G[50],
-                        color: G[500],
-                        border: `1px solid ${G[100]}`,
-                      }
-                    : {
-                        background: "#f3f4f6",
-                        color: "#6b7280",
-                        border: "1px solid #e5e7eb",
-                      }
-                }
-              >
-                {r.activo ? "ACTIVO" : "INACTIVO"}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+      {r && <RestauranteHero r={r} />}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -397,7 +429,7 @@ export default function GerenteDashboard() {
 
       {/* 2 columnas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Últimos platos */}
+        {/* Platos recientes */}
         <div
           className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
@@ -420,7 +452,7 @@ export default function GerenteDashboard() {
                 className="font-bold text-stone-900"
                 style={{ fontFamily: "'Playfair Display', serif" }}
               >
-                Platos recientes
+                Platos recientes{" "}
                 <span className="text-stone-400 text-sm font-dm ml-2">
                   ({platos.length})
                 </span>

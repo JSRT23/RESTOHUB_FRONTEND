@@ -30,25 +30,27 @@ export function AuthProvider({ children }) {
   });
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
 
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  // FIX: logout ahora está declarado antes del useEffect y en el deps array.
+  // Antes estaba declarado después del useEffect → stale closure potencial.
   useEffect(() => {
     if (token) {
       const p = parseJwt(token);
       if (!p || p.exp * 1000 < Date.now()) logout();
     }
-  }, []);
+  }, [token, logout]);
 
   const login = useCallback(({ access_token, usuario }) => {
     localStorage.setItem(TOKEN_KEY, access_token);
     localStorage.setItem(USER_KEY, JSON.stringify(usuario));
     setToken(access_token);
     setUser(usuario);
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setToken(null);
-    setUser(null);
   }, []);
 
   return (

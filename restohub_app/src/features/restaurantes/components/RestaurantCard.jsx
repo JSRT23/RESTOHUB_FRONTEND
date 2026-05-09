@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-// Imágenes placeholder mientras no haya imagen real del backend
+// Imágenes Unsplash — solo se usan cuando el restaurante no tiene imagen propia
 const PLACEHOLDER_IMGS = [
   "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=700&q=90",
   "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=700&q=90",
@@ -10,7 +10,11 @@ const PLACEHOLDER_IMGS = [
   "https://images.unsplash.com/photo-1424847651672-bf20a4b0982b?w=700&q=90",
   "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=700&q=90",
 ];
-const getImg = (id) => {
+
+// Devuelve la imagen del restaurante si tiene una, o un placeholder basado en el id
+const getImg = (restaurante) => {
+  if (restaurante?.imagen) return restaurante.imagen;
+  const id = restaurante?.id || "";
   if (!id) return PLACEHOLDER_IMGS[0];
   return PLACEHOLDER_IMGS[
     parseInt(id.replace(/-/g, "").slice(0, 8), 16) % PLACEHOLDER_IMGS.length
@@ -24,12 +28,21 @@ export default function RestaurantCard({
 }) {
   const { id, nombre, ciudad, activo } = restaurante;
   const [hovered, setHovered] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const navigate = useNavigate();
 
   const handleClick = () => {
     if (!tieneMenu) return;
     navigate(`/restaurante/${id}`);
   };
+
+  // Si la imagen del backend falla, usar placeholder
+  const imgSrc = imgError
+    ? PLACEHOLDER_IMGS[
+        parseInt((id || "").replace(/-/g, "").slice(0, 8), 16) %
+          PLACEHOLDER_IMGS.length
+      ]
+    : getImg(restaurante);
 
   return (
     <div
@@ -54,8 +67,9 @@ export default function RestaurantCard({
         style={{ position: "relative", height: "230px", overflow: "hidden" }}
       >
         <img
-          src={getImg(id)}
+          src={imgSrc}
           alt={nombre}
+          onError={() => setImgError(true)}
           style={{
             width: "100%",
             height: "100%",
@@ -76,7 +90,7 @@ export default function RestaurantCard({
           }}
         />
 
-        {/* Overlay Próximamente — aparece en hover si no tiene menú */}
+        {/* Overlay Próximamente */}
         {!tieneMenu && (
           <div
             style={{
@@ -132,7 +146,7 @@ export default function RestaurantCard({
           </div>
         )}
 
-        {/* Marca de agua — visible cuando no hay hover y no tiene menú */}
+        {/* Marca de agua — sin menú, sin hover */}
         {!tieneMenu && (
           <div
             style={{

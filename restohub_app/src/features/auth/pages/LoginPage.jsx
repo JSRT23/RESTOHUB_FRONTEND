@@ -10,7 +10,16 @@ import {
   MUTATION_REENVIAR_CODIGO,
 } from "../queries";
 
-// Iconos SVG del panel izquierdo
+// ── Tipos de documento ────────────────────────────────────────────────────
+const TIPOS_DOC = [
+  { value: "CC", label: "Cédula de ciudadanía" },
+  { value: "CE", label: "Cédula de extranjería" },
+  { value: "PA", label: "Pasaporte" },
+  { value: "NIT", label: "NIT" },
+  { value: "OT", label: "Otro" },
+];
+
+// ── Iconos panel izquierdo ────────────────────────────────────────────────
 const IcoCupon2 = () => (
   <svg
     width="16"
@@ -54,20 +63,32 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [step, setStep] = useState("login");
 
+  // Login
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // Registro
   const [nombre, setNombre] = useState("");
-  const [pass2, setPass2] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [pass2Val, setPass2Val] = useState("");
+  const [pass2Confirm, setPass2Confirm] = useState("");
+  const [cedula, setCedula] = useState("");
+  const [tipoDoc, setTipoDoc] = useState("CC");
+  const [telefono, setTelefono] = useState("");
+
+  // Verificación
   const [codigo, setCodigo] = useState("");
-  const [error, setError] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
+
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const [doLogin] = useMutation(MUTATION_LOGIN);
   const [doRegistro] = useMutation(MUTATION_AUTO_REGISTRO);
   const [doVerificar] = useMutation(MUTATION_VERIFICAR_CODIGO);
   const [doReenviar] = useMutation(MUTATION_REENVIAR_CODIGO);
-  const [loading, setLoading] = useState(false);
 
+  // ── Estilos reutilizables ──────────────────────────────────────────────
   const inp = {
     width: "100%",
     padding: "12px 14px",
@@ -83,6 +104,42 @@ export default function LoginPage() {
   const focus = (e) => (e.target.style.borderColor = "var(--green)");
   const blur = (e) => (e.target.style.borderColor = "var(--border2)");
 
+  const Label = ({ children, optional }) => (
+    <label
+      style={{
+        display: "block",
+        fontSize: "10px",
+        fontWeight: 700,
+        color: "var(--text3)",
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+        marginBottom: "6px",
+      }}
+    >
+      {children}
+      {optional && (
+        <span style={{ fontWeight: 400, textTransform: "none", marginLeft: 4 }}>
+          (opcional)
+        </span>
+      )}
+    </label>
+  );
+
+  const Spinner = () => (
+    <span
+      style={{
+        width: 15,
+        height: 15,
+        border: "2px solid rgba(255,255,255,0.3)",
+        borderTopColor: "#fff",
+        borderRadius: "50%",
+        animation: "spin 0.7s linear infinite",
+        display: "inline-block",
+      }}
+    />
+  );
+
+  // ── Handlers ──────────────────────────────────────────────────────────
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) {
@@ -104,7 +161,7 @@ export default function LoginPage() {
       } else {
         const p = res.payload;
         login(p.accessToken, p.refreshToken, p.usuario);
-        navigate("/"); // Quedarse en la app, no forzar /perfil
+        navigate("/");
       }
     } catch {
       setError("Error de conexión. Intenta de nuevo.");
@@ -114,29 +171,42 @@ export default function LoginPage() {
 
   const handleRegistro = async (e) => {
     e.preventDefault();
-    if (!nombre || !email || !password || !pass2) {
-      setError("Completa todos los campos.");
+    if (!nombre || !regEmail || !pass2Val || !pass2Confirm) {
+      setError("Completa los campos obligatorios.");
       return;
     }
-    if (password !== pass2) {
+    if (pass2Val !== pass2Confirm) {
       setError("Las contraseñas no coinciden.");
       return;
     }
-    if (password.length < 8) {
+    if (pass2Val.length < 8) {
       setError("La contraseña debe tener al menos 8 caracteres.");
       return;
     }
+
     setLoading(true);
     setError("");
     try {
-      const { data } = await doRegistro({
-        variables: { email, nombre, password, passwordConfirm: pass2 },
-      });
+      const vars = {
+        email: regEmail,
+        nombre,
+        password: pass2Val,
+        passwordConfirm: pass2Confirm,
+      };
+      if (cedula.trim()) {
+        vars.cedula = cedula.trim();
+        vars.tipoDocumento = tipoDoc;
+      }
+      if (telefono.trim()) {
+        vars.telefono = telefono.trim();
+      }
+
+      const { data } = await doRegistro({ variables: vars });
       const res = data?.autoRegistro;
       if (!res?.ok) {
         setError(res?.error || "Error al registrarse.");
       } else {
-        setPendingEmail(email);
+        setPendingEmail(regEmail);
         setStep("verificar");
       }
     } catch {
@@ -183,39 +253,14 @@ export default function LoginPage() {
     }
   };
 
-  const Spinner = () => (
-    <span
-      style={{
-        width: 15,
-        height: 15,
-        border: "2px solid rgba(255,255,255,0.3)",
-        borderTopColor: "#fff",
-        borderRadius: "50%",
-        animation: "spin 0.7s linear infinite",
-        display: "inline-block",
-      }}
-    />
-  );
-
-  const Label = ({ children }) => (
-    <label
-      style={{
-        display: "block",
-        fontSize: "10px",
-        fontWeight: 700,
-        color: "var(--text3)",
-        letterSpacing: "0.1em",
-        textTransform: "uppercase",
-        marginBottom: "6px",
-      }}
-    >
-      {children}
-    </label>
-  );
+  const switchTab = (s) => {
+    setStep(s);
+    setError("");
+  };
 
   return (
     <div style={{ minHeight: "100vh", display: "flex" }}>
-      {/* ── Panel izquierdo — foto + contenido ── */}
+      {/* ── Panel izquierdo ── */}
       <div
         className="login-panel"
         style={{
@@ -228,7 +273,6 @@ export default function LoginPage() {
           backgroundPosition: "center",
         }}
       >
-        {/* Overlay verde */}
         <div
           style={{
             position: "absolute",
@@ -237,7 +281,6 @@ export default function LoginPage() {
               "linear-gradient(180deg, rgba(7,45,32,0.88) 0%, rgba(7,45,32,0.52) 50%, rgba(7,45,32,0.82) 100%)",
           }}
         />
-        {/* Contenido */}
         <div
           style={{
             position: "relative",
@@ -249,7 +292,6 @@ export default function LoginPage() {
             padding: "44px 48px",
           }}
         >
-          {/* Logo */}
           <Link
             to="/"
             style={{ display: "flex", alignItems: "center", gap: "8px" }}
@@ -288,7 +330,6 @@ export default function LoginPage() {
             </span>
           </Link>
 
-          {/* Copy */}
           <div>
             <h2
               style={{
@@ -364,7 +405,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* ── Panel derecho — formulario (sin logo, ya está en el izquierdo y en el navbar) ── */}
+      {/* ── Panel derecho: formulario ── */}
       <div
         style={{
           flex: 1,
@@ -383,9 +424,9 @@ export default function LoginPage() {
             animation: "fadeUp 0.4s ease",
           }}
         >
-          {/* Encabezado del form */}
+          {/* Encabezado */}
           <div style={{ textAlign: "center", marginBottom: "28px" }}>
-            {step !== "verificar" && (
+            {step !== "verificar" ? (
               <>
                 <h1
                   style={{
@@ -403,8 +444,7 @@ export default function LoginPage() {
                     : "Únete y empieza a pedir"}
                 </p>
               </>
-            )}
-            {step === "verificar" && (
+            ) : (
               <>
                 <h1
                   style={{
@@ -447,10 +487,7 @@ export default function LoginPage() {
               ].map(([s, label]) => (
                 <button
                   key={s}
-                  onClick={() => {
-                    setStep(s);
-                    setError("");
-                  }}
+                  onClick={() => switchTab(s)}
                   style={{
                     flex: 1,
                     padding: "10px",
@@ -461,7 +498,6 @@ export default function LoginPage() {
                     fontSize: "13px",
                     fontWeight: step === s ? 700 : 500,
                     cursor: "pointer",
-                    transition: "all 0.2s",
                     fontFamily: "DM Sans, sans-serif",
                     boxShadow:
                       step === s ? "0 1px 6px rgba(0,0,0,0.08)" : "none",
@@ -473,7 +509,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Form Login */}
+          {/* ── LOGIN ── */}
           {step === "login" && (
             <form
               onSubmit={handleLogin}
@@ -522,12 +558,13 @@ export default function LoginPage() {
             </form>
           )}
 
-          {/* Form Registro */}
+          {/* ── REGISTRO ── */}
           {step === "registro" && (
             <form
               onSubmit={handleRegistro}
               style={{ display: "flex", flexDirection: "column", gap: "14px" }}
             >
+              {/* Nombre */}
               <div>
                 <Label>Nombre completo</Label>
                 <input
@@ -541,12 +578,14 @@ export default function LoginPage() {
                   required
                 />
               </div>
+
+              {/* Email */}
               <div>
                 <Label>Correo electrónico</Label>
                 <input
                   type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
                   placeholder="tu@email.com"
                   style={inp}
                   onFocus={focus}
@@ -554,6 +593,80 @@ export default function LoginPage() {
                   required
                 />
               </div>
+
+              {/* Documento — tipo + número en la misma fila */}
+              <div>
+                <Label>
+                  Documento de identidad{" "}
+                  <span
+                    style={{
+                      fontWeight: 400,
+                      textTransform: "none",
+                      fontSize: "9px",
+                    }}
+                  >
+                    (opcional)
+                  </span>
+                </Label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <select
+                    value={tipoDoc}
+                    onChange={(e) => setTipoDoc(e.target.value)}
+                    style={{
+                      ...inp,
+                      width: "auto",
+                      flexShrink: 0,
+                      paddingRight: "10px",
+                    }}
+                    onFocus={focus}
+                    onBlur={blur}
+                  >
+                    {TIPOS_DOC.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.value}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={cedula}
+                    onChange={(e) =>
+                      setCedula(e.target.value.replace(/\D/g, ""))
+                    }
+                    placeholder="Número de documento"
+                    style={{ ...inp, flex: 1 }}
+                    onFocus={focus}
+                    onBlur={blur}
+                    inputMode="numeric"
+                    maxLength={15}
+                  />
+                </div>
+                <p
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text3)",
+                    marginTop: "5px",
+                  }}
+                >
+                  Necesario para acumular puntos en compras presenciales.
+                </p>
+              </div>
+
+              {/* Teléfono */}
+              <div>
+                <Label optional>Teléfono</Label>
+                <input
+                  type="tel"
+                  value={telefono}
+                  onChange={(e) => setTelefono(e.target.value)}
+                  placeholder="+57 300 000 0000"
+                  style={inp}
+                  onFocus={focus}
+                  onBlur={blur}
+                />
+              </div>
+
+              {/* Contraseñas */}
               <div
                 style={{
                   display: "grid",
@@ -565,8 +678,8 @@ export default function LoginPage() {
                   <Label>Contraseña</Label>
                   <input
                     type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={pass2Val}
+                    onChange={(e) => setPass2Val(e.target.value)}
                     placeholder="••••••••"
                     style={inp}
                     onFocus={focus}
@@ -578,8 +691,8 @@ export default function LoginPage() {
                   <Label>Confirmar</Label>
                   <input
                     type="password"
-                    value={pass2}
-                    onChange={(e) => setPass2(e.target.value)}
+                    value={pass2Confirm}
+                    onChange={(e) => setPass2Confirm(e.target.value)}
                     placeholder="••••••••"
                     style={inp}
                     onFocus={focus}
@@ -588,6 +701,7 @@ export default function LoginPage() {
                   />
                 </div>
               </div>
+
               <p
                 style={{
                   fontSize: "11px",
@@ -605,6 +719,7 @@ export default function LoginPage() {
                 </span>
                 .
               </p>
+
               {error && <ErrBox msg={error} />}
               <button
                 type="submit"
@@ -622,7 +737,7 @@ export default function LoginPage() {
             </form>
           )}
 
-          {/* Verificar código */}
+          {/* ── VERIFICAR CÓDIGO ── */}
           {step === "verificar" && (
             <form
               onSubmit={handleVerificar}
@@ -722,7 +837,7 @@ export default function LoginPage() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setStep("login")}
+                  onClick={() => switchTab("login")}
                   style={{
                     background: "none",
                     border: "none",
@@ -753,7 +868,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <style>{`@media (min-width: 768px) { .login-panel { display: flex !important; } }`}</style>
+      <style>{`@media (min-width: 768px) { .login-panel { display: flex !important; } } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

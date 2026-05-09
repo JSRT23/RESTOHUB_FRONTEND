@@ -10,6 +10,7 @@ export const GET_RESTAURANTES = gql`
       direccion
       moneda
       activo
+      imagen
     }
   }
 `;

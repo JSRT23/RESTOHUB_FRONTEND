@@ -1,4 +1,5 @@
 // src/features/menu/components/Gerente/graphql/operations.js
+// CAMBIO: GET_MI_RESTAURANTE ahora incluye imagen para mostrarla en el dashboard.
 import { gql } from "@apollo/client";
 
 // ── Restaurante propio ────────────────────────────────────────────────────
@@ -11,6 +12,7 @@ export const GET_MI_RESTAURANTE = gql`
       ciudad
       direccion
       moneda
+      imagen
       activo
     }
   }
@@ -43,7 +45,6 @@ export const GET_INGREDIENTES_GERENTE = gql`
 `;
 
 // ── Ingredientes disponibles para asignar a un plato ─────────────────────
-// "disponibles=UUID" → globales + propios del restaurante.
 export const GET_INGREDIENTES_DISPONIBLES = gql`
   query GetIngredientesDisponibles($disponibles: ID!, $activo: Boolean) {
     ingredientes(disponibles: $disponibles, activo: $activo) {
@@ -123,9 +124,6 @@ export const DESACTIVAR_INGREDIENTE = gql`
 `;
 
 // ── Platos del restaurante (lista) ───────────────────────────────────────
-// Usa restauranteId — el backend devuelve campos básicos sin ingredientes
-// ni precios. Los precios se obtienen por separado con GET_PRECIOS_RESTAURANTE
-// y se cruzan en JS por platoId.
 export const GET_PLATOS_GERENTE = gql`
   query GetPlatosGerente(
     $restauranteId: ID!
@@ -151,8 +149,6 @@ export const GET_PLATOS_GERENTE = gql`
 `;
 
 // ── Todos los precios del restaurante ────────────────────────────────────
-// Devuelve platoId → se cruza con platos en JS para obtener precio vigente.
-// Se usa en GPlatosList, GerenteDashboard y refetchQueries de mutaciones de precio.
 export const GET_PRECIOS_RESTAURANTE = gql`
   query GetPreciosRestaurante($restauranteId: ID!) {
     precios(restauranteId: $restauranteId, activo: true) {
@@ -170,7 +166,6 @@ export const GET_PRECIOS_RESTAURANTE = gql`
 `;
 
 // ── Detalle completo de un plato ──────────────────────────────────────────
-// plato(id) devuelve PlatoSerializer completo — con ingredientes y precios.
 export const GET_PLATO_DETALLE = gql`
   query GetPlatoDetalle($id: ID!) {
     plato(id: $id) {
@@ -353,7 +348,7 @@ export const DESACTIVAR_PRECIO = gql`
     }
   }
 `;
-// ── Platos disponibles para mesero (globales + del restaurante) ───────────
+
 export const GET_PLATOS_DISPONIBLES = gql`
   query GetPlatosDisponibles($disponibles: ID!, $activo: Boolean) {
     platos(disponibles: $disponibles, activo: $activo) {
@@ -369,5 +364,4 @@ export const GET_PLATOS_DISPONIBLES = gql`
   }
 `;
 
-// ── Re-exportar queries de inventory para uso en wizard de precio ─────────
 export { GET_COSTO_PLATO } from "../../../../inventory/graphql/queries";

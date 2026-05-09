@@ -23,6 +23,7 @@ const fmt = (precio, moneda = "COP") =>
     maximumFractionDigits: 0,
   }).format(Number(precio) || 0);
 
+// Fallback para platos sin imagen
 const FALLBACK_FOOD = [
   "https://images.unsplash.com/photo-1547592180-85f173990554?w=500&q=90",
   "https://images.unsplash.com/photo-1565299507177-b0ac66763828?w=500&q=90",
@@ -38,6 +39,10 @@ const getFoodImg = (id) => {
   ];
 };
 
+// Fallback para el hero del restaurante
+const HERO_FALLBACK =
+  "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1600&q=90";
+
 export default function MenuPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -45,22 +50,20 @@ export default function MenuPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [modalPlato, setModalPlato] = useState(null);
   const [addedIds, setAddedIds] = useState({});
+  const [heroImgError, setHeroImgError] = useState(false);
 
-  // Query 1: datos del restaurante
   const { data: restData, loading: restLoading } = useQuery(GET_RESTAURANTE, {
     variables: { id },
   });
 
-  // Query 2: intentar platos directos (con categoría real)
   const { data: platosData, loading: platosLoading } = useQuery(
     GET_PLATOS_RESTAURANTE,
     {
       variables: { restauranteId: id },
-      errorPolicy: "ignore", // si el gateway no soporta estos args, fallback al menú
+      errorPolicy: "ignore",
     },
   );
 
-  // Query 3: menú agrupado (fallback)
   const { data: menuData, loading: menuLoading } = useQuery(
     GET_MENU_RESTAURANTE,
     {
@@ -72,25 +75,27 @@ export default function MenuPage() {
   const rest = restData?.restaurante;
   const moneda = rest?.moneda || "COP";
 
-  // Construir categorías: preferir platos directos (con categoria real)
-  // Si el gateway devuelve platos con categoriaNombre → agrupar aquí
-  // Si no → usar el menuRestaurante del fallback
+  // Imagen del hero: imagen del restaurante o fallback Unsplash
+  const heroImg =
+    !heroImgError && rest?.imagen
+      ? rest.imagen
+      : menuData?.menuRestaurante?.imagen && !heroImgError
+        ? menuData.menuRestaurante.imagen
+        : HERO_FALLBACK;
+
   const categorias = useMemo(() => {
     const platosDirectos = platosData?.platos || [];
     const preciosDirectos = platosData?.precios || [];
     const menuCategorias = menuData?.menuRestaurante?.categorias || [];
 
-    // Intentar con platos directos si hay datos y precios
     if (platosDirectos.length > 0 && preciosDirectos.length > 0) {
       const precioMap = {};
       preciosDirectos.forEach((p) => {
         if (p.estaVigente !== false) precioMap[p.platoId] = p;
       });
 
-      // Solo platos con precio vigente
       const platosConPrecio = platosDirectos.filter((p) => precioMap[p.id]);
 
-      // Agrupar por categoriaNombre
       const grupos = {};
       platosConPrecio.forEach((p) => {
         const cat = p.categoriaNombre || "General";
@@ -112,8 +117,6 @@ export default function MenuPage() {
       if (cats.length > 0) return cats;
     }
 
-    // Fallback: menuRestaurante del gateway
-    // Renombrar "Otros" si tiene categoriaId null → "General"
     return menuCategorias.map((cat) => ({
       ...cat,
       nombre:
@@ -121,7 +124,6 @@ export default function MenuPage() {
     }));
   }, [platosData, menuData, moneda]);
 
-  // Tab "Todos" + categorías reales
   const TABS = useMemo(
     () => ["Todos", ...categorias.map((c) => c.nombre)],
     [categorias],
@@ -132,7 +134,6 @@ export default function MenuPage() {
     return categorias.find((c) => c.nombre === TABS[activeTab])?.platos || [];
   }, [activeTab, categorias, TABS]);
 
-  // Restaurante no encontrado
   if (!loading && !rest)
     return (
       <div
@@ -164,7 +165,6 @@ export default function MenuPage() {
       </div>
     );
 
-  // Sin menú
   if (!loading && rest && categorias.length === 0)
     return (
       <div
@@ -260,7 +260,7 @@ export default function MenuPage() {
         background: "var(--bg)",
       }}
     >
-      {/* Hero */}
+      {/* Hero — imagen del restaurante o fallback */}
       <div
         style={{
           position: "relative",
@@ -270,11 +270,16 @@ export default function MenuPage() {
           alignItems: "flex-end",
         }}
       >
-        <div
+        <img
+          src={heroImg}
+          alt={rest?.nombre || "Restaurante"}
+          onError={() => setHeroImgError(true)}
           style={{
             position: "absolute",
             inset: 0,
-            background: `url('https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1600&q=90') center/cover`,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
             filter: "brightness(0.3)",
           }}
         />
@@ -370,7 +375,7 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* Tabs — "Todos" + categorías reales */}
+      {/* Tabs */}
       {TABS.length > 1 && (
         <div
           style={{
@@ -471,7 +476,6 @@ export default function MenuPage() {
           </div>
         ) : (
           <>
-            {/* Si estamos en "Todos" mostrar agrupado por categoría */}
             {activeTab === 0 ? (
               <div
                 style={{
@@ -517,6 +521,7 @@ export default function MenuPage() {
                           onAdd={handleAdd}
                           onOpen={setModalPlato}
                           i={i}
+                          getFoodImg={getFoodImg}
                         />
                       ))}
                     </div>
@@ -534,6 +539,7 @@ export default function MenuPage() {
                     onAdd={handleAdd}
                     onOpen={setModalPlato}
                     i={i}
+                    getFoodImg={getFoodImg}
                   />
                 ))}
                 {platosTab.length === 0 && (
@@ -553,7 +559,7 @@ export default function MenuPage() {
         )}
       </div>
 
-      {/* ── Modal producto ── */}
+      {/* Modal producto */}
       {modalPlato && (
         <div
           onClick={() => setModalPlato(null)}
@@ -584,7 +590,6 @@ export default function MenuPage() {
               overflowY: "auto",
             }}
           >
-            {/* Imagen grande */}
             <div
               style={{
                 position: "relative",
@@ -595,6 +600,9 @@ export default function MenuPage() {
               <img
                 src={modalPlato.imagen || getFoodImg(modalPlato.platoId)}
                 alt={modalPlato.nombre}
+                onError={(e) => {
+                  e.target.src = getFoodImg(modalPlato.platoId);
+                }}
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
               <div
@@ -628,7 +636,6 @@ export default function MenuPage() {
                 ✕
               </button>
             </div>
-            {/* Info */}
             <div style={{ padding: "24px 26px 28px" }}>
               <h2
                 style={{
@@ -756,7 +763,12 @@ export default function MenuPage() {
   );
 }
 
-function PlatoCard({ plato, moneda, addedIds, onAdd, onOpen, i }) {
+function PlatoCard({ plato, moneda, addedIds, onAdd, onOpen, i, getFoodImg }) {
+  const [imgError, setImgError] = useState(false);
+  const imgSrc = imgError
+    ? getFoodImg(plato.platoId)
+    : plato.imagen || getFoodImg(plato.platoId);
+
   return (
     <div
       onClick={() => onOpen && onOpen(plato)}
@@ -781,8 +793,9 @@ function PlatoCard({ plato, moneda, addedIds, onAdd, onOpen, i }) {
     >
       <div style={{ width: "140px", flexShrink: 0, overflow: "hidden" }}>
         <img
-          src={plato.imagen || getFoodImg(plato.platoId)}
+          src={imgSrc}
           alt={plato.nombre}
+          onError={() => setImgError(true)}
           style={{
             width: "100%",
             height: "100%",

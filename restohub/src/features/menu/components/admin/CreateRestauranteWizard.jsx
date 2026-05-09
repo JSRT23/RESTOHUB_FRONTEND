@@ -1,4 +1,5 @@
 // src/features/restaurantes/components/CreateRestauranteWizard.jsx
+// CAMBIO: Paso1 ahora incluye campo URL imagen con preview en tiempo real.
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
@@ -8,15 +9,13 @@ import {
   MapPin,
   Coins,
   User,
-  Mail,
-  Lock,
-  ChevronRight,
   Check,
   Loader2,
   Eye,
   EyeOff,
   ArrowLeft,
   ShieldCheck,
+  ImageOff,
 } from "lucide-react";
 import {
   PageHeader,
@@ -59,7 +58,6 @@ const fb = (e) => {
 const cls =
   "w-full px-3.5 py-3 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 placeholder:text-stone-300 outline-none transition-all shadow-sm";
 
-// ── Componentes de campo ───────────────────────────────────────────────────
 function Field({
   label,
   value,
@@ -91,36 +89,6 @@ function Field({
   );
 }
 
-function PasswordField({ label, value, onChange, placeholder, required }) {
-  const [show, setShow] = useState(false);
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
-        {label}
-        {required && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
-      <div className="relative">
-        <input
-          type={show ? "text" : "password"}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          className={`${cls} pr-10`}
-          onFocus={fi}
-          onBlur={fb}
-        />
-        <button
-          type="button"
-          onClick={() => setShow((s) => !s)}
-          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-300 hover:text-stone-500 transition"
-        >
-          {show ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function SelectField({ label, value, onChange, options, required }) {
   return (
     <div className="space-y-1.5">
@@ -146,10 +114,12 @@ function SelectField({ label, value, onChange, options, required }) {
   );
 }
 
-// ── Paso 1: Datos ──────────────────────────────────────────────────────────
+// ── Paso 1: Datos + imagen ────────────────────────────────────────────────
 function Paso1({ form, onChange, onNext }) {
+  const [imgError, setImgError] = useState(false);
   const valid =
     form.nombre && form.pais && form.ciudad && form.direccion && form.moneda;
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -192,7 +162,72 @@ function Paso1({ form, onChange, onNext }) {
           options={MONEDAS}
           required
         />
+
+        {/* URL Imagen con preview */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
+            URL Imagen{" "}
+            <span className="font-normal text-stone-300 normal-case">
+              (opcional)
+            </span>
+          </label>
+          <input
+            value={form.imagen}
+            onChange={(e) => {
+              onChange("imagen", e.target.value);
+              setImgError(false);
+            }}
+            placeholder="https://..."
+            className={cls}
+            onFocus={fi}
+            onBlur={fb}
+          />
+        </div>
       </div>
+
+      {/* Preview de imagen — ocupa todo el ancho si hay URL */}
+      {form.imagen && !imgError && (
+        <div className="relative h-32 rounded-2xl overflow-hidden border border-stone-200">
+          <img
+            src={form.imagen}
+            alt="preview"
+            className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+          <div className="absolute bottom-2 left-3 flex items-center gap-2">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
+              style={{
+                background: "rgba(255,255,255,0.15)",
+                color: "white",
+                backdropFilter: "blur(4px)",
+                fontFamily: "'Playfair Display', serif",
+              }}
+            >
+              {form.nombre ? form.nombre.slice(0, 2).toUpperCase() : "—"}
+            </div>
+            <p className="text-sm font-dm font-semibold text-white drop-shadow">
+              {form.nombre || "Tu restaurante"}
+            </p>
+          </div>
+          <span
+            className="absolute top-2 right-2 text-[10px] font-dm font-bold px-2 py-1 rounded-full text-white/80"
+            style={{ background: "rgba(0,0,0,0.3)" }}
+          >
+            Vista previa
+          </span>
+        </div>
+      )}
+      {form.imagen && imgError && (
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-100">
+          <ImageOff size={13} className="text-red-400" />
+          <p className="text-xs font-dm text-red-500">
+            La URL no cargó. Verifica que sea una imagen válida.
+          </p>
+        </div>
+      )}
+
       <div className="flex justify-end pt-2">
         <button
           onClick={onNext}
@@ -200,7 +235,7 @@ function Paso1({ form, onChange, onNext }) {
           style={{ background: G[900] }}
           className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-dm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
         >
-          Continuar <ChevronRight size={15} />
+          Continuar →
         </button>
       </div>
     </div>
@@ -216,11 +251,29 @@ function Paso2({ form, onBack, onConfirm, loading }) {
     { icon: MapPin, label: "Dirección", value: form.direccion },
     { icon: Coins, label: "Moneda", value: form.moneda },
   ];
+
   return (
     <div className="space-y-5">
       <p className="text-sm font-dm text-stone-500">
         Revisa los datos antes de crear el restaurante.
       </p>
+
+      {/* Preview imagen si existe */}
+      {form.imagen && (
+        <div className="relative h-28 rounded-2xl overflow-hidden border border-stone-200">
+          <img
+            src={form.imagen}
+            alt={form.nombre}
+            className="w-full h-full object-cover"
+            onError={(e) => (e.target.parentElement.style.display = "none")}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+          <p className="absolute bottom-2 left-3 text-sm font-dm font-semibold text-white drop-shadow">
+            {form.nombre}
+          </p>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-stone-200 overflow-hidden">
         {rows.map((r, i) => (
           <div
@@ -242,15 +295,17 @@ function Paso2({ form, onBack, onConfirm, loading }) {
           </div>
         ))}
       </div>
+
       <div
         style={{ background: `${G[50]}99`, borderColor: G[100] }}
         className="rounded-xl border px-4 py-3"
       >
         <p className="text-xs font-dm" style={{ color: G[500] }}>
           <span className="font-semibold">Siguiente paso:</span> crearás al
-          gerente de este restaurante. Podrá iniciar sesión de inmediato.
+          gerente de este restaurante.
         </p>
       </div>
+
       <div className="flex items-center justify-between pt-2">
         <button
           onClick={onBack}
@@ -299,6 +354,7 @@ export default function CreateRestauranteWizard() {
     ciudad: "",
     direccion: "",
     moneda: "",
+    imagen: "",
   });
 
   const handleChange = (key, val) => setForm((f) => ({ ...f, [key]: val }));
@@ -306,7 +362,8 @@ export default function CreateRestauranteWizard() {
     useMutation(CREAR_RESTAURANTE);
 
   const handleConfirm = async () => {
-    const { data } = await crearRestaurante({ variables: form });
+    const variables = { ...form, imagen: form.imagen || null };
+    const { data } = await crearRestaurante({ variables });
     const res = data?.crearRestaurante;
     if (!res?.ok) {
       Swal.fire({
@@ -314,7 +371,7 @@ export default function CreateRestauranteWizard() {
         icon: "error",
         draggable: true,
         title: "Error al crear restaurante",
-        text: res?.error || "No se pudo crear el restaurante.",
+        text: res?.error || "No se pudo crear.",
         confirmButtonColor: G[900],
       });
       return;

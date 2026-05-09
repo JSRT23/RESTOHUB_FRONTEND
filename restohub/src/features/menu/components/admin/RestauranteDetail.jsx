@@ -1,8 +1,8 @@
 // src/features/menu/components/admin/RestauranteDetail.jsx
-// FIX: TabMenu ahora usa la estructura REAL del schema (MenuRestauranteType):
-//   campos planos: restauranteId, nombre, moneda
-//   categorias[categoriaId, nombre, orden, platos[platoId, nombre, descripcion, precio, moneda]]
-// Se eliminó el acceso a menu.restaurante.moneda (no existe) → usa menu.moneda directamente.
+// CAMBIOS:
+// - RestauranteHero: muestra imagen del restaurante si existe (con onError fallback a iniciales)
+// - EditarModal: campo URL imagen con preview en tiempo real
+// - GET_RESTAURANTE ya incluye imagen (en operations.js actualizado)
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
@@ -29,6 +29,7 @@ import {
   Mail,
   Phone,
   CreditCard,
+  ImageOff,
 } from "lucide-react";
 import {
   Breadcrumb,
@@ -54,7 +55,6 @@ const G = {
   500: "#163832",
   900: "#051F20",
 };
-
 const PAIS_FLAG = {
   Colombia: "🇨🇴",
   México: "🇲🇽",
@@ -96,13 +96,15 @@ const fb = (e) => {
   e.target.style.boxShadow = "none";
 };
 
-// ── Modal editar ───────────────────────────────────────────────────────────
+// ── Modal editar — con campo imagen + preview ──────────────────────────────
 function EditarModal({ r, onClose, onSaved }) {
   const [form, setForm] = useState({
     nombre: r.nombre,
     ciudad: r.ciudad || "",
     direccion: r.direccion || "",
+    imagen: r.imagen || "",
   });
+  const [imgPreviewError, setImgPreviewError] = useState(false);
   const [error, setError] = useState("");
   const [actualizar, { loading }] = useMutation(ACTUALIZAR_RESTAURANTE);
   const cls =
@@ -116,6 +118,12 @@ function EditarModal({ r, onClose, onSaved }) {
     }
     onSaved();
   };
+
+  const fields = [
+    { label: "Nombre", key: "nombre", ph: "Nombre del restaurante" },
+    { label: "Ciudad", key: "ciudad", ph: "Ciudad" },
+    { label: "Dirección", key: "direccion", ph: "Dirección completa" },
+  ];
 
   return (
     <div
@@ -142,12 +150,8 @@ function EditarModal({ r, onClose, onSaved }) {
             ✕
           </button>
         </div>
-        <div className="p-5 space-y-4">
-          {[
-            { label: "Nombre", key: "nombre", ph: "Nombre del restaurante" },
-            { label: "Ciudad", key: "ciudad", ph: "Ciudad" },
-            { label: "Dirección", key: "direccion", ph: "Dirección completa" },
-          ].map((f) => (
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+          {fields.map((f) => (
             <div key={f.key} className="space-y-1.5">
               <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
                 {f.label}
@@ -162,6 +166,55 @@ function EditarModal({ r, onClose, onSaved }) {
               />
             </div>
           ))}
+
+          {/* Campo imagen con preview */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
+              URL Imagen{" "}
+              <span className="font-normal text-stone-300 normal-case">
+                (opcional)
+              </span>
+            </label>
+            <input
+              value={form.imagen}
+              onChange={(e) => {
+                setForm({ ...form, imagen: e.target.value });
+                setImgPreviewError(false);
+              }}
+              placeholder="https://..."
+              className={cls}
+              onFocus={fi}
+              onBlur={fb}
+            />
+            {form.imagen && !imgPreviewError && (
+              <div className="relative h-28 rounded-xl overflow-hidden border border-stone-200">
+                <img
+                  src={form.imagen}
+                  alt="preview"
+                  className="w-full h-full object-cover"
+                  onError={() => setImgPreviewError(true)}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+                <span className="absolute bottom-2 left-3 text-[10px] font-dm text-white/80">
+                  Vista previa
+                </span>
+              </div>
+            )}
+            {form.imagen && imgPreviewError && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-100">
+                <ImageOff size={12} className="text-red-400" />
+                <p className="text-[11px] font-dm text-red-500">
+                  URL inválida o imagen no cargó.
+                </p>
+              </div>
+            )}
+            {!form.imagen && r.imagen && (
+              <p className="text-[11px] font-dm text-stone-400">
+                Deja vacío para quitar la imagen actual.
+              </p>
+            )}
+          </div>
+
           {error && (
             <div className="px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
               <p className="text-xs font-dm text-red-600">{error}</p>
@@ -190,37 +243,52 @@ function EditarModal({ r, onClose, onSaved }) {
   );
 }
 
-// ── Hero ───────────────────────────────────────────────────────────────────
+// ── Hero — imagen si existe, iniciales verde si no ─────────────────────────
 function RestauranteHero({ r, onEdit, onToggle, toggling }) {
+  const [imgError, setImgError] = useState(false);
   const flag = PAIS_FLAG[r.pais] || "🌎";
   const initials = getInitials(r.nombre);
+  const showImg = r.imagen && !imgError;
 
   return (
     <div
       className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
       style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.07)" }}
     >
+      {/* Cover */}
       <div
-        className="relative h-48 flex items-center justify-center"
-        style={{ background: G[50] }}
+        className="relative h-48 overflow-hidden"
+        style={{ background: showImg ? undefined : G[50] }}
       >
-        {r.imagen ? (
-          <img
-            src={r.imagen}
-            alt={r.nombre}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+        {showImg ? (
+          <>
+            <img
+              src={r.imagen}
+              alt={r.nombre}
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+          </>
         ) : (
           <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold"
+            className="w-full h-full flex items-center justify-center"
             style={{
-              background: "white",
-              color: G[500],
-              border: `2px solid ${G[100]}`,
-              boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
+              background: `linear-gradient(135deg, ${G[50]} 0%, ${G[100]}44 100%)`,
             }}
           >
-            {initials}
+            <div
+              className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold"
+              style={{
+                background: "white",
+                color: G[500],
+                border: `2px solid ${G[100]}`,
+                boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
+                fontFamily: "'Playfair Display', serif",
+              }}
+            >
+              {initials}
+            </div>
           </div>
         )}
         <div
@@ -242,7 +310,7 @@ function RestauranteHero({ r, onEdit, onToggle, toggling }) {
                     border: "1px solid #e5e7eb",
                   }
             }
-            className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide"
+            className="text-[10px] font-dm font-bold px-3 py-1.5 rounded-full tracking-wide backdrop-blur-sm"
           >
             {r.activo ? "ACTIVO" : "INACTIVO"}
           </span>
@@ -256,16 +324,13 @@ function RestauranteHero({ r, onEdit, onToggle, toggling }) {
             {r.pais}
           </span>
         </div>
-
         <h1
           style={{ fontFamily: "'Playfair Display', serif" }}
           className="text-3xl font-bold text-stone-900 leading-tight"
         >
           {r.nombre}
         </h1>
-
         <div className="h-px bg-stone-100" />
-
         <div className="space-y-3">
           {[
             { label: "Ciudad", value: r.ciudad, Icon: MapPin },
@@ -298,19 +363,14 @@ function RestauranteHero({ r, onEdit, onToggle, toggling }) {
             </div>
           ))}
         </div>
-
         <div className="h-px bg-stone-100" />
-
         <div className="space-y-2">
           <button
             onClick={onEdit}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
-                       text-sm font-dm font-semibold text-stone-600 bg-stone-50 border border-stone-200
-                       hover:border-stone-300 hover:text-stone-900 transition-all"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-dm font-semibold text-stone-600 bg-stone-50 border border-stone-200 hover:border-stone-300 hover:text-stone-900 transition-all"
           >
             <Pencil size={13} /> Editar información
           </button>
-
           <button
             onClick={onToggle}
             disabled={toggling}
@@ -323,8 +383,7 @@ function RestauranteHero({ r, onEdit, onToggle, toggling }) {
                   }
                 : { background: G[50], color: G[300], borderColor: G[100] }
             }
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
-                       text-sm font-dm font-semibold border transition-all disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-dm font-semibold border transition-all disabled:opacity-50"
           >
             {toggling ? (
               <Loader2 size={13} className="animate-spin" />
@@ -360,7 +419,6 @@ function TabInfo({ r }) {
     },
     { label: "Estado", value: null, Icon: ShieldCheck, badge: r.activo },
   ];
-
   return (
     <div
       className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
@@ -430,16 +488,25 @@ function TabInfo({ r }) {
   );
 }
 
-// ── Plato row (para TabMenu) ───────────────────────────────────────────────
-// FIX: usa los campos PLANOS del MenuRestauranteType real:
-//   plato = { platoId, nombre, descripcion, precio, moneda }
-//   NO hay campo .activo en MenuPlatoType — se muestra el precio directamente
+// ── Tab Menú ───────────────────────────────────────────────────────────────
 function PlatoMenuRow({ plato, moneda }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-3 rounded-xl hover:bg-stone-50 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center shrink-0">
-          <UtensilsCrossed size={11} className="text-stone-400" />
+        {/* mini thumbnail si tiene imagen */}
+        <div className="w-7 h-7 rounded-lg overflow-hidden bg-stone-100 border border-stone-200 shrink-0 flex items-center justify-center">
+          {plato.imagen ? (
+            <img
+              src={plato.imagen}
+              alt={plato.nombre}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.target.style.display = "none";
+              }}
+            />
+          ) : (
+            <UtensilsCrossed size={11} className="text-stone-400" />
+          )}
         </div>
         <div className="min-w-0">
           <p className="text-sm font-dm font-semibold text-stone-800 truncate">
@@ -462,12 +529,9 @@ function PlatoMenuRow({ plato, moneda }) {
   );
 }
 
-// ── Categoría accordion (para TabMenu) ────────────────────────────────────
-// FIX: usa categoriaId (no categoria.id), y platos directamente del array plano
 function CategoriaAccordion({ categoria, moneda }) {
   const [open, setOpen] = useState(true);
   const platos = categoria.platos ?? [];
-
   return (
     <div className="border border-stone-100 rounded-xl overflow-hidden">
       <button
@@ -499,7 +563,7 @@ function CategoriaAccordion({ categoria, moneda }) {
         <div className="px-2 py-1.5 space-y-0.5 bg-white">
           {platos.length === 0 ? (
             <p className="text-xs font-dm text-stone-400 px-3 py-3 italic">
-              Sin platos en esta categoría
+              Sin platos
             </p>
           ) : (
             platos.map((plato) => (
@@ -512,10 +576,6 @@ function CategoriaAccordion({ categoria, moneda }) {
   );
 }
 
-// ── Tab Menú ───────────────────────────────────────────────────────────────
-// FIX: usa la estructura PLANA real del MenuRestauranteType
-//   menu.restauranteId, menu.nombre, menu.moneda (NO menu.restaurante.moneda)
-//   menu.categorias[categoriaId, nombre, orden, platos[platoId, nombre, precio, moneda]]
 function TabMenu({ restauranteId }) {
   const { data, loading } = useQuery(GET_MENU_RESTAURANTE, {
     variables: { restauranteId },
@@ -533,7 +593,6 @@ function TabMenu({ restauranteId }) {
 
   const menu = data?.menuRestaurante;
   const categorias = menu?.categorias || [];
-  // FIX: moneda viene del campo plano menu.moneda (antes erróneo: menu.restaurante.moneda)
   const moneda = menu?.moneda || "COP";
   const totalPlatos = categorias.reduce(
     (s, c) => s + (c.platos?.length ?? 0),
@@ -562,7 +621,6 @@ function TabMenu({ restauranteId }) {
           Solo lectura
         </span>
       </div>
-
       <div className="p-5 space-y-4">
         {categorias.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -611,17 +669,6 @@ function TabMenu({ restauranteId }) {
                 </div>
               ))}
             </div>
-
-            <div
-              className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border"
-              style={{ background: `${G[50]}99`, borderColor: G[100] }}
-            >
-              <Info size={12} style={{ color: G[300] }} />
-              <p className="text-[11px] font-dm" style={{ color: G[500] }}>
-                El gerente gestiona platos, categorías y precios.
-              </p>
-            </div>
-
             <div className="space-y-2">
               {categorias.map((cat) => (
                 <CategoriaAccordion
@@ -638,7 +685,7 @@ function TabMenu({ restauranteId }) {
   );
 }
 
-// ── Modal Crear Gerente ────────────────────────────────────────────────────
+// ── Tab Gerente ────────────────────────────────────────────────────────────
 function ModalCrearGerente({ restaurante, onClose, onCreado }) {
   return (
     <div
@@ -698,7 +745,6 @@ function ModalCrearGerente({ restaurante, onClose, onCreado }) {
   );
 }
 
-// ── Tab Gerente ────────────────────────────────────────────────────────────
 function TabGerente({ restaurante }) {
   const { data, loading, refetch } = useQuery(GET_GERENTE_RESTAURANTE, {
     variables: { restauranteId: restaurante.id },
@@ -717,9 +763,7 @@ function TabGerente({ restaurante }) {
       draggable: true,
       title: "¿Desactivar gerente?",
       html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.6">
-        <p><b style="color:#163832">${gerente.nombre} ${gerente.apellido || ""}</b>
-        dejará de tener acceso al restaurante.</p>
-        <p style="margin-top:6px">Podrás asignar un nuevo gerente después.</p>
+        <p><b style="color:#163832">${gerente.nombre} ${gerente.apellido || ""}</b> dejará de tener acceso.</p>
       </div>`,
       showCancelButton: true,
       confirmButtonColor: "#dc2626",
@@ -727,7 +771,6 @@ function TabGerente({ restaurante }) {
       cancelButtonText: "Cancelar",
     });
     if (!result.isConfirmed) return;
-
     setToggling(true);
     const { data: d } = await desactivarEmp({
       variables: { empleadoId: gerente.id },
@@ -738,8 +781,7 @@ function TabGerente({ restaurante }) {
         icon: "error",
         draggable: true,
         title: "Error al desactivar",
-        text:
-          d?.desactivarEmpleado?.errores || "No se pudo desactivar el gerente.",
+        text: d?.desactivarEmpleado?.errores || "No se pudo desactivar.",
         confirmButtonColor: G[900],
       });
     } else {
@@ -748,9 +790,6 @@ function TabGerente({ restaurante }) {
         icon: "success",
         draggable: true,
         title: "Gerente desactivado",
-        html: `<span style="font-family:'DM Sans',sans-serif;color:#78716c">
-          Ahora puedes asignar un nuevo gerente.
-        </span>`,
         confirmButtonColor: G[900],
         timer: 2500,
         timerProgressBar: true,
@@ -761,11 +800,7 @@ function TabGerente({ restaurante }) {
   };
 
   if (loading)
-    return (
-      <div className="space-y-3">
-        <div className="h-32 rounded-2xl bg-stone-100 animate-pulse" />
-      </div>
-    );
+    return <div className="h-32 rounded-2xl bg-stone-100 animate-pulse" />;
 
   return (
     <>
@@ -843,7 +878,6 @@ function TabGerente({ restaurante }) {
               ACTIVO
             </span>
           </div>
-
           <div className="p-5 space-y-4">
             <div className="flex items-center gap-4">
               <div
@@ -869,9 +903,7 @@ function TabGerente({ restaurante }) {
                 </p>
               </div>
             </div>
-
             <div className="h-px bg-stone-100" />
-
             {[
               {
                 icon: Mail,
@@ -918,9 +950,7 @@ function TabGerente({ restaurante }) {
                   )}
                 </div>
               ))}
-
             <div className="h-px bg-stone-100" />
-
             <button
               onClick={handleDesactivar}
               disabled={toggling}
@@ -938,10 +968,6 @@ function TabGerente({ restaurante }) {
               )}
               {toggling ? "Procesando..." : "Desactivar gerente"}
             </button>
-
-            <p className="text-[11px] font-dm text-stone-400 text-center">
-              Solo desactiva si el gerente fue reemplazado.
-            </p>
           </div>
         </div>
       )}
@@ -1014,7 +1040,7 @@ export default function RestauranteDetail() {
               style={{ background: G[900] }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-dm font-bold text-white hover:opacity-90 transition"
             >
-              <ArrowLeft size={14} /> Volver a restaurantes
+              <ArrowLeft size={14} /> Volver
             </button>
           }
         />
@@ -1029,7 +1055,6 @@ export default function RestauranteDetail() {
           { label: r.nombre },
         ]}
       />
-
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 lg:col-span-5">
           <div className="lg:sticky lg:top-6">
@@ -1041,7 +1066,6 @@ export default function RestauranteDetail() {
             />
           </div>
         </div>
-
         <div className="col-span-12 lg:col-span-7 space-y-4">
           <div className="flex items-center gap-1 bg-white border border-stone-200 rounded-xl p-1 shadow-sm w-fit">
             {[
@@ -1055,21 +1079,17 @@ export default function RestauranteDetail() {
                 style={
                   tab === t.key ? { background: G[900], color: "white" } : {}
                 }
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-dm font-semibold transition-all
-                  ${tab === t.key ? "" : "text-stone-500 hover:bg-stone-50"}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-dm font-semibold transition-all ${tab === t.key ? "" : "text-stone-500 hover:bg-stone-50"}`}
               >
-                <t.icon size={13} />
-                {t.label}
+                <t.icon size={13} /> {t.label}
               </button>
             ))}
           </div>
-
           {tab === "info" && <TabInfo r={r} />}
           {tab === "menu" && <TabMenu restauranteId={id} />}
           {tab === "gerente" && <TabGerente restaurante={r} />}
         </div>
       </div>
-
       {editando && (
         <EditarModal
           r={r}

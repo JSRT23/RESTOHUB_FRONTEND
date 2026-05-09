@@ -29,12 +29,18 @@ export const MUTATION_AUTO_REGISTRO = gql`
     $nombre: String!
     $password: String!
     $passwordConfirm: String!
+    $cedula: String
+    $tipoDocumento: String
+    $telefono: String
   ) {
     autoRegistro(
       email: $email
       nombre: $nombre
       password: $password
       passwordConfirm: $passwordConfirm
+      cedula: $cedula
+      tipoDocumento: $tipoDocumento
+      telefono: $telefono
     ) {
       ok
       error

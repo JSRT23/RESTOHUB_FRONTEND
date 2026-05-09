@@ -31,10 +31,9 @@ export const GET_TRANSACCIONES = gql`
       tipo
       tipoDisplay
       puntos
+      puntosDisplay
       saldoAnterior
       saldoPosterior
-      pedidoId
-      restauranteId
       descripcion
       createdAt
     }
@@ -113,28 +112,13 @@ export const GET_PROMOCIONES = gql`
       descripcion
       alcance
       alcanceDisplay
-      marca
-      restauranteId
       tipoBeneficio
       tipoBeneficioDisplay
       valor
       puntosBonus
-      multiplicadorPuntos
       fechaInicio
       fechaFin
       activa
-      totalAplicaciones
-      reglas {
-        id
-        tipoCondicion
-        tipoCondicionDisplay
-        montoMinimo
-        moneda
-        platoId
-        categoriaId
-        horaInicio
-        horaFin
-      }
     }
   }
 `;
@@ -144,29 +128,23 @@ export const CREAR_PROMOCION = gql`
     $nombre: String!
     $descripcion: String
     $alcance: String!
-    $marca: String
     $restauranteId: ID
     $tipoBeneficio: String!
     $valor: Float
     $puntosBonus: Int
-    $multiplicadorPuntos: Float
     $fechaInicio: String!
     $fechaFin: String!
-    $reglas: [ReglaPromocionInput]
   ) {
     crearPromocion(
       nombre: $nombre
       descripcion: $descripcion
       alcance: $alcance
-      marca: $marca
       restauranteId: $restauranteId
       tipoBeneficio: $tipoBeneficio
       valor: $valor
       puntosBonus: $puntosBonus
-      multiplicadorPuntos: $multiplicadorPuntos
       fechaInicio: $fechaInicio
       fechaFin: $fechaFin
-      reglas: $reglas
     ) {
       ok
       error
@@ -213,7 +191,6 @@ export const GET_CUPONES = gql`
     cupones(clienteId: $clienteId, activo: $activo, codigo: $codigo) {
       id
       codigo
-      promocion
       promocionNombre
       clienteId
       tipoDescuento
