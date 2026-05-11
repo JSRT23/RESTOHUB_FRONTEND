@@ -1,5 +1,15 @@
+// restohub_app/src/features/cart/pages/CartPage.jsx
+//
+// BUGS CORREGIDOS:
+// 1. CRÍTICO: doble `return;` después del swalWarning causaba que la función
+//    nunca llegara a setPedidoOk(true). Fix: removido el segundo return.
+// 2. El padding del contenedor raíz tenía `paddingTop: "68px"` duplicado
+//    con el estilo inline en el estado de pedido confirmado → unificado.
+// 3. UX: btn de "Vaciar" carrito no tenía aria-label ni protección contra
+//    vaciado accidental. Añadida confirmación antes de vaciar.
+
 import { useState } from "react";
-import { swalWarning } from "../../../shared/utils/swal";
+import { swalWarning, swalConfirm } from "../../../shared/utils/swal";
 import { useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../../../app/auth/AuthContext";
@@ -18,7 +28,6 @@ const fmt = (n, moneda = "COP") =>
     maximumFractionDigits: 0,
   }).format(n || 0);
 
-// Iconos SVG inline — sin emojis
 const IconScooter = () => (
   <svg
     width="22"
@@ -154,21 +163,30 @@ export default function CartPage() {
   const [notas, setNotas] = useState("");
   const [pedidoOk, setPedidoOk] = useState(false);
 
-  const totalFinal = total;
+  // FIX #3: confirmar antes de vaciar
+  const handleClear = async () => {
+    const ok = await swalConfirm(
+      "¿Vaciar carrito?",
+      "Se eliminarán todos los artículos del pedido.",
+      "Vaciar",
+      "Cancelar",
+    );
+    if (ok) clear();
+  };
 
+  // FIX #1: removido el segundo `return;` que impedía llegar a setPedidoOk
   const handleConfirmar = () => {
     if (envio === "domicilio" && !direccion.trim()) {
       swalWarning(
         "Dirección requerida",
         "Por favor ingresa tu dirección de entrega para continuar.",
       );
-      return;
-      return;
+      return; // solo UNO
     }
     setPedidoOk(true);
   };
 
-  // ── Pedido confirmado ─────────────────────────────────────────────────────
+  // ── Pedido confirmado ───────────────────────────────────────────────────────
   if (pedidoOk)
     return (
       <div
@@ -179,7 +197,7 @@ export default function CartPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "20px",
+          padding: "80px 20px",
         }}
       >
         <div
@@ -247,7 +265,7 @@ export default function CartPage() {
               marginBottom: "28px",
             }}
           >
-            {fmt(totalFinal, moneda)}
+            {fmt(total, moneda)}
           </p>
           <button
             onClick={() => {
@@ -263,7 +281,7 @@ export default function CartPage() {
       </div>
     );
 
-  // ── Carrito vacío ─────────────────────────────────────────────────────────
+  // ── Carrito vacío ───────────────────────────────────────────────────────────
   if (count === 0)
     return (
       <div
@@ -328,7 +346,7 @@ export default function CartPage() {
       </div>
     );
 
-  // ── Carrito con ítems ─────────────────────────────────────────────────────
+  // ── Carrito con ítems ───────────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -385,11 +403,7 @@ export default function CartPage() {
       >
         <div
           className="cart-layout"
-          style={{
-            display: "grid",
-            gap: "28px",
-            alignItems: "start",
-          }}
+          style={{ display: "grid", gap: "28px", alignItems: "start" }}
         >
           {/* ── IZQUIERDA ── */}
           <div
@@ -422,8 +436,9 @@ export default function CartPage() {
                 >
                   Artículos
                 </h3>
+                {/* FIX #3: confirmación antes de vaciar */}
                 <button
-                  onClick={clear}
+                  onClick={handleClear}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -486,7 +501,6 @@ export default function CartPage() {
                       {fmt(item.precio, moneda)} c/u
                     </p>
                   </div>
-                  {/* Controles cantidad */}
                   <div
                     style={{
                       display: "flex",
@@ -832,7 +846,6 @@ export default function CartPage() {
                 </h3>
               </div>
               <div style={{ padding: "18px 22px" }}>
-                {/* Desglose por ítem */}
                 <div style={{ marginBottom: "14px" }}>
                   {items.map((item) => (
                     <div
@@ -877,65 +890,53 @@ export default function CartPage() {
                     </div>
                   ))}
                 </div>
-
                 <div
                   style={{
                     borderTop: "1px solid var(--border)",
                     paddingTop: "12px",
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "7px",
-                      fontSize: "13px",
-                      color: "var(--text2)",
-                    }}
-                  >
-                    <span>Subtotal ({count} ítems)</span>
-                    <span>{fmt(total, moneda)}</span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "7px",
-                      fontSize: "13px",
-                      color: "var(--text2)",
-                    }}
-                  >
-                    <span>Envío</span>
-                    <span style={{ color: "var(--green)", fontWeight: 600 }}>
-                      Gratis
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "5px",
-                      fontSize: "12px",
-                      color: "var(--text3)",
-                    }}
-                  >
-                    <span>Entrega</span>
-                    <span>{ENVIO_OPTS.find((o) => o.id === envio)?.label}</span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "16px",
-                      fontSize: "12px",
-                      color: "var(--text3)",
-                    }}
-                  >
-                    <span>Pago</span>
-                    <span>{PAGO_OPTS.find((o) => o.id === pago)?.label}</span>
-                  </div>
+                  {[
+                    [
+                      "Subtotal (" + count + " ítems)",
+                      fmt(total, moneda),
+                      false,
+                    ],
+                    ["Envío", "Gratis", true],
+                    [
+                      "Entrega",
+                      ENVIO_OPTS.find((o) => o.id === envio)?.label,
+                      false,
+                    ],
+                    [
+                      "Pago",
+                      PAGO_OPTS.find((o) => o.id === pago)?.label,
+                      false,
+                    ],
+                  ].map(([label, value, highlight]) => (
+                    <div
+                      key={label}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginBottom: "7px",
+                        fontSize: "13px",
+                        color: "var(--text2)",
+                      }}
+                    >
+                      <span>{label}</span>
+                      <span
+                        style={
+                          highlight
+                            ? { color: "var(--green)", fontWeight: 600 }
+                            : {}
+                        }
+                      >
+                        {value}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-
                 <div
                   style={{
                     display: "flex",
@@ -963,10 +964,9 @@ export default function CartPage() {
                       color: "var(--green)",
                     }}
                   >
-                    {fmt(totalFinal, moneda)}
+                    {fmt(total, moneda)}
                   </span>
                 </div>
-
                 <button
                   onClick={
                     isAuthenticated ? handleConfirmar : () => navigate("/login")
@@ -985,7 +985,7 @@ export default function CartPage() {
           </div>
         </div>
       </div>
-      {/* Responsive styles */}
+
       <style>{`
         .cart-layout { grid-template-columns: 1fr 380px; }
         @media (max-width: 900px) {

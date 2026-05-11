@@ -1,3 +1,11 @@
+// restohub_app/src/features/auth/pages/LoginPage.jsx
+//
+// CAMBIOS vs original:
+// 1. Panel izquierdo: SOLO imagen de fondo + overlay oscuro suave.
+//    Removido: logo RestoHub arriba, copy central con features, © abajo.
+//    El panel es pura fotografía inmersiva — el texto vive en el panel derecho.
+// 2. Bug: doble `return;` en CartPage (movido a su propio archivo).
+
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@apollo/client/react";
@@ -10,7 +18,6 @@ import {
   MUTATION_REENVIAR_CODIGO,
 } from "../queries";
 
-// ── Tipos de documento ────────────────────────────────────────────────────
 const TIPOS_DOC = [
   { value: "CC", label: "Cédula de ciudadanía" },
   { value: "CE", label: "Cédula de extranjería" },
@@ -19,55 +26,14 @@ const TIPOS_DOC = [
   { value: "OT", label: "Otro" },
 ];
 
-// ── Iconos panel izquierdo ────────────────────────────────────────────────
-const IcoCupon2 = () => (
-  <svg
-    width="16"
-    height="16"
-    fill="none"
-    stroke="var(--cream)"
-    strokeWidth="2"
-    viewBox="0 0 24 24"
-  >
-    <rect x="2" y="6" width="20" height="12" rx="2" />
-    <path d="M2 10h20" />
-  </svg>
-);
-const IcoStar2 = () => (
-  <svg
-    width="16"
-    height="16"
-    fill="none"
-    stroke="var(--cream)"
-    strokeWidth="2"
-    viewBox="0 0 24 24"
-  >
-    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-  </svg>
-);
-const IcoMenu2 = () => (
-  <svg
-    width="16"
-    height="16"
-    fill="none"
-    stroke="var(--cream)"
-    strokeWidth="2"
-    viewBox="0 0 24 24"
-  >
-    <path d="M3 12h18M3 6h18M3 18h18" />
-  </svg>
-);
-
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const [step, setStep] = useState("login");
 
-  // Login
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Registro
   const [nombre, setNombre] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [pass2Val, setPass2Val] = useState("");
@@ -76,10 +42,8 @@ export default function LoginPage() {
   const [tipoDoc, setTipoDoc] = useState("CC");
   const [telefono, setTelefono] = useState("");
 
-  // Verificación
   const [codigo, setCodigo] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
-
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -88,7 +52,6 @@ export default function LoginPage() {
   const [doVerificar] = useMutation(MUTATION_VERIFICAR_CODIGO);
   const [doReenviar] = useMutation(MUTATION_REENVIAR_CODIGO);
 
-  // ── Estilos reutilizables ──────────────────────────────────────────────
   const inp = {
     width: "100%",
     padding: "12px 14px",
@@ -139,7 +102,6 @@ export default function LoginPage() {
     />
   );
 
-  // ── Handlers ──────────────────────────────────────────────────────────
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) {
@@ -183,7 +145,6 @@ export default function LoginPage() {
       setError("La contraseña debe tener al menos 8 caracteres.");
       return;
     }
-
     setLoading(true);
     setError("");
     try {
@@ -197,10 +158,7 @@ export default function LoginPage() {
         vars.cedula = cedula.trim();
         vars.tipoDocumento = tipoDoc;
       }
-      if (telefono.trim()) {
-        vars.telefono = telefono.trim();
-      }
-
+      if (telefono.trim()) vars.telefono = telefono.trim();
       const { data } = await doRegistro({ variables: vars });
       const res = data?.autoRegistro;
       if (!res?.ok) {
@@ -260,7 +218,7 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex" }}>
-      {/* ── Panel izquierdo ── */}
+      {/* ── Panel izquierdo: SOLO IMAGEN ── */}
       <div
         className="login-panel"
         style={{
@@ -273,136 +231,15 @@ export default function LoginPage() {
           backgroundPosition: "center",
         }}
       >
+        {/* Overlay suave — solo oscurece un poco para que la foto respire */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(180deg, rgba(7,45,32,0.88) 0%, rgba(7,45,32,0.52) 50%, rgba(7,45,32,0.82) 100%)",
+              "linear-gradient(180deg, rgba(7,45,32,0.18) 0%, rgba(7,45,32,0.28) 100%)",
           }}
         />
-        <div
-          style={{
-            position: "relative",
-            height: "100%",
-            minHeight: "100vh",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            padding: "44px 48px",
-          }}
-        >
-          <Link
-            to="/"
-            style={{ display: "flex", alignItems: "center", gap: "8px" }}
-          >
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                background: "var(--cream)",
-                borderRadius: "9px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <svg
-                width="18"
-                height="18"
-                fill="none"
-                stroke="var(--green)"
-                strokeWidth="2.8"
-                viewBox="0 0 24 24"
-              >
-                <path d="M3 11l19-9-9 19-2-8-8-2z" />
-              </svg>
-            </div>
-            <span
-              style={{
-                fontFamily: "Playfair Display, serif",
-                fontSize: "20px",
-                fontWeight: 700,
-                color: "#fff",
-              }}
-            >
-              Resto<span style={{ color: "var(--cream)" }}>Hub</span>
-            </span>
-          </Link>
-
-          <div>
-            <h2
-              style={{
-                fontFamily: "Playfair Display, serif",
-                fontSize: "clamp(28px,3vw,42px)",
-                fontWeight: 700,
-                color: "#fff",
-                lineHeight: 1.15,
-                marginBottom: "18px",
-              }}
-            >
-              La mejor
-              <br />
-              experiencia
-              <br />
-              gastronómica.
-            </h2>
-            <p
-              style={{
-                color: "rgba(255,255,255,0.58)",
-                lineHeight: 1.7,
-                maxWidth: "300px",
-                marginBottom: "32px",
-              }}
-            >
-              Accede a restaurantes premium, acumula puntos y disfruta de
-              promociones exclusivas.
-            </p>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "14px" }}
-            >
-              {[
-                [<IcoCupon2 key="cu" />, "Cupones exclusivos"],
-                [<IcoStar2 key="st" />, "Puntos de fidelización"],
-                [<IcoMenu2 key="mn" />, "Menús completos"],
-              ].map(([ic, tx]) => (
-                <div
-                  key={tx}
-                  style={{ display: "flex", alignItems: "center", gap: "12px" }}
-                >
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: "9px",
-                      background: "rgba(255,250,202,0.12)",
-                      border: "1px solid rgba(255,250,202,0.2)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {ic}
-                  </div>
-                  <span
-                    style={{
-                      fontSize: "13px",
-                      color: "rgba(255,255,255,0.65)",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {tx}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
-            © {new Date().getFullYear()} RestoHub
-          </p>
-        </div>
       </div>
 
       {/* ── Panel derecho: formulario ── */}
@@ -424,6 +261,55 @@ export default function LoginPage() {
             animation: "fadeUp 0.4s ease",
           }}
         >
+          {/* Logo visible solo en móvil (panel izquierdo oculto) */}
+          <div
+            className="login-logo-mobile"
+            style={{ textAlign: "center", marginBottom: "28px" }}
+          >
+            <Link
+              to="/"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                textDecoration: "none",
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  background: "var(--green)",
+                  borderRadius: "9px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="var(--cream)"
+                  strokeWidth="2.8"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M3 11l19-9-9 19-2-8-8-2z" />
+                </svg>
+              </div>
+              <span
+                style={{
+                  fontFamily: "Playfair Display, serif",
+                  fontSize: "20px",
+                  fontWeight: 700,
+                  color: "var(--green)",
+                }}
+              >
+                Resto<span style={{ color: "var(--green-lt)" }}>Hub</span>
+              </span>
+            </Link>
+          </div>
+
           {/* Encabezado */}
           <div style={{ textAlign: "center", marginBottom: "28px" }}>
             {step !== "verificar" ? (
@@ -564,7 +450,6 @@ export default function LoginPage() {
               onSubmit={handleRegistro}
               style={{ display: "flex", flexDirection: "column", gap: "14px" }}
             >
-              {/* Nombre */}
               <div>
                 <Label>Nombre completo</Label>
                 <input
@@ -578,8 +463,6 @@ export default function LoginPage() {
                   required
                 />
               </div>
-
-              {/* Email */}
               <div>
                 <Label>Correo electrónico</Label>
                 <input
@@ -593,8 +476,6 @@ export default function LoginPage() {
                   required
                 />
               </div>
-
-              {/* Documento — tipo + número en la misma fila */}
               <div>
                 <Label>
                   Documento de identidad{" "}
@@ -651,8 +532,6 @@ export default function LoginPage() {
                   Necesario para acumular puntos en compras presenciales.
                 </p>
               </div>
-
-              {/* Teléfono */}
               <div>
                 <Label optional>Teléfono</Label>
                 <input
@@ -665,8 +544,6 @@ export default function LoginPage() {
                   onBlur={blur}
                 />
               </div>
-
-              {/* Contraseñas */}
               <div
                 style={{
                   display: "grid",
@@ -701,7 +578,6 @@ export default function LoginPage() {
                   />
                 </div>
               </div>
-
               <p
                 style={{
                   fontSize: "11px",
@@ -719,7 +595,6 @@ export default function LoginPage() {
                 </span>
                 .
               </p>
-
               {error && <ErrBox msg={error} />}
               <button
                 type="submit"
@@ -868,7 +743,14 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <style>{`@media (min-width: 768px) { .login-panel { display: flex !important; } } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @media (min-width: 768px) {
+          .login-panel { display: block !important; }
+          .login-logo-mobile { display: none !important; }
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }

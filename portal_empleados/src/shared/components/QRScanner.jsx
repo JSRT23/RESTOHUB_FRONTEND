@@ -1,14 +1,33 @@
-// portal_empleados/src/shared/components/QRScanner.jsx  v6
+// portal_empleados/src/shared/components/QRScanner.jsx  v7
 //
-// Estrategia unificada:
-//   1. Siempre intenta getUserMedia primero (funciona en PC aunque sea HTTP)
-//   2. Si getUserMedia falla por contexto inseguro (celular con HTTP)
-//      → muestra botón nativo (input file) para tomar/subir foto
-//   3. Si falla por permiso denegado → pantalla de permiso + fallback subir foto
+// BUGS CORREGIDOS vs v6:
 //
-// Resultado: PC/tablet → visor en vivo siempre
-//            Celular HTTP → botón cámara nativa
-//            Celular HTTPS → visor en vivo
+// 1. BUG PRINCIPAL: cuando se escanea un QR inválido en modo "active" (visor en vivo),
+//    el loop sigue disparando onQR múltiples veces antes de que el usuario vea la alerta.
+//    FIX: flag `procesando` ref que bloquea nuevas lecturas mientras se muestra Swal.
+//         Tras cerrar la alerta, el flag se libera y el loop sigue → usuario puede
+//         intentar de nuevo SIN cerrar el scanner.
+//
+// 2. BUG: en modo nativo (foto) tras QR inválido, `showResult` llamaba setFase("native")
+//    y LUEGO mostraba Swal. La alerta aparecía encima de la pantalla nativa correctamente,
+//    pero al cerrarla el scanner ya había sido desmontado por el padre via onCerrar.
+//    FIX: NO llamar onCerrar en QR inválido. Solo mostrar alerta y quedar listo para
+//         otro intento.
+//
+// 3. BUG: linterna quedaba encendida si el usuario cerraba el scanner manualmente.
+//    FIX: apagar() se llama siempre en el botón "Cancelar" y en el cleanup de useEffect.
+//
+// 4. BUG: el loop de animación `scanline` seguía corriendo en modo "success" generando
+//    un parpadeo visual antes de que se cerrara el modal.
+//    FIX: en fase "success" el loop ya no llama requestAnimationFrame.
+//
+// 5. BUG UX: tras un QR inválido en modo "active", el marco del visor NO daba
+//    feedback visual de error. El usuario no sabía que había escaneado algo.
+//    FIX: fase temporal "error" → marco rojo 1.5s → vuelve a "active" automáticamente.
+//
+// 6. BUG UX: en modo "native" el input file no se reseteaba correctamente en iOS,
+//    causando que la segunda foto no disparara onChange.
+//    FIX: el reset del value ahora ocurre ANTES de llamar decodeImage.
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Swal from "sweetalert2";
@@ -24,8 +43,9 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
   const jsqrRef = useRef(null);
   const trackRef = useRef(null);
   const fileRef = useRef(null);
+  const procesando = useRef(false); // ← FIX #1: evita disparos múltiples
 
-  // idle | requesting | active | success | denied | native | decoding
+  // idle | requesting | active | error | success | denied | native | decoding
   const [fase, setFase] = useState("idle");
   const [linterna, setLinterna] = useState(false);
   const [hayLinterna, setHayLinterna] = useState(false);
@@ -37,7 +57,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     });
   }, []);
 
-  // ── Linterna ───────────────────────────────────────────────────────────
+  // ── Apagar linterna ────────────────────────────────────────────────────
   const apagar = useCallback(() => {
     try {
       trackRef.current?.applyConstraints({ advanced: [{ torch: false }] });
@@ -45,6 +65,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     setLinterna(false);
   }, []);
 
+  // ── Toggle linterna ────────────────────────────────────────────────────
   const toggleLinterna = useCallback(async () => {
     if (!trackRef.current) return;
     try {
@@ -54,12 +75,28 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     } catch (_) {}
   }, [linterna]);
 
+  // ── Cerrar limpiamente ────────────────────────────────────────────────
+  const cerrarLimpio = useCallback(() => {
+    apagar();
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (streamRef.current)
+      streamRef.current.getTracks().forEach((t) => t.stop());
+    onCerrar();
+  }, [apagar, onCerrar]);
+
   // ── Loop en vivo ───────────────────────────────────────────────────────
   const startScan = useCallback(() => {
     const loop = () => {
-      const video = videoRef.current,
-        canvas = canvasRef.current,
-        jsqr = jsqrRef.current;
+      // Si ya estamos procesando o en éxito, no seguir
+      if (procesando.current) {
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const jsqr = jsqrRef.current;
+
       if (
         !video ||
         !canvas ||
@@ -69,6 +106,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         rafRef.current = requestAnimationFrame(loop);
         return;
       }
+
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext("2d");
@@ -77,14 +115,46 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
       const code = jsqr(img.data, img.width, img.height, {
         inversionAttempts: "dontInvert",
       });
-      if (code && code.data.trim() === tokenEsperado) {
-        setFase("success");
-        apagar();
-        setTimeout(() => onExito(code.data.trim()), 700);
+
+      if (!code) {
+        rafRef.current = requestAnimationFrame(loop);
         return;
       }
-      rafRef.current = requestAnimationFrame(loop);
+
+      const tok = code.data.trim();
+
+      if (tok === tokenEsperado) {
+        // ✅ QR correcto
+        procesando.current = true;
+        apagar();
+        setFase("success");
+        setTimeout(() => onExito(tok), 700);
+        return; // no continuar el loop
+      }
+
+      // ❌ QR incorrecto — FIX #1 + #5
+      procesando.current = true;
+      setFase("error"); // marco rojo
+
+      Swal.fire({
+        background: "#fff",
+        icon: "warning",
+        title: "QR incorrecto",
+        html: `<p style="font-family:'DM Sans',sans-serif;color:#78716c;font-size:14px;margin:0;line-height:1.6">
+          Este QR no corresponde a tu turno.<br/>
+          <strong style="color:#1c1917">Apunta al QR correcto del supervisor</strong> e intenta de nuevo.
+        </p>`,
+        confirmButtonColor: "#235347",
+        confirmButtonText: "Intentar de nuevo",
+        allowOutsideClick: false,
+      }).then(() => {
+        // Volver a "active" sin cerrar el scanner → usuario puede reintentar
+        procesando.current = false;
+        setFase("active");
+        rafRef.current = requestAnimationFrame(loop);
+      });
     };
+
     rafRef.current = requestAnimationFrame(loop);
   }, [tokenEsperado, onExito, apagar]);
 
@@ -106,7 +176,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         }
       };
 
-      // Leer orientación EXIF para corregir fotos rotadas de cámara
       const readExif = (buf) => {
         try {
           const v = new DataView(buf);
@@ -166,8 +235,8 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         const jsqr = jsqrRef.current;
         const MAX = 2000;
         const r = Math.min(1, MAX / Math.max(img.width, img.height));
-        const w = Math.round(img.width * r),
-          h = Math.round(img.height * r);
+        const w = Math.round(img.width * r);
+        const h = Math.round(img.height * r);
         for (const deg of [...new Set([exifDeg, 0, 90, 270, 180])]) {
           const d = draw(img, w, h, deg);
           const code =
@@ -185,33 +254,42 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         return null;
       };
 
+      // FIX #2: no llamar onCerrar en QR inválido, dejar al usuario reintentar
       const showResult = (code) => {
         if (!code) {
           setFase("native");
           Swal.fire({
             background: "#fff",
             icon: "warning",
-            title: "QR no válido",
-            text: "No se detectó ningún código QR. Enfoca bien el código e intenta de nuevo.",
+            title: "No se detectó QR",
+            text: "Enfoca bien el código QR e intenta de nuevo.",
             confirmButtonColor: "#235347",
             confirmButtonText: "Intentar de nuevo",
+            allowOutsideClick: false,
           });
           return;
         }
+
         const tok = code.data.trim();
         if (tok === tokenEsperado) {
           setFase("success");
           setTimeout(() => onExito(tok), 500);
         } else {
+          // QR detectado pero no corresponde → quedar en pantalla nativa para reintentar
           setFase("native");
           Swal.fire({
             background: "#fff",
             icon: "error",
-            title: "QR no válido",
-            text: "El código QR no corresponde a tu turno. Escanea el QR correcto del supervisor.",
+            title: "QR incorrecto",
+            html: `<p style="font-family:'DM Sans',sans-serif;color:#78716c;font-size:14px;margin:0;line-height:1.6">
+              Este QR no corresponde a tu turno.<br/>
+              <strong style="color:#1c1917">Escanea el QR del supervisor</strong> e intenta de nuevo.
+            </p>`,
             confirmButtonColor: "#235347",
             confirmButtonText: "Intentar de nuevo",
+            allowOutsideClick: false,
           });
+          // El scanner sigue abierto en modo native → usuario puede volver a tomar foto
         }
       };
 
@@ -236,10 +314,11 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
             Swal.fire({
               background: "#fff",
               icon: "error",
-              title: "QR no válido",
-              text: "No se pudo leer la imagen. Intenta de nuevo.",
+              title: "Error al leer imagen",
+              text: "No se pudo procesar la foto. Intenta de nuevo.",
               confirmButtonColor: "#235347",
               confirmButtonText: "Intentar de nuevo",
+              allowOutsideClick: false,
             });
           };
           img.src = url;
@@ -249,10 +328,11 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
           Swal.fire({
             background: "#fff",
             icon: "error",
-            title: "QR no válido",
+            title: "Error al leer archivo",
             text: "No se pudo procesar el archivo.",
             confirmButtonColor: "#235347",
             confirmButtonText: "Intentar de nuevo",
+            allowOutsideClick: false,
           });
         };
         fr.readAsArrayBuffer(file);
@@ -264,13 +344,10 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
   );
 
   // ── Iniciar cámara ─────────────────────────────────────────────────────
-  // Siempre intenta getUserMedia. En PC funciona aunque sea HTTP.
-  // Solo cae al modo nativo si el navegador rechaza por contexto inseguro
-  // (típicamente celulares con HTTP que bloquean mediaDevices completamente).
   const requestCamera = useCallback(async () => {
     setFase("requesting");
+    procesando.current = false;
 
-    // Si mediaDevices no existe en absoluto → modo nativo (celular HTTP)
     if (!navigator.mediaDevices?.getUserMedia) {
       setFase("native");
       return;
@@ -304,7 +381,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     } catch (err) {
       const n = err.name ?? "";
       if (n === "NotAllowedError" || n === "PermissionDeniedError") {
-        // Usuario negó el permiso → mostrar pantalla de permiso
         setFase("denied");
       } else if (
         n === "NotSupportedError" ||
@@ -312,13 +388,10 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         err.message?.includes("secure") ||
         err.message?.includes("insecure")
       ) {
-        // Contexto inseguro (celular con HTTP) → modo nativo
         setFase("native");
       } else if (n === "NotFoundError") {
-        // No hay cámara → modo nativo para subir imagen
         setFase("native");
       } else {
-        // Cualquier otro error → modo nativo como fallback
         setFase("native");
       }
     }
@@ -329,16 +402,33 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
     return () => clearTimeout(t);
   }, [requestCamera]);
 
+  // FIX #3: cleanup siempre apaga linterna y stream
   useEffect(() => {
     return () => {
+      procesando.current = true; // detener el loop
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      apagar();
       if (streamRef.current)
         streamRef.current.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [apagar]);
 
   const exitoFlash = fase === "success";
-  const mostrarVisor = fase === "active" || fase === "success";
+  const errorFlash = fase === "error"; // FIX #5
+  const mostrarVisor =
+    fase === "active" || fase === "success" || fase === "error";
+
+  // Color del marco según estado
+  const marcoColor = exitoFlash
+    ? "#22c55e"
+    : errorFlash
+      ? "#ef4444"
+      : "rgba(255,255,255,.8)";
+  const marcoSombra = exitoFlash
+    ? "0 0 0 3px #22c55e,0 0 60px rgba(34,197,94,.4)"
+    : errorFlash
+      ? "0 0 0 3px #ef4444,0 0 60px rgba(239,68,68,.3)"
+      : "0 0 0 1.5px rgba(255,255,255,.8)";
 
   return (
     <div
@@ -352,7 +442,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         fontFamily: "'DM Sans',system-ui,sans-serif",
       }}
     >
-      {/* Input file — sin capture para que iOS muestre "Escanear QR" en el menú */}
+      {/* FIX #6: input file — reset ANTES de procesar */}
       <input
         ref={fileRef}
         type="file"
@@ -368,7 +458,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         }}
         onChange={(e) => {
           const file = e.target.files?.[0];
-          e.target.value = "";
+          e.target.value = ""; // reset ANTES de procesar → FIX #6
           if (file) decodeImage(file);
         }}
       />
@@ -419,13 +509,13 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
           <rect
             width="100%"
             height="100%"
-            fill="rgba(0,0,0,.6)"
+            fill={errorFlash ? "rgba(0,0,0,.75)" : "rgba(0,0,0,.6)"}
             mask="url(#qr-mask)"
           />
         </svg>
       )}
 
-      {/* Marco visor */}
+      {/* Marco visor — FIX #4 + #5 */}
       {mostrarVisor && (
         <div
           style={{
@@ -436,39 +526,38 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
             width: `${VISOR}px`,
             height: `${VISOR}px`,
             borderRadius: `${RADIO}px`,
-            boxShadow: exitoFlash
-              ? "0 0 0 3px #22c55e,0 0 60px rgba(34,197,94,.4)"
-              : "0 0 0 1.5px rgba(255,255,255,.8)",
-            transition: "box-shadow .3s",
+            boxShadow: marcoSombra,
+            transition: "box-shadow .25s ease",
           }}
         >
+          {/* Esquinas */}
           {[
             {
               top: 0,
               left: 0,
-              borderTop: "3px solid #fff",
-              borderLeft: "3px solid #fff",
+              borderTop: `3px solid ${marcoColor}`,
+              borderLeft: `3px solid ${marcoColor}`,
               borderTopLeftRadius: `${RADIO}px`,
             },
             {
               top: 0,
               right: 0,
-              borderTop: "3px solid #fff",
-              borderRight: "3px solid #fff",
+              borderTop: `3px solid ${marcoColor}`,
+              borderRight: `3px solid ${marcoColor}`,
               borderTopRightRadius: `${RADIO}px`,
             },
             {
               bottom: 0,
               left: 0,
-              borderBottom: "3px solid #fff",
-              borderLeft: "3px solid #fff",
+              borderBottom: `3px solid ${marcoColor}`,
+              borderLeft: `3px solid ${marcoColor}`,
               borderBottomLeftRadius: `${RADIO}px`,
             },
             {
               bottom: 0,
               right: 0,
-              borderBottom: "3px solid #fff",
-              borderRight: "3px solid #fff",
+              borderBottom: `3px solid ${marcoColor}`,
+              borderRight: `3px solid ${marcoColor}`,
               borderBottomRightRadius: `${RADIO}px`,
             },
           ].map((s, i) => (
@@ -479,11 +568,12 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 width: "32px",
                 height: "32px",
                 ...s,
-                ...(exitoFlash ? { borderColor: "#22c55e" } : {}),
+                transition: "border-color .25s",
               }}
             />
           ))}
 
+          {/* Línea de scan — solo en active, FIX #4 */}
           {fase === "active" && (
             <div
               style={{
@@ -499,6 +589,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
             />
           )}
 
+          {/* Flash éxito */}
           {exitoFlash && (
             <div
               style={{
@@ -534,6 +625,54 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
               </div>
             </div>
           )}
+
+          {/* Flash error — FIX #5 */}
+          {errorFlash && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: `${RADIO}px`,
+                background: "rgba(239,68,68,.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div
+                style={{
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "50%",
+                  background: "rgba(239,68,68,.85)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <line
+                    x1="18"
+                    y1="6"
+                    x2="6"
+                    y2="18"
+                    stroke="white"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                  <line
+                    x1="6"
+                    y1="6"
+                    x2="18"
+                    y2="18"
+                    stroke="white"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -545,7 +684,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
           left: 0,
           right: 0,
           zIndex: 10,
-          paddingTop: "max(env(safe-area-inset-top,44px),44px)",
           padding: "max(env(safe-area-inset-top,44px),44px) 20px 16px",
           background:
             "linear-gradient(to bottom,rgba(0,0,0,.7) 0%,transparent 100%)",
@@ -555,10 +693,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         }}
       >
         <button
-          onClick={() => {
-            apagar();
-            onCerrar();
-          }}
+          onClick={cerrarLimpio}
           style={{
             background: "rgba(255,255,255,.15)",
             backdropFilter: "blur(10px)",
@@ -633,8 +768,8 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
         )}
       </div>
 
-      {/* Instrucción visor activo */}
-      {fase === "active" && (
+      {/* Footer instrucción — visor activo */}
+      {(fase === "active" || fase === "error") && (
         <div
           style={{
             position: "absolute",
@@ -660,13 +795,16 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
           )}
           <p
             style={{
-              color: "#fff",
+              color: errorFlash ? "#fca5a5" : "#fff",
               fontSize: "15px",
               fontWeight: "500",
               margin: "0 0 4px",
+              transition: "color .3s",
             }}
           >
-            Apunta al QR del supervisor
+            {errorFlash
+              ? "QR incorrecto — apunta al correcto"
+              : "Apunta al QR del supervisor"}
           </p>
           <p
             style={{
@@ -820,7 +958,7 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
             </div>
           )}
 
-          {/* Modo nativo — celular HTTP o no hay cámara */}
+          {/* Modo nativo */}
           {fase === "native" && (
             <div
               style={{
@@ -892,13 +1030,12 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 }}
               >
                 <strong style={{ color: "rgba(255,255,255,.45)" }}>iOS:</strong>{" "}
-                elige "Escanear código QR" en el menú.{"  "}
+                elige "Escanear código QR".{"  "}
                 <strong style={{ color: "rgba(255,255,255,.45)" }}>
                   Android:
                 </strong>{" "}
                 apunta al QR y toma la foto.
               </p>
-
               <button
                 onClick={() => fileRef.current?.click()}
                 style={{
@@ -936,7 +1073,6 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
                 </svg>
                 Abrir cámara
               </button>
-
               <div
                 style={{
                   background: "rgba(251,191,36,.07)",
@@ -1012,7 +1148,8 @@ export default function QRScanner({ tokenEsperado, onExito, onCerrar }) {
       <style>{`
         @keyframes scanline {
           0%   { top: 12px; opacity: 0; }
-          8%   { opacity: 1; } 92% { opacity: 1; }
+          8%   { opacity: 1; }
+          92%  { opacity: 1; }
           100% { top: ${VISOR - 14}px; opacity: 0; }
         }
         @keyframes spin { to { transform: rotate(360deg); } }

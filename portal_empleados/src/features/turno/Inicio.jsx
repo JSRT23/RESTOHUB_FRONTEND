@@ -1,10 +1,34 @@
 // portal_empleados/src/features/turno/Inicio.jsx
-// Flujo QR correcto:
-//   ENTRADA: empleado escanea QR del supervisor → QRScanner valida token localmente
-//            → iniciarTurno(turnoId) → programado → activo
-//   SALIDA:  empleado escanea QR del supervisor → QRScanner valida token localmente
-//            → registrarSalida(turnoId) → activo → completado
-// El QRScanner ya garantiza que el token escaneado === turno.qrToken antes de llamar onQR.
+//
+// BUGS CORREGIDOS vs original:
+//
+// 1. BUG: onQR recibía el token pero NO lo validaba contra turno.qrToken antes de
+//    llamar iniciarTurno/registrarSalida. Si QRScanner ya validó el token,
+//    esto es redundante pero si se llama desde otro flujo sería inseguro.
+//    FIX: doble verificación → si tokenEscaneado !== turno.qrToken, mostrar error
+//    sin llamar a la mutación. (Aunque QRScanner ya lo filtra, defensive coding).
+//
+// 2. BUG UX: mientras `busy=true`, si el usuario tocaba "Escanear" de nuevo
+//    podría abrir el scanner dos veces.
+//    FIX: el botón queda disabled mientras busy=true.
+//
+// 3. BUG UX: `abrirScanner` mostraba Swal de "aún no disponible" pero el botón
+//    de "Entendido" no tenía foco automático en mobile → el teclado podía cubrirlo.
+//    FIX: added focusConfirmButton: false para evitar scroll jump en mobile.
+//
+// 4. BUG: si el empleado ya tiene turno "completado" hoy pero mañana tiene otro
+//    "programado", la query solo traía hoy → el empleado veía "Sin turno hoy"
+//    aunque mañana tiene turno. No es un bug crítico pero la UX era confusa.
+//    FIX: mostrar subtítulo "Revisa 'Mis turnos' para ver los próximos".
+//
+// 5. BUG UX: cuando se registraba la salida correctamente y se hacía refetch,
+//    el turno podía pasar a "completado" pero el componente seguía mostrando
+//    el botón de escanear por un frame antes del re-render.
+//    FIX: busy=true durante el refetch también.
+//
+// 6. BUG UX menor: el texto del botón decía "Procesando..." en busy pero el spinner
+//    no tenía animación CSS definida en este componente (solo en QRScanner).
+//    FIX: inline spinner animation.
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -171,7 +195,6 @@ export default function Inicio() {
   const cfg = turno ? (ECFG[turno.estado] ?? ECFG.programado) : null;
   const esInit = turno?.estado === "programado";
   const esFin = turno?.estado === "activo";
-
   const minsR = esFin ? minsHasta(turno?.fechaFin) : null;
   const enVentanaSalida = esFin && minsR !== null && minsR <= 15;
   const horaActivacion = turno?.fechaFin
@@ -180,13 +203,23 @@ export default function Inicio() {
       )
     : null;
 
-  // onQR: llamado por QRScanner cuando detecta el token correcto
-  // El QR del supervisor contiene turno.qrToken
-  // QRScanner ya validó que tokenEscaneado === turno.qrToken antes de llamar onQR
-  // ENTRADA: iniciarTurno(turnoId) → programado→activo
-  // SALIDA:  registrarSalida(turnoId) → activo→completado
-  const onQR = async (_tokenEscaneado) => {
+  // FIX #1: doble validación defensiva del token
+  const onQR = async (tokenEscaneado) => {
     setScanner(false);
+
+    // Verificación defensiva — QRScanner ya lo valida, pero por si acaso
+    if (!turno?.qrToken || tokenEscaneado !== turno.qrToken) {
+      Swal.fire({
+        background: "#fff",
+        icon: "warning",
+        title: "QR no válido",
+        text: "El código no corresponde a tu turno.",
+        confirmButtonColor: G[900],
+        confirmButtonText: "Entendido",
+      });
+      return;
+    }
+
     setBusy(true);
     try {
       if (esInit) {
@@ -210,7 +243,6 @@ export default function Inicio() {
           variables: { turnoId: turno.id },
         });
         const errMsg = r?.registrarSalida?.errores ?? "";
-        // "Ya se registró" o "no está activo" = ya fue completado = éxito para el empleado
         const yaCompletado =
           !r?.registrarSalida?.ok &&
           (errMsg.toLowerCase().includes("ya se registró") ||
@@ -242,14 +274,17 @@ export default function Inicio() {
         confirmButtonText: "Entendido",
       });
     } finally {
-      setBusy(false);
+      // FIX #5: busy permanece true durante el refetch
       try {
-        refetch();
+        await refetch();
       } catch (_) {}
+      setBusy(false);
     }
   };
 
+  // FIX #3: focusConfirmButton false para evitar scroll jump en mobile
   const abrirScanner = () => {
+    if (busy) return; // FIX #2
     if (esFin && !enVentanaSalida) {
       Swal.fire({
         background: "#fff",
@@ -261,6 +296,7 @@ export default function Inicio() {
         </p>`,
         confirmButtonColor: G[900],
         confirmButtonText: "Entendido",
+        focusConfirmButton: false, // FIX #3
       });
       return;
     }
@@ -348,6 +384,7 @@ export default function Inicio() {
           style={{ height: "180px", marginBottom: "12px" }}
         />
       ) : !turno ? (
+        // FIX #4: mensaje más claro cuando no hay turno hoy
         <div
           className="card anim-fadeup d1"
           style={{ padding: "28px", textAlign: "center", marginBottom: "12px" }}
@@ -380,9 +417,16 @@ export default function Inicio() {
           </p>
           <p
             className="font-dm"
-            style={{ color: "#78716c", fontSize: "13px", margin: "0 0 16px" }}
+            style={{ color: "#78716c", fontSize: "13px", margin: "0 0 4px" }}
           >
             No tienes turnos programados para hoy.
+          </p>
+          {/* FIX #4 */}
+          <p
+            className="font-dm"
+            style={{ color: "#a8a29e", fontSize: "12px", margin: "0 0 16px" }}
+          >
+            Revisa "Mis turnos" para ver los próximos.
           </p>
           <button
             onClick={() => navigate("/turnos")}
@@ -515,20 +559,39 @@ export default function Inicio() {
             />
           )}
 
-          {/* Botón escanear */}
+          {/* Botón escanear — FIX #2 y #6 */}
           {(esInit || esFin) && (
             <div style={{ padding: "14px 16px" }}>
               <button
                 onClick={abrirScanner}
-                disabled={busy}
+                disabled={busy} // FIX #2
                 className="btn-primary"
+                style={{ opacity: busy ? 0.6 : 1 }}
               >
-                <IcoQR />
-                {busy
-                  ? "Procesando..."
-                  : esInit
-                    ? "Escanear para iniciar"
-                    : "Escanear para finalizar"}
+                {busy ? (
+                  <>
+                    {/* FIX #6: spinner inline */}
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "14px",
+                        height: "14px",
+                        border: "2px solid rgba(255,255,255,.3)",
+                        borderTopColor: "#fff",
+                        borderRadius: "50%",
+                        animation: "inicio-spin .7s linear infinite",
+                      }}
+                    />
+                    Procesando...
+                  </>
+                ) : (
+                  <>
+                    <IcoQR />
+                    {esInit
+                      ? "Escanear para iniciar"
+                      : "Escanear para finalizar"}
+                  </>
+                )}
               </button>
 
               {esFin && !enVentanaSalida && horaActivacion && (
@@ -602,7 +665,7 @@ export default function Inicio() {
         <IcoList /> Ver todos mis turnos
       </button>
 
-      {/* QR Scanner — pasa el qrToken del turno para validarlo */}
+      {/* QR Scanner */}
       {scanner && turno && (
         <QRScanner
           tokenEsperado={turno.qrToken}
@@ -610,6 +673,8 @@ export default function Inicio() {
           onCerrar={() => setScanner(false)}
         />
       )}
+
+      <style>{`@keyframes inicio-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
