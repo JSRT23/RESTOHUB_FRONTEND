@@ -301,7 +301,7 @@ function ProveedorModal({ open, onClose, proveedor }) {
       size="md"
     >
       <div className="space-y-4">
-        {/* Selector de alcance — el campo más importante */}
+        {/* Selector de alcance */}
         <Field icon={Globe} label="Alcance" required hint={alcanceMeta.desc}>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {Object.entries(ALCANCE_META).map(([k, m]) => (
@@ -334,7 +334,6 @@ function ProveedorModal({ open, onClose, proveedor }) {
           </div>
         </Field>
 
-        {/* País destino — solo si aplica */}
         {needsPais && (
           <Field icon={Globe} label="País destino" required>
             <select
@@ -354,7 +353,6 @@ function ProveedorModal({ open, onClose, proveedor }) {
           </Field>
         )}
 
-        {/* Ciudad destino — solo si alcance=CIUDAD */}
         {needsCiudad && (
           <Field
             icon={MapPin}
@@ -373,7 +371,6 @@ function ProveedorModal({ open, onClose, proveedor }) {
           </Field>
         )}
 
-        {/* Datos del proveedor */}
         <div className="h-px bg-stone-100" />
 
         <Field icon={Building2} label="Nombre" required>
@@ -488,7 +485,6 @@ function ProveedorCard({ proveedor, onEditar, onToggle, toggling }) {
     proveedor.telefono && { icon: Phone, text: proveedor.telefono },
     proveedor.email && { icon: Mail, text: proveedor.email },
     { icon: Coins, text: proveedor.monedaPreferida ?? "—" },
-    // Destino si aplica
     proveedor.ciudadDestino && {
       icon: MapPin,
       text: `→ ${proveedor.ciudadDestino}`,
@@ -515,7 +511,6 @@ function ProveedorCard({ proveedor, onEditar, onToggle, toggling }) {
       />
 
       <div className="p-5 space-y-3.5">
-        {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <div
@@ -553,7 +548,6 @@ function ProveedorCard({ proveedor, onEditar, onToggle, toggling }) {
           </div>
         </div>
 
-        {/* Info */}
         <div className="space-y-1.5">
           {info.map(({ icon: Icon, text }) => (
             <div key={text} className="flex items-center gap-2.5">
@@ -567,7 +561,6 @@ function ProveedorCard({ proveedor, onEditar, onToggle, toggling }) {
           ))}
         </div>
 
-        {/* Acciones */}
         <div className="flex items-center gap-2 pt-1 border-t border-stone-100">
           <button
             onClick={() => onEditar(proveedor)}
@@ -602,10 +595,10 @@ function ProveedorCard({ proveedor, onEditar, onToggle, toggling }) {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 export default function AProveedoresList() {
-  const [modal, setModal] = useState(null); // null | "nuevo" | proveedor-obj
+  const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
-  const [filtroAl, setFiltroAl] = useState("all"); // all | GLOBAL | PAIS | CIUDAD | LOCAL
-  const [filtroPais, setFiltroPais] = useState(""); // país para filtrar
+  const [filtroAl, setFiltroAl] = useState("all");
+  const [filtroPais, setFiltroPais] = useState("");
   const [toggling, setToggling] = useState(null);
 
   const { data, loading } = useQuery(GET_PROVEEDORES, {
@@ -659,7 +652,6 @@ export default function AProveedoresList() {
 
   const proveedores = data?.proveedores ?? [];
 
-  // Conteos por alcance
   const conteos = { all: proveedores.length };
   Object.keys(ALCANCE_META).forEach((k) => {
     conteos[k] = proveedores.filter((p) => p.alcance === k).length;
@@ -668,7 +660,6 @@ export default function AProveedoresList() {
     ...new Set(proveedores.map((p) => p.pais).filter(Boolean)),
   ].sort();
 
-  // Filtrado
   const base =
     filtroAl === "all"
       ? proveedores
@@ -700,7 +691,7 @@ export default function AProveedoresList() {
         }
       />
 
-      {/* Stats strip */}
+      {/* Stats strip — FIX: un solo map con separadores inline */}
       <div className="flex flex-wrap items-center gap-3 text-xs font-dm text-stone-500">
         <span>
           <span className="font-semibold" style={{ color: G[300] }}>
@@ -714,23 +705,20 @@ export default function AProveedoresList() {
           activos
         </span>
         {Object.entries(ALCANCE_META).map(([k, m]) => (
-          <span key={k} className="text-stone-300 first-of-type:hidden">
-            ·
-          </span>
-        ))}
-        {Object.entries(ALCANCE_META).map(([k, m]) => (
-          <span key={k}>
-            <span style={{ color: m.text }} className="font-semibold">
-              {conteos[k] ?? 0}
-            </span>{" "}
-            {m.label.toLowerCase()}
+          <span key={k} className="flex items-center gap-3">
+            <span className="text-stone-300">·</span>
+            <span>
+              <span style={{ color: m.text }} className="font-semibold">
+                {conteos[k] ?? 0}
+              </span>{" "}
+              {m.label.toLowerCase()}
+            </span>
           </span>
         ))}
       </div>
 
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
-        {/* Búsqueda */}
         <div
           className="flex items-center gap-2.5 flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 transition-all"
           style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
@@ -758,7 +746,6 @@ export default function AProveedoresList() {
           )}
         </div>
 
-        {/* Filtro por país */}
         {paisesDisponibles.length > 1 && (
           <select
             value={filtroPais}
@@ -774,7 +761,6 @@ export default function AProveedoresList() {
           </select>
         )}
 
-        {/* Filtro por alcance */}
         <div className="flex items-center gap-1 p-1 rounded-xl bg-white border border-stone-200 overflow-x-auto">
           {[
             { v: "all", l: "Todos" },
@@ -795,30 +781,16 @@ export default function AProveedoresList() {
               }
             >
               {l}
-              {v !== "all" && (
-                <span
-                  className="px-1.5 py-0.5 rounded-full text-[9px] font-bold"
-                  style={
-                    filtroAl === v
-                      ? { background: "rgba(255,255,255,0.18)", color: "#fff" }
-                      : { background: "#f5f5f4", color: "#a8a29e" }
-                  }
-                >
-                  {conteos[v] ?? 0}
-                </span>
-              )}
-              {v === "all" && (
-                <span
-                  className="px-1.5 py-0.5 rounded-full text-[9px] font-bold"
-                  style={
-                    filtroAl === v
-                      ? { background: "rgba(255,255,255,0.18)", color: "#fff" }
-                      : { background: "#f5f5f4", color: "#a8a29e" }
-                  }
-                >
-                  {proveedores.length}
-                </span>
-              )}
+              <span
+                className="px-1.5 py-0.5 rounded-full text-[9px] font-bold"
+                style={
+                  filtroAl === v
+                    ? { background: "rgba(255,255,255,0.18)", color: "#fff" }
+                    : { background: "#f5f5f4", color: "#a8a29e" }
+                }
+              >
+                {v === "all" ? proveedores.length : (conteos[v] ?? 0)}
+              </span>
             </button>
           ))}
         </div>

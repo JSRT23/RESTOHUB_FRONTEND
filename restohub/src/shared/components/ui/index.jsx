@@ -1,7 +1,6 @@
 // src/shared/components/ui/index.jsx
 import { Loader2, ChevronRight } from "lucide-react";
 
-// Acentos verdes sobre blanco
 const G = {
   50: "#DAF1DE",
   100: "#8EB69B",
@@ -48,13 +47,18 @@ export function Button({
   const base =
     "inline-flex items-center justify-center rounded-xl font-dm font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed";
 
+  // ⚠️ Fix: no usar interpolación de variables JS dentro de clases Tailwind
+  // porque el compilador JIT no puede resolverlas en build.
+  // secondary y outline usan colores estáticos de Tailwind.
   const variants = {
-    primary: `text-white hover:opacity-90`,
-    secondary: `bg-white text-stone-600 border border-stone-200 hover:border-[${G[300]}] hover:text-[${G[300]}]`,
-    ghost: `text-stone-500 hover:text-stone-800 hover:bg-stone-50`,
-    danger: `bg-red-50 text-red-600 border border-red-200 hover:bg-red-100`,
-    outline: `bg-transparent border text-stone-600 hover:text-[${G[300]}]`,
-    dark: `bg-stone-900 text-white hover:bg-stone-800`,
+    primary: "text-white hover:opacity-90",
+    secondary:
+      "bg-white text-stone-600 border border-stone-200 hover:border-stone-400 hover:text-stone-800",
+    ghost: "text-stone-500 hover:text-stone-800 hover:bg-stone-50",
+    danger: "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100",
+    outline:
+      "bg-transparent border border-stone-200 text-stone-600 hover:text-stone-800 hover:border-stone-400",
+    dark: "bg-stone-900 text-white hover:bg-stone-800",
   };
 
   const sizes = {
@@ -64,12 +68,7 @@ export function Button({
     lg: "px-5 py-3 text-sm gap-2.5",
   };
 
-  const inlineStyle =
-    variant === "primary"
-      ? { background: G[900] }
-      : variant === "secondary" || variant === "outline"
-        ? {}
-        : {};
+  const inlineStyle = variant === "primary" ? { background: G[900] } : {};
 
   return (
     <button
@@ -382,8 +381,6 @@ export function Modal({ open, onClose, title, children, size = "md" }) {
 }
 
 // ── Divider ────────────────────────────────────────────────────────────────
-// Antes: líneas bg-stone-100 y texto text-stone-300 → casi invisible
-// Ahora: líneas bg-stone-300 y texto text-stone-500 → bien visible
 export function Divider({ label }) {
   if (!label) return <div className="h-px bg-stone-300" />;
   return (

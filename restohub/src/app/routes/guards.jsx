@@ -29,7 +29,6 @@ export function RoleRoute({ children, roles = [] }) {
   return children;
 }
 
-// Redirige a la home correcta según el rol del usuario autenticado
 export function RoleBasedRedirect() {
   const { user, isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
@@ -52,6 +51,6 @@ export function RoleBasedRedirect() {
     case "repartidor":
       return <Navigate to="/entregas" replace />;
     default:
-      return <Navigate to="/restaurantes" replace />;
+      return <Navigate to="/sin-permiso" replace />; // ← era /restaurantes
   }
 }

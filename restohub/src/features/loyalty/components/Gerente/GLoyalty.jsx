@@ -105,7 +105,7 @@ const BENEFICIO_META = {
 // SELECTOR DE CLIENTES — reemplaza el input de UUID
 // ═══════════════════════════════════════════════════════════════
 
-function ClienteSelector({
+export function ClienteSelector({
   value,
   onChange,
   onSelect,

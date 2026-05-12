@@ -126,13 +126,15 @@ const mins = (iso) =>
   iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 60000) : null;
 const esHoy = (iso) => {
   if (!iso) return false;
-  const d = new Date(iso);
-  const hoy = new Date();
-  return (
-    d.getFullYear() === hoy.getFullYear() &&
-    d.getMonth() === hoy.getMonth() &&
-    d.getDate() === hoy.getDate()
-  );
+  const opts = {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  };
+  const fechaPedido = new Date(iso).toLocaleDateString("en-CA", opts);
+  const hoy = new Date().toLocaleDateString("en-CA", opts);
+  return fechaPedido === hoy;
 };
 
 // ── Modal detalle (idéntico al original) ─────────────────────────────────

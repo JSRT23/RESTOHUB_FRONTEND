@@ -63,13 +63,15 @@ const fmtFD = (iso) =>
     : "—";
 const esHoy = (iso) => {
   if (!iso) return false;
-  const d = new Date(iso);
-  const h = new Date();
-  return (
-    d.getFullYear() === h.getFullYear() &&
-    d.getMonth() === h.getMonth() &&
-    d.getDate() === h.getDate()
-  );
+  const opts = {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  };
+  const fechaPedido = new Date(iso).toLocaleDateString("en-CA", opts);
+  const hoy = new Date().toLocaleDateString("en-CA", opts);
+  return fechaPedido === hoy;
 };
 
 const ESTADO_META = {

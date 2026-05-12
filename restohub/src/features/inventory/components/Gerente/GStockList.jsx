@@ -634,7 +634,11 @@ function StockCard({ item, onAjustar, onVerMovimientos }) {
   const cantAct = parseFloat(item.cantidadActual) || 0;
   const pct = nivelMax > 0 ? (cantAct / nivelMax) * 100 : 0;
   const pctLabel =
-    nivelMax === 0 ? "Sin máx" : pct < 1 ? `${pct.toFixed(1)}%` : `${pctLabel}`;
+    nivelMax === 0
+      ? "Sin máx"
+      : pct < 1
+        ? `${pct.toFixed(1)}%`
+        : `${Math.round(pct)}%`;
   const estado = item.estaAgotado
     ? "agotado"
     : item.necesitaReposicion

@@ -21,10 +21,16 @@ import AInventarioDashboard from "../../features/inventory/components/admin/AInv
 import AProveedoresList from "../../features/inventory/components/admin/AProveedoresList";
 import AStockGlobal from "../../features/inventory/components/admin/AStockGlobal";
 import AAlmacenesList from "../../features/inventory/components/admin/AAlmacenesList";
+import ALotesList from "../../features/inventory/components/admin/ALotesList";
+import AOrdenesCompra from "../../features/inventory/components/admin/AOrdenesCompra";
+import AAlertasStock from "../../features/inventory/components/admin/AAlertasStock";
 
 // Admin Central — Staff
 import AdminStaffList from "../../features/staff/components/admin/AdminStaffList";
 import AdminUsuariosList from "../../features/staff/components/admin/AdminUsuariosList";
+
+// Admin Central — Loyalty
+import AdminLoyalty from "../../features/loyalty/components/admin/AdminLoyalty";
 
 // ── Gerente Local ─────────────────────────────────────────────────────────
 import GerenteDashboard from "../../features/menu/components/Gerente/dashboard/GerenteDashboard";
@@ -212,15 +218,29 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "inventario/ordenes",
+        path: "inventario/lotes",
         element: (
-          <RoleRoute roles={["admin_central", "gerente_local"]}>
-            <WIP title="Órdenes de compra (admin)" />
+          <RoleRoute roles={["admin_central"]}>
+            <ALotesList />
           </RoleRoute>
         ),
       },
-      { path: "inventario/alertas", element: <WIP title="Alertas de stock" /> },
-      { path: "inventario/lotes", element: <WIP title="Lotes (global)" /> },
+      {
+        path: "inventario/ordenes",
+        element: (
+          <RoleRoute roles={["admin_central", "gerente_local"]}>
+            <AOrdenesCompra />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "inventario/alertas",
+        element: (
+          <RoleRoute roles={["admin_central"]}>
+            <AAlertasStock />
+          </RoleRoute>
+        ),
+      },
 
       // ── Admin Central — Gestión ──────────────────────────────────────
       {
@@ -243,7 +263,7 @@ const router = createBrowserRouter([
         path: "admin/loyalty",
         element: (
           <RoleRoute roles={["admin_central"]}>
-            <WIP title="Loyalty — Promociones y cupones" />
+            <AdminLoyalty />
           </RoleRoute>
         ),
       },
@@ -382,6 +402,7 @@ const router = createBrowserRouter([
           { path: "turno", element: <MMiTurno /> },
         ],
       },
+
       // ── Cocinero ─────────────────────────────────────────────────────
       {
         path: "cocina",
@@ -396,6 +417,7 @@ const router = createBrowserRouter([
           { path: "turno", element: <CMiTurno /> },
         ],
       },
+
       // ── Cajero ───────────────────────────────────────────────────────
       {
         path: "caja",
@@ -410,6 +432,7 @@ const router = createBrowserRouter([
           { path: "turno", element: <CMiTurnoCajero /> },
         ],
       },
+
       // ── Repartidor ───────────────────────────────────────────────────
       {
         path: "entregas",

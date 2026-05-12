@@ -178,14 +178,9 @@ const TIPO_LABEL = {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MODAL QR — Supervisor muestra el QR al empleado
-//
-// Flujo del backend:
-//   PROGRAMADO → qrToken (entrada) ya existe desde crearTurno
-//   Empleado escanea → iniciarTurno(turnoId) → estado=activo + nuevo qrToken (salida)
-//   Empleado escanea al salir → registrarSalida(turnoId) → estado=completado
 // ═══════════════════════════════════════════════════════════════════════════
 function ModalQR({ turno, modo, onClose }) {
-  const esIniciar = modo === "iniciar"; // programado → activo
+  const esIniciar = modo === "iniciar";
   const [accionando, setAccionando] = useState(false);
   const [segundos, setSegundos] = useState(null);
 
@@ -201,7 +196,6 @@ function ModalQR({ turno, modo, onClose }) {
 
   const token = turno.qrToken ?? "";
 
-  // Countdown hasta expiración del QR
   useEffect(() => {
     if (!turno.qrExpiraEn) return;
     const calcular = () => {
@@ -225,7 +219,6 @@ function ModalQR({ turno, modo, onClose }) {
     return m > 0 ? `${m}m ${pad(ss)}s` : `${ss}s`;
   };
 
-  // Acción manual de respaldo
   const handleAccionManual = async () => {
     const { isConfirmed } = await Swal.fire({
       background: "#fff",
@@ -258,8 +251,6 @@ function ModalQR({ turno, modo, onClose }) {
           confirmButtonColor: G[900],
         });
       } else {
-        // Intentar completarTurno directo (endpoint /turnos/{id}/completar/)
-        // Si el gateway no lo tiene, fallback a registrarSalida (asistencia/salida)
         let ok = false;
         let errMsg = "";
         try {
@@ -305,6 +296,7 @@ function ModalQR({ turno, modo, onClose }) {
   const accentColor = esIniciar ? "#4a9e6b" : G[300];
   const accentBg = esIniciar ? "#edf7f1" : G[50];
   const accentBorder = esIniciar ? "#a8d5b8" : G[100];
+
   return (
     <Modal
       open={true}
@@ -313,7 +305,6 @@ function ModalQR({ turno, modo, onClose }) {
       size="sm"
     >
       <div className="space-y-4">
-        {/* Instrucción */}
         <div
           className="flex items-start gap-3 px-4 py-3 rounded-2xl"
           style={{ background: accentBg, border: `1px solid ${accentBorder}` }}
@@ -340,7 +331,6 @@ function ModalQR({ turno, modo, onClose }) {
           </div>
         </div>
 
-        {/* Empleado + horario */}
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-stone-100 bg-stone-50">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center font-playfair font-bold text-white text-base shrink-0"
@@ -361,10 +351,8 @@ function ModalQR({ turno, modo, onClose }) {
           </div>
         </div>
 
-        {/* QR — con lógica de ventana para modo "finalizar" */}
         {token ? (
           (() => {
-            // Ventana de salida: QR habilitado desde -15min antes del fechaFin
             const minsParaFin = minutosHasta(turno.fechaFin);
             const fueraDeVentana =
               !esIniciar && (minsParaFin === null || minsParaFin > 15);
@@ -373,7 +361,6 @@ function ModalQR({ turno, modo, onClose }) {
             return (
               <div className="flex flex-col items-center gap-3">
                 {fueraDeVentana ? (
-                  // Fuera de ventana — mostrar countdown hasta que se habilite
                   <div className="flex flex-col items-center gap-3 py-6">
                     <div
                       className="w-16 h-16 rounded-2xl flex items-center justify-center"
@@ -415,7 +402,6 @@ function ModalQR({ turno, modo, onClose }) {
                   </div>
                 )}
 
-                {/* Estado del QR */}
                 {!fueraDeVentana && turno.qrExpiraEn && (
                   <div
                     className={`flex items-center gap-2 text-xs font-dm font-semibold px-3 py-1.5 rounded-full ${
@@ -442,7 +428,6 @@ function ModalQR({ turno, modo, onClose }) {
           </div>
         )}
 
-        {/* Horario recap */}
         <div className="grid grid-cols-2 gap-2">
           <div className="px-3 py-2.5 rounded-xl text-center bg-stone-50 border border-stone-100">
             <p className="text-[10px] font-dm text-stone-400">Inicio</p>
@@ -458,7 +443,6 @@ function ModalQR({ turno, modo, onClose }) {
           </div>
         </div>
 
-        {/* Acción manual */}
         <div className="pt-1 border-t border-stone-100">
           <p className="text-[10px] font-dm text-stone-400 text-center mb-2">
             ¿El empleado no puede escanear?
@@ -485,7 +469,6 @@ function ModalQR({ turno, modo, onClose }) {
 // MODAL REPROGRAMAR
 // ═══════════════════════════════════════════════════════════════════════════
 function ModalReprogramar({ turno, restauranteId, onClose }) {
-  // Día siguiente como fecha propuesta por defecto
   const manana = new Date();
   manana.setDate(manana.getDate() + 1);
   const mananaStr = manana.toISOString().slice(0, 10);
@@ -500,14 +483,13 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
   );
   const [notas, setNotas] = useState("");
 
-  // Cargar todos los turnos del empleado para detectar conflictos
   const { data: turnosEmpleadoData, loading: loadingConflictos } = useQuery(
     GET_TURNOS,
     {
       variables: {
         empleadoId: turno.empleado,
         restauranteId,
-        fechaDesde: mananaStr, // solo futuro interesa
+        fechaDesde: mananaStr,
       },
       fetchPolicy: "network-only",
     },
@@ -517,14 +499,12 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
     refetchQueries: ["GetTurnos"],
   });
 
-  // Turnos futuros del empleado (excluyendo cancelados)
   const turnosFuturos = useMemo(() => {
     return (turnosEmpleadoData?.turnos ?? []).filter(
       (t) => t.id !== turno.id && t.estado !== "cancelado",
     );
   }, [turnosEmpleadoData, turno.id]);
 
-  // Turnos del día seleccionado
   const turnosEnFechaSeleccionada = useMemo(() => {
     return turnosFuturos.filter((t) => {
       const dTurno = new Date(t.fechaInicio).toISOString().slice(0, 10);
@@ -535,7 +515,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
   const fechaEsHoy = fecha === hoyStr;
   const hayConflictoEnFecha = turnosEnFechaSeleccionada.length > 0;
 
-  // Próximas fechas con turnos (para mostrar advertencia visual)
   const fechasOcupadas = useMemo(() => {
     const set = new Set();
     turnosFuturos.forEach((t) => {
@@ -545,7 +524,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
   }, [turnosFuturos]);
 
   const handleSave = async () => {
-    // No permitir el mismo día del turno original
     if (fechaEsHoy) {
       Swal.fire({
         background: "#fff",
@@ -557,7 +535,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
       return;
     }
 
-    // Bloquear si hay conflicto de turno en esa fecha
     if (hayConflictoEnFecha) {
       const lista = turnosEnFechaSeleccionada
         .map(
@@ -589,14 +566,9 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
       return;
     }
 
-    // Aviso de confirmación con la fecha propuesta
     const fechaDisplay = new Date(`${fecha}T12:00:00`).toLocaleDateString(
       "es-CO",
-      {
-        weekday: "long",
-        day: "2-digit",
-        month: "long",
-      },
+      { weekday: "long", day: "2-digit", month: "long" },
     );
     const { isConfirmed } = await Swal.fire({
       background: "#fff",
@@ -667,7 +639,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
   return (
     <Modal open={true} onClose={onClose} title="Reprogramar turno" size="sm">
       <div className="space-y-4">
-        {/* Empleado + turno original */}
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-stone-200 bg-stone-50">
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center font-dm font-bold text-white text-xs shrink-0"
@@ -686,7 +657,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
           </div>
         </div>
 
-        {/* Aviso: solo días futuros */}
         <div
           className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs font-dm"
           style={{
@@ -702,7 +672,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
           </span>
         </div>
 
-        {/* Selector de fecha */}
         <div className="space-y-1.5">
           <label className="text-xs font-dm font-semibold text-stone-500">
             Nueva fecha
@@ -717,7 +686,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
             onBlur={fb}
           />
 
-          {/* Estado de la fecha seleccionada */}
           {loadingConflictos ? (
             <p className="text-[10px] font-dm text-stone-400 flex items-center gap-1">
               <span className="w-3 h-3 border border-stone-300 border-t-transparent rounded-full animate-spin inline-block" />
@@ -753,7 +721,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
             </p>
           ) : null}
 
-          {/* Próximas fechas ocupadas como advertencia */}
           {fechasOcupadas.size > 0 && !loadingConflictos && (
             <div className="flex items-start gap-1.5 text-[10px] font-dm text-amber-600">
               <AlertTriangle size={11} className="shrink-0 mt-0.5" />
@@ -778,7 +745,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
           )}
         </div>
 
-        {/* Horas */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <label className="text-xs font-dm font-semibold text-stone-500">
@@ -808,7 +774,6 @@ function ModalReprogramar({ turno, restauranteId, onClose }) {
           </div>
         </div>
 
-        {/* Nota */}
         <div className="space-y-1.5">
           <label className="text-xs font-dm font-semibold text-stone-500">
             Nota (opcional)
@@ -853,13 +818,11 @@ function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
   const meta = ESTADO_CFG[turno.estado] ?? ESTADO_CFG.programado;
   const enCurso = turno.estado === "activo";
   const prog = turno.estado === "programado";
-  const cancel = turno.estado === "programado"; // activo no se cancela manualmente
+  const cancel = turno.estado === "programado";
 
-  // Tiempo restante para en_curso
   const minsRestantes = enCurso ? minutosHasta(turno.fechaFin) : null;
   const urgenteFin = enCurso && minsRestantes !== null && minsRestantes <= 15;
 
-  // Tiempo pasado desde inicio para programado
   const minsPasados = prog ? minutosDesde(turno.fechaInicio) : null;
   const tardanza = prog && minsPasados !== null && minsPasados > 0;
 
@@ -890,7 +853,6 @@ function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
             : "0 2px 8px rgba(0,0,0,0.05)",
       }}
     >
-      {/* Avatar */}
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-dm font-bold text-sm"
         style={{
@@ -901,7 +863,6 @@ function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
         {turno.empleadoNombre?.[0]?.toUpperCase() ?? "?"}
       </div>
 
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-dm font-semibold text-stone-800 truncate">
           {turno.empleadoNombre}
@@ -912,7 +873,6 @@ function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
         </p>
       </div>
 
-      {/* Countdown para en_curso */}
       {enCurso && minsRestantes !== null && (
         <div className="text-right shrink-0">
           <p
@@ -928,7 +888,6 @@ function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
         </div>
       )}
 
-      {/* Tardanza para programado */}
       {prog && tardanza && (
         <div className="text-right shrink-0">
           <p
@@ -939,7 +898,6 @@ function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
         </div>
       )}
 
-      {/* Badge estado */}
       <div className="flex items-center gap-1.5 shrink-0">
         <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
         <span
@@ -950,12 +908,10 @@ function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
         </span>
       </div>
 
-      {/* QR hint para programado/en_curso */}
       {(prog || enCurso) && (
         <QrCode size={14} className="text-stone-300 shrink-0" />
       )}
 
-      {/* Botones acción (no bloquean el click de la card) */}
       <div
         className="flex items-center gap-1 shrink-0"
         onClick={(e) => e.stopPropagation()}
@@ -988,7 +944,7 @@ function TurnoCard({ turno, onShowQR, onReprogramar, onCancelar, cancelando }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ALERTA OPERACIONAL — Mejorada
+// ALERTA OPERACIONAL
 // ═══════════════════════════════════════════════════════════════════════════
 function AlertaCard({ alerta }) {
   const nivel = (alerta.nivel ?? "BAJA").toUpperCase();
@@ -997,19 +953,14 @@ function AlertaCard({ alerta }) {
   const tipo =
     TIPO_LABEL[alerta.tipo] ?? alerta.tipoDisplay ?? alerta.tipo ?? "General";
 
-  // Limpiar el mensaje para hacerlo legible
   let mensaje = alerta.mensaje ?? "";
-  // Reemplazar UUIDs completos con versión corta
   mensaje = mensaje.replace(
     /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
     (uuid) => `…${uuid.slice(-8)}`,
   );
-  // Si es una orden de compra con total 0, mejorar el mensaje
   if (alerta.tipo === "orden_compra" && mensaje.includes("total 0.0")) {
     mensaje = mensaje.replace(/ \| total 0\.0 [A-Z]+/, "");
   }
-  // Limpiar "proveedor …XXXXXXXX" por "proveedor"
-  // El nombre real no está en el evento — quitar el UUID residual
   mensaje = mensaje.replace(/— proveedor …[0-9a-f]+/i, "— orden generada");
 
   const [expanded, setExpanded] = useState(false);
@@ -1028,7 +979,6 @@ function AlertaCard({ alerta }) {
           <Icon size={14} style={{ color: cfg.text }} />
         </div>
         <div className="flex-1 min-w-0">
-          {/* Nivel + tipo */}
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span
               className="text-[10px] font-dm font-bold px-2 py-0.5 rounded-full"
@@ -1040,7 +990,6 @@ function AlertaCard({ alerta }) {
               {tipo}
             </span>
           </div>
-          {/* Mensaje */}
           <p
             className={`text-sm font-dm text-stone-700 leading-snug ${!expanded && larga ? "line-clamp-2" : ""}`}
           >
@@ -1063,7 +1012,6 @@ function AlertaCard({ alerta }) {
               )}
             </button>
           )}
-          {/* Fecha */}
           <p className="text-[10px] font-dm text-stone-400 mt-1">
             {new Date(alerta.createdAt).toLocaleString("es-CO", {
               day: "2-digit",
@@ -1115,7 +1063,7 @@ function AsistenciaRow({ reg }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════
-const AUTO_CANCEL_MINUTOS = 45; // cancelar si lleva N minutos después del inicio en programado
+const AUTO_CANCEL_MINUTOS = 45;
 
 export default function SStaffList() {
   const { user } = useAuth();
@@ -1124,14 +1072,10 @@ export default function SStaffList() {
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("all");
   const [cancelando, setCancelando] = useState(null);
-
-  // Modal QR
-  const [qrModal, setQrModal] = useState(null); // { turno, modo: "iniciar"|"finalizar" }
-
-  // Modal reprogramar
+  const [qrModal, setQrModal] = useState(null);
   const [reprogramarTurno, setReprogramarTurno] = useState(null);
 
-  // ── Queries ──────────────────────────────────────────────────────────────
+  // ── Queries ───────────────────────────────────────────────────────────────
   const {
     data: turnosData,
     loading: turnosLoading,
@@ -1177,10 +1121,9 @@ export default function SStaffList() {
     (a) => (a.nivel ?? "").toUpperCase() === "ALTA",
   ).length;
 
-  // ── Auto-cancelación: 45min después del inicio sin escanear ───────────────
-  // Usa setInterval propio (cada 60s) independiente del poll de Apollo.
-  // Así no depende de que lleguen datos nuevos para dispararse.
-  const canceladosRef = useRef(new Set()); // evitar doble-cancelación
+  // ── Auto-cancelación entrada: 45min programado sin escanear ───────────────
+  const canceladosRef = useRef(new Set());
+
   useEffect(() => {
     const check = async () => {
       const tardos = turnos.filter((t) => {
@@ -1189,77 +1132,59 @@ export default function SStaffList() {
         const mins = minutosDesde(t.fechaInicio);
         return mins !== null && mins >= AUTO_CANCEL_MINUTOS;
       });
-
       for (const turno of tardos) {
-        canceladosRef.current.add(turno.id); // marcar antes de la llamada
+        canceladosRef.current.add(turno.id);
         try {
           const { data } = await cancelarTurno({
             variables: { turnoId: turno.id },
           });
-          if (!data?.cancelarTurno?.ok) {
-            canceladosRef.current.delete(turno.id); // revertir si falló
-          }
+          if (!data?.cancelarTurno?.ok) canceladosRef.current.delete(turno.id);
         } catch (e) {
           canceladosRef.current.delete(turno.id);
-          console.error("[Auto-cancel] Error:", e);
+          console.error("[Auto-cancel entrada]", e);
         }
       }
     };
-
-    // Correr inmediatamente al montar y al cambiar turnos
     check();
-    // Y cada 60 segundos independientemente
-    const id = setInterval(check, 60_000);
-    return () => clearInterval(id);
-  }, [turnos, cancelarTurno]);
+  }, [turnos]); // cancelarTurno es estable (useMutation) — no va en deps
 
-  // ── Ventana de salida: QR habilitado -15min antes del fechaFin ────────────
-  // Si turno ACTIVO pasa +30min de fechaFin sin registrar salida → cancelar
+  // ── Auto-cancelación salida: +30min después del fin sin registrar salida ──
   const autoCancelSalidaRef = useRef(new Set());
+
   useEffect(() => {
-    if (!qrModal) {
-      // Auto-abrir modal finalizar cuando entramos en ventana (-15min a 0)
-      const candidato = turnos.find((t) => {
+    const check = async () => {
+      const vencidos = turnos.filter((t) => {
         if (t.estado !== "activo") return false;
-        if (modalAutoAbiertoRef.current.has(t.id)) return false;
-        const restantes = minutosHasta(t.fechaFin);
-        return restantes !== null && restantes <= 15 && restantes >= 0;
+        if (autoCancelSalidaRef.current.has(t.id)) return false;
+        const pasados = minutosDesde(t.fechaFin);
+        return pasados !== null && pasados >= 30;
       });
-      if (candidato) {
-        modalAutoAbiertoRef.current.add(candidato.id);
-        setQrModal({ turno: candidato, modo: "finalizar" });
+      for (const t of vencidos) {
+        autoCancelSalidaRef.current.add(t.id);
+        try {
+          const { data } = await cancelarTurno({
+            variables: { turnoId: t.id },
+          });
+          if (!data?.cancelarTurno?.ok)
+            autoCancelSalidaRef.current.delete(t.id);
+        } catch (e) {
+          autoCancelSalidaRef.current.delete(t.id);
+          console.error("[Auto-cancel salida]", e);
+        }
       }
-    }
+    };
+    check();
+  }, [turnos]); // mismo patrón — solo turnos
 
-    // Auto-cancelar turnos activos que llevan +30min después de su fechaFin sin salida
-    const vencidos = turnos.filter((t) => {
-      if (t.estado !== "activo") return false;
-      if (autoCancelSalidaRef.current.has(t.id)) return false;
-      const pasados = minutosDesde(t.fechaFin);
-      return pasados !== null && pasados >= 30;
-    });
-
-    vencidos.forEach(async (t) => {
-      autoCancelSalidaRef.current.add(t.id);
-      try {
-        const { data } = await cancelarTurno({ variables: { turnoId: t.id } });
-        if (!data?.cancelarTurno?.ok) autoCancelSalidaRef.current.delete(t.id);
-      } catch (e) {
-        autoCancelSalidaRef.current.delete(t.id);
-        console.error("[Auto-cancel salida]", e);
-      }
-    });
-  }, [turnos, qrModal, cancelarTurno]);
-
-  // ── Auto-abrir modal QR para finalizar (-15min antes o +45min después) ───
+  // ── Auto-abrir modal QR para finalizar (-15min antes o hasta +45min) ──────
   const modalAutoAbiertoRef = useRef(new Set());
+
   useEffect(() => {
-    if (qrModal) return; // ya hay un modal abierto
+    if (qrModal) return;
     const candidato = turnos.find((t) => {
       if (t.estado !== "activo") return false;
       if (modalAutoAbiertoRef.current.has(t.id)) return false;
       const restantes = minutosHasta(t.fechaFin);
-      // -15 antes de acabar o hasta +45 después
       return restantes !== null && restantes <= 15 && restantes >= -45;
     });
     if (candidato) {
@@ -1268,7 +1193,7 @@ export default function SStaffList() {
     }
   }, [turnos, qrModal]);
 
-  // ── Filtro de turnos ──────────────────────────────────────────────────────
+  // ── Filtro ────────────────────────────────────────────────────────────────
   const filteredTurnos = useMemo(() => {
     const q = busqueda.toLowerCase().trim();
     return turnos.filter((t) => {
@@ -1417,7 +1342,6 @@ export default function SStaffList() {
           </span>
         </div>
 
-        {/* Filtros */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div
             className="flex items-center gap-2.5 flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200"
@@ -1458,7 +1382,6 @@ export default function SStaffList() {
           </div>
         </div>
 
-        {/* Lista */}
         {turnosLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => (
@@ -1500,7 +1423,6 @@ export default function SStaffList() {
           <Skeleton className="h-28 rounded-2xl" />
         ) : asistencia.length === 0 ? (
           <div className="space-y-2">
-            {/* Si hay turnos activos pero sin registro QR, mostrarlos igual */}
             {turnos.filter((t) => t.estado === "activo").length > 0 ? (
               <>
                 <div

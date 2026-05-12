@@ -1,10 +1,10 @@
 // src/features/inventory/components/admin/AStockGlobal.jsx
 // Admin Central — Stock global de toda la cadena.
 // Ve stock de todos los almacenes, filtra por restaurante/almacén/estado.
-// Puede ajustar cantidades (ajuste manual con descripción).
+// Admin es de solo lectura: ve movimientos pero NO ajusta (eso es del gerente).
 
 import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "@apollo/client/react";
+import { useQuery } from "@apollo/client/react";
 import { useSearchParams } from "react-router-dom";
 import {
   Package,
@@ -12,17 +12,18 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  SlidersHorizontal,
-  BarChart3,
-  Loader2,
-  TrendingDown,
-  Minus,
-  Plus,
+  History,
   RefreshCw,
+  ArrowUp,
+  ArrowDown,
+  SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
-import Swal from "sweetalert2";
-import { GET_STOCK, GET_ALMACENES } from "../../graphql/queries";
-import { AJUSTAR_STOCK } from "../../graphql/mutations";
+import {
+  GET_STOCK,
+  GET_ALMACENES,
+  GET_STOCK_ITEM,
+} from "../../graphql/queries";
 import { GET_RESTAURANTES } from "../../../menu/components/admin/graphql/operations";
 import {
   PageHeader,
@@ -63,151 +64,204 @@ function NivelBar({ pct, agotado, bajo }) {
   );
 }
 
-// ── Modal Ajuste manual ────────────────────────────────────────────────────
-function AjusteModal({ open, onClose, item }) {
-  const [cantidad, setCantidad] = useState("");
-  const [descripcion, setDescripcion] = useState("");
-  const [ajustar, { loading }] = useMutation(AJUSTAR_STOCK, {
-    refetchQueries: ["GetStock"],
+// ── Modal Movimientos ─────────────────────────────────────────────────────
+function MovimientosModal({ open, onClose, item }) {
+  const { data, loading } = useQuery(GET_STOCK_ITEM, {
+    variables: { id: item?.id },
+    skip: !item?.id || !open,
+    fetchPolicy: "cache-and-network",
   });
 
-  const handleSave = async () => {
-    const val = parseFloat(cantidad);
-    if (!val || !descripcion.trim()) return;
-    try {
-      const { data } = await ajustar({
-        variables: {
-          id: item.id,
-          cantidad: val,
-          descripcion: descripcion.trim(),
-        },
-      });
-      if (!data?.ajustarStock?.ok)
-        throw new Error(data?.ajustarStock?.error ?? "Error");
-      Swal.fire({
-        background: "#fff",
-        icon: "success",
-        title: "Stock ajustado",
-        timer: 1400,
-        timerProgressBar: true,
-        confirmButtonColor: G[900],
-      });
-      onClose();
-      setCantidad("");
-      setDescripcion("");
-    } catch (e) {
-      Swal.fire({
-        background: "#fff",
-        icon: "error",
-        title: "Error",
-        text: e.message,
-        confirmButtonColor: G[900],
-      });
-    }
-  };
+  const detalle = data?.stockItem;
 
-  const icls =
-    "w-full px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-900 placeholder:text-stone-400 outline-none transition-all";
-  const fi = (e) => {
-    e.target.style.borderColor = "transparent";
-    e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
-  };
-  const fb = (e) => {
-    e.target.style.borderColor = "#e2e8f0";
-    e.target.style.boxShadow = "none";
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString("es-CO", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  const TIPO_CFG = {
+    ENTRADA: { icon: ArrowUp, color: "#16a34a", label: "Entrada", signo: +1 },
+    DEVOLUCION: {
+      icon: ArrowUp,
+      color: "#3b82f6",
+      label: "Devolución",
+      signo: +1,
+    },
+    SALIDA: { icon: ArrowDown, color: "#dc2626", label: "Venta", signo: -1 },
+    VENCIMIENTO: { icon: Trash2, color: "#7c3aed", label: "Retiro", signo: -1 },
+    AJUSTE: {
+      icon: SlidersHorizontal,
+      color: "#d97706",
+      label: "Ajuste",
+      signo: null,
+    },
   };
 
   if (!item) return null;
+
   return (
-    <Modal open={open} onClose={onClose} title="Ajuste de stock" size="sm">
-      <div className="space-y-4">
-        <div
-          className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border"
-          style={{ background: G[50], borderColor: G[100] }}
-        >
-          <Package size={14} style={{ color: G[300] }} />
-          <div>
-            <p
-              className="text-sm font-dm font-semibold"
-              style={{ color: G[500] }}
-            >
-              {item.nombreIngrediente}
-            </p>
-            <p className="text-[10px] font-dm text-stone-400">
-              Actual: {item.cantidadActual} {item.unidadMedida} · Almacén:{" "}
-              {item.almacenNombre}
-            </p>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Movimientos — ${item.nombreIngrediente}`}
+      size="lg"
+    >
+      {loading || !detalle ? (
+        <div className="space-y-2">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-12 rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Resumen del ítem */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              {
+                label: "Stock actual",
+                value: `${parseFloat(detalle.cantidadActual).toFixed(2)} ${detalle.unidadMedida}`,
+              },
+              {
+                label: "Nivel mínimo",
+                value: `${parseFloat(detalle.nivelMinimo).toFixed(2)} ${detalle.unidadMedida}`,
+              },
+              {
+                label: "Nivel máximo",
+                value: `${parseFloat(detalle.nivelMaximo).toFixed(2)} ${detalle.unidadMedida}`,
+              },
+            ].map(({ label, value }) => (
+              <div
+                key={label}
+                className="px-3 py-2.5 rounded-xl bg-stone-50 border border-stone-200"
+              >
+                <p className="text-[10px] font-dm text-stone-400 uppercase tracking-wider">
+                  {label}
+                </p>
+                <p className="text-sm font-dm font-semibold text-stone-800 mt-0.5">
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Nota solo lectura */}
+          <div
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-dm"
+            style={{ background: G[50], borderColor: G[100], color: G[300] }}
+          >
+            <History size={12} />
+            <span>
+              Los ajustes de stock los realiza el <strong>gerente local</strong>
+              . Los movimientos se generan automáticamente al recibir órdenes de
+              compra o por ventas.
+            </span>
+          </div>
+
+          {/* Lista de movimientos */}
+          {!detalle.movimientos?.length ? (
+            <div className="flex flex-col items-center py-8 gap-2">
+              <History size={24} className="text-stone-200" />
+              <p className="text-sm font-dm text-stone-400">
+                Sin movimientos registrados
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+              {detalle.movimientos.map((m) => {
+                const cfg = TIPO_CFG[m.tipoMovimiento] ?? {
+                  icon: History,
+                  color: "#94a3b8",
+                  label: m.tipoMovimiento,
+                  signo: null,
+                };
+                const Icon = cfg.icon;
+                const cantidad = parseFloat(m.cantidad);
+                const signo =
+                  cfg.signo !== null
+                    ? cfg.signo
+                    : parseFloat(m.cantidadDespues) >=
+                        parseFloat(m.cantidadAntes)
+                      ? +1
+                      : -1;
+                const esIngreso = signo >= 0;
+
+                return (
+                  <div
+                    key={m.id}
+                    className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-stone-100"
+                    style={{ borderLeft: `3px solid ${cfg.color}` }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ background: `${cfg.color}15` }}
+                    >
+                      <Icon size={13} style={{ color: cfg.color }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-dm font-semibold text-stone-800">
+                        {cfg.label}
+                      </p>
+                      {m.descripcion && (
+                        <p className="text-[10px] font-dm text-stone-400 truncate">
+                          {m.descripcion}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p
+                        className="text-sm font-dm font-bold"
+                        style={{ color: esIngreso ? G[300] : "#dc2626" }}
+                      >
+                        {esIngreso ? "+" : "−"}
+                        {cantidad.toFixed(2)}
+                      </p>
+                      <p className="text-[10px] font-dm text-stone-400">
+                        → {parseFloat(m.cantidadDespues).toFixed(2)}{" "}
+                        {detalle.unidadMedida}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0 min-w-[80px]">
+                      <p className="text-[10px] font-dm text-stone-400">
+                        {fmtDate(m.fecha)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-1">
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              Cerrar
+            </Button>
           </div>
         </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-dm font-semibold text-stone-500">
-            Cantidad a ajustar{" "}
-            <span className="text-stone-400 font-normal">
-              (positivo = entrada, negativo = salida)
-            </span>
-          </label>
-          <input
-            type="number"
-            step="0.001"
-            value={cantidad}
-            onChange={(e) => setCantidad(e.target.value)}
-            placeholder="Ej: 5.000 o -2.500"
-            className={icls}
-            onFocus={fi}
-            onBlur={fb}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-dm font-semibold text-stone-500">
-            Motivo del ajuste <span className="text-red-400">*</span>
-          </label>
-          <input
-            value={descripcion}
-            onChange={(e) => setDescripcion(e.target.value)}
-            placeholder="Ej: Conteo físico semanal, Merma detectada..."
-            className={icls}
-            onFocus={fi}
-            onBlur={fb}
-          />
-        </div>
-
-        <div className="flex justify-end gap-2 pt-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancelar
-          </Button>
-          <Button
-            size="sm"
-            loading={loading}
-            disabled={!cantidad || !descripcion.trim()}
-            onClick={handleSave}
-          >
-            Aplicar ajuste
-          </Button>
-        </div>
-      </div>
+      )}
     </Modal>
   );
 }
 
 // ── Fila de stock ──────────────────────────────────────────────────────────
-function StockRow({ item, onAjustar }) {
+function StockRow({ item, restaurante, onVerMovimientos }) {
   const agotado = item.estaAgotado;
   const bajo = !agotado && item.necesitaReposicion;
-  const ok = !agotado && !bajo;
 
   return (
     <tr className="border-b border-stone-100 hover:bg-stone-50/60 transition-colors">
+      {/* Ingrediente + almacén */}
       <td className="py-3.5 pl-5 pr-3">
         <div className="flex items-center gap-2.5">
           <div
-            className={`w-2 h-2 rounded-full shrink-0 ${agotado ? "bg-red-500" : bajo ? "bg-amber-400" : "bg-emerald-500"}`}
+            className={`w-2 h-2 rounded-full shrink-0 ${
+              agotado ? "bg-red-500" : bajo ? "bg-amber-400" : "bg-emerald-500"
+            }`}
           />
           <div>
             <p className="text-sm font-dm font-semibold text-stone-800 leading-tight">
@@ -220,6 +274,17 @@ function StockRow({ item, onAjustar }) {
         </div>
       </td>
 
+      {/* Restaurante */}
+      <td className="py-3.5 px-3 hidden md:table-cell">
+        <p className="text-xs font-dm font-semibold text-stone-600 truncate max-w-[120px]">
+          {restaurante?.nombre ?? "—"}
+        </p>
+        <p className="text-[10px] font-dm text-stone-400">
+          {restaurante?.ciudad ?? ""}
+        </p>
+      </td>
+
+      {/* Cantidad */}
       <td className="py-3.5 px-3 text-sm font-dm text-stone-700">
         <span className="font-semibold">
           {parseFloat(item.cantidadActual).toFixed(2)}
@@ -227,7 +292,8 @@ function StockRow({ item, onAjustar }) {
         <span className="text-stone-400 text-xs ml-1">{item.unidadMedida}</span>
       </td>
 
-      <td className="py-3.5 px-3">
+      {/* Nivel */}
+      <td className="py-3.5 px-3 min-w-[180px]">
         <div className="text-[10px] font-dm text-stone-400 mb-1">
           mín {parseFloat(item.nivelMinimo).toFixed(1)} · máx{" "}
           {parseFloat(item.nivelMaximo).toFixed(1)}
@@ -235,6 +301,7 @@ function StockRow({ item, onAjustar }) {
         <NivelBar pct={item.porcentajeStock} agotado={agotado} bajo={bajo} />
       </td>
 
+      {/* Estado */}
       <td className="py-3.5 px-3">
         <Badge variant={agotado ? "red" : bajo ? "amber" : "green"} size="xs">
           {agotado ? (
@@ -253,12 +320,13 @@ function StockRow({ item, onAjustar }) {
         </Badge>
       </td>
 
+      {/* Movimientos — reemplaza Ajuste */}
       <td className="py-3.5 pr-5 pl-3">
         <button
-          onClick={() => onAjustar(item)}
+          onClick={() => onVerMovimientos(item)}
           className="flex items-center gap-1.5 text-xs font-dm font-semibold px-2.5 py-1.5 rounded-lg border border-stone-200 text-stone-600 bg-stone-50 hover:bg-stone-100 transition-colors"
         >
-          <SlidersHorizontal size={11} /> Ajustar
+          <History size={11} /> Movimientos
         </button>
       </td>
     </tr>
@@ -272,16 +340,41 @@ export default function AStockGlobal() {
   const [filtroAlmacen, setFiltroAlmacen] = useState(
     searchParams.get("almacen") ?? "",
   );
+  const [filtroRestaurante, setFiltroRestaurante] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("all");
-  const [ajusteItem, setAjusteItem] = useState(null);
+  const [movItem, setMovItem] = useState(null);
 
   const { data, loading, refetch } = useQuery(GET_STOCK, {
     fetchPolicy: "cache-and-network",
   });
   const { data: almData } = useQuery(GET_ALMACENES);
+  const { data: restData } = useQuery(GET_RESTAURANTES);
 
   const stock = data?.stock ?? [];
   const almacenes = almData?.almacenes ?? [];
+  const restaurantes = restData?.restaurantes ?? [];
+
+  // Map almacén → restauranteId
+  const almacenRestMap = useMemo(() => {
+    const m = {};
+    almacenes.forEach((a) => (m[a.id] = a.restauranteId));
+    return m;
+  }, [almacenes]);
+
+  const restaurantesMap = useMemo(() => {
+    const m = {};
+    restaurantes.forEach((r) => (m[r.id] = r));
+    return m;
+  }, [restaurantes]);
+
+  // Filtro de almacenes según restaurante seleccionado
+  const almacenesFiltrados = useMemo(
+    () =>
+      filtroRestaurante
+        ? almacenes.filter((a) => a.restauranteId === filtroRestaurante)
+        : almacenes,
+    [almacenes, filtroRestaurante],
+  );
 
   const agotados = stock.filter((s) => s.estaAgotado).length;
   const bajos = stock.filter(
@@ -301,6 +394,10 @@ export default function AStockGlobal() {
       )
         return false;
       if (filtroAlmacen && s.almacen !== filtroAlmacen) return false;
+      if (filtroRestaurante) {
+        const restId = almacenRestMap[s.almacen];
+        if (restId !== filtroRestaurante) return false;
+      }
       if (filtroEstado === "agotado" && !s.estaAgotado) return false;
       if (filtroEstado === "bajo" && (s.estaAgotado || !s.necesitaReposicion))
         return false;
@@ -308,7 +405,14 @@ export default function AStockGlobal() {
         return false;
       return true;
     });
-  }, [stock, search, filtroAlmacen, filtroEstado]);
+  }, [
+    stock,
+    search,
+    filtroAlmacen,
+    filtroRestaurante,
+    filtroEstado,
+    almacenRestMap,
+  ]);
 
   const almacenSeleccionado = filtroAlmacen
     ? almacenes.find((a) => a.id === filtroAlmacen)
@@ -326,7 +430,7 @@ export default function AStockGlobal() {
         description={
           almacenSeleccionado
             ? "Mostrando stock de este almacén. Usa el selector para cambiar de almacén."
-            : "Niveles de inventario de todos los almacenes de la cadena."
+            : "Niveles de inventario de todos los almacenes de la cadena — solo lectura."
         }
         action={
           <div className="flex items-center gap-3">
@@ -355,7 +459,7 @@ export default function AStockGlobal() {
         }
       />
 
-      {/* Stats strip */}
+      {/* Stats clicables */}
       <div className="grid grid-cols-3 gap-3">
         {[
           {
@@ -421,9 +525,9 @@ export default function AStockGlobal() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
         <div
-          className="flex items-center gap-2.5 flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200"
+          className="flex items-center gap-2.5 flex-1 min-w-[200px] px-3.5 py-2.5 rounded-xl bg-white border border-stone-200"
           style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
           onFocusCapture={(e) =>
             (e.currentTarget.style.boxShadow = `0 0 0 2px ${G[300]}`)
@@ -449,13 +553,31 @@ export default function AStockGlobal() {
           )}
         </div>
 
+        {/* Filtro restaurante */}
+        <select
+          value={filtroRestaurante}
+          onChange={(e) => {
+            setFiltroRestaurante(e.target.value);
+            setFiltroAlmacen(""); // limpiar almacén al cambiar restaurante
+          }}
+          className="px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-600 outline-none appearance-none cursor-pointer"
+        >
+          <option value="">Todos los restaurantes</option>
+          {restaurantes.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.nombre}
+            </option>
+          ))}
+        </select>
+
+        {/* Filtro almacén — en cascada con restaurante */}
         <select
           value={filtroAlmacen}
           onChange={(e) => setFiltroAlmacen(e.target.value)}
           className="px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-600 outline-none appearance-none cursor-pointer"
         >
           <option value="">Todos los almacenes</option>
-          {almacenes.map((a) => (
+          {almacenesFiltrados.map((a) => (
             <option key={a.id} value={a.id}>
               {a.nombre}
             </option>
@@ -468,7 +590,17 @@ export default function AStockGlobal() {
         <p className="text-xs font-dm text-stone-400 -mt-2">
           {filtered.length} ítem{filtered.length !== 1 ? "s" : ""}
           {filtroEstado !== "all" &&
-            ` · ${filtroEstado === "agotado" ? "agotados" : filtroEstado === "bajo" ? "bajo mínimo" : "nivel OK"}`}
+            ` · ${
+              filtroEstado === "agotado"
+                ? "agotados"
+                : filtroEstado === "bajo"
+                  ? "bajo mínimo"
+                  : "nivel OK"
+            }`}
+          {" · "}
+          <span className="text-stone-500">
+            Solo lectura — los ajustes los gestiona el gerente
+          </span>
         </p>
       )}
 
@@ -500,10 +632,11 @@ export default function AStockGlobal() {
                 <tr className="border-b border-stone-100 bg-stone-50/50">
                   {[
                     { l: "Ingrediente · Almacén", cls: "pl-5 pr-3" },
+                    { l: "Restaurante", cls: "px-3 hidden md:table-cell" },
                     { l: "Cantidad", cls: "px-3" },
                     { l: "Nivel", cls: "px-3 min-w-[180px]" },
                     { l: "Estado", cls: "px-3" },
-                    { l: "Ajuste", cls: "pr-5 pl-3" },
+                    { l: "Historial", cls: "pr-5 pl-3" },
                   ].map(({ l, cls }) => (
                     <th
                       key={l}
@@ -519,7 +652,8 @@ export default function AStockGlobal() {
                   <StockRow
                     key={item.id}
                     item={item}
-                    onAjustar={setAjusteItem}
+                    restaurante={restaurantesMap[almacenRestMap[item.almacen]]}
+                    onVerMovimientos={setMovItem}
                   />
                 ))}
               </tbody>
@@ -528,10 +662,10 @@ export default function AStockGlobal() {
         </div>
       )}
 
-      <AjusteModal
-        open={!!ajusteItem}
-        onClose={() => setAjusteItem(null)}
-        item={ajusteItem}
+      <MovimientosModal
+        open={!!movItem}
+        onClose={() => setMovItem(null)}
+        item={movItem}
       />
     </div>
   );

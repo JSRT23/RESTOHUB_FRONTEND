@@ -262,9 +262,13 @@ function AccesoCard({
 // ── AlertaRow ─────────────────────────────────────────────────────────────
 function AlertaRow({ alerta }) {
   const TIPO = {
+    STOCK_BAJO: { label: "Bajo mínimo", bg: "#fef3c7", text: "#d97706" },
     bajo_minimo: { label: "Bajo mínimo", bg: "#fef3c7", text: "#d97706" },
-    agotado: { label: "Agotado", bg: "#fee2e2", text: "#dc2626" },
+    VENCIMIENTO: { label: "Por vencer", bg: "#fef3c7", text: "#d97706" },
     por_vencer: { label: "Por vencer", bg: "#fef3c7", text: "#d97706" },
+    AGOTADO: { label: "Agotado", bg: "#fee2e2", text: "#dc2626" },
+    agotado: { label: "Agotado", bg: "#fee2e2", text: "#dc2626" },
+    VENCIDO: { label: "Vencido", bg: "#fee2e2", text: "#dc2626" },
     vencido: { label: "Vencido", bg: "#fee2e2", text: "#dc2626" },
   };
   const c = TIPO[alerta.tipoAlerta] ?? {

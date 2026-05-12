@@ -5,6 +5,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
 } from "react";
 
 const AuthContext = createContext(null);
@@ -30,8 +31,26 @@ export function AuthProvider({ children }) {
     }
   });
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
+  const navigateRef = useRef(null);
 
-  // Verificar que el token no haya expirado al montar
+  const setNavigate = useCallback((fn) => {
+    navigateRef.current = fn;
+  }, []);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(USER_KEY);
+    setToken(null);
+    setUser(null);
+    if (navigateRef.current) {
+      navigateRef.current("/login");
+    } else {
+      window.location.href = "/login";
+    }
+  }, []);
+
+  // Verificar token al montar
   useEffect(() => {
     if (token) {
       const payload = parseJwt(token);
@@ -39,7 +58,19 @@ export function AuthProvider({ children }) {
         logout();
       }
     }
-  }, []);
+  }, [logout]); // ← logout agregado a deps
+
+  // Verificar token periódicamente (cada 60s)
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => {
+      const payload = parseJwt(token);
+      if (!payload || payload.exp * 1000 < Date.now()) {
+        logout();
+      }
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [token, logout]);
 
   const login = useCallback(({ access_token, refresh_token, usuario }) => {
     localStorage.setItem(TOKEN_KEY, access_token);
@@ -49,26 +80,21 @@ export function AuthProvider({ children }) {
     setUser(usuario);
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-    localStorage.removeItem(USER_KEY);
-    setToken(null);
-    setUser(null);
-  }, []);
-
   const isAuthenticated = !!token && !!user;
 
-  const hasRole = useCallback(
-    (...roles) => {
-      return roles.includes(user?.rol);
-    },
-    [user],
-  );
+  const hasRole = useCallback((...roles) => roles.includes(user?.rol), [user]);
 
   return (
     <AuthContext.Provider
-      value={{ user, token, login, logout, isAuthenticated, hasRole }}
+      value={{
+        user,
+        token,
+        login,
+        logout,
+        isAuthenticated,
+        hasRole,
+        setNavigate,
+      }}
     >
       {children}
     </AuthContext.Provider>

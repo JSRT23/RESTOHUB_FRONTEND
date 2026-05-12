@@ -1,14 +1,4 @@
 // src/features/orders/components/Cajero/CCobrar.jsx
-// Cajero — punto de venta (TPV).
-// Flujo completo:
-//   1. Lista de pedidos LISTOS del restaurante
-//   2. Seleccionar pedido → ver ítems y total
-//   3. Buscar cliente (opcional) → ver puntos disponibles
-//   4. Aplicar descuento: cupón o canjear puntos
-//   5. Seleccionar método de pago
-//   6. Cobrar → acumular puntos al cliente si aplica
-// Ruta: /caja
-
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { useAuth } from "../../../../app/auth/AuthContext";
@@ -17,7 +7,6 @@ import {
   CreditCard,
   Smartphone,
   Search,
-  User,
   Tag,
   Star,
   CheckCircle2,
@@ -40,8 +29,6 @@ import {
   GET_PUNTOS_CLIENTE,
   ACUMULAR_PUNTOS,
   CANJEAR_PUNTOS,
-} from "../../../loyalty/graphql/operations";
-import {
   VALIDAR_CUPON,
   CANJEAR_CUPON,
 } from "../../../loyalty/graphql/operations";
@@ -53,8 +40,8 @@ import {
   Badge,
 } from "../../../../shared/components/ui";
 import { gql } from "@apollo/client";
+import { ClienteSelector } from "../../../loyalty/components/Gerente/GLoyalty";
 
-// Query ligera para obtener imágenes de platos (fallback si imagenPlato no viene en el detalle)
 const GET_PLATOS_IMG = gql`
   query GetPlatosImg($disponibles: ID, $activo: Boolean) {
     platos(disponibles: $disponibles, activo: $activo) {
@@ -78,6 +65,7 @@ const fmtMoney = (n, moneda = "COP") =>
     currency: moneda,
     maximumFractionDigits: 0,
   }).format(n ?? 0);
+
 const fmtHora = (iso) =>
   iso
     ? new Date(iso).toLocaleTimeString("es-CO", {
@@ -99,7 +87,6 @@ const METODOS_PAGO = [
   },
 ];
 
-// Puntos que se acumulan: 1 pto por cada 1000 COP
 const calcularPuntos = (total, moneda) => {
   if (moneda === "COP") return Math.floor(total / 1000);
   if (moneda === "USD") return Math.floor(total * 3);
@@ -205,9 +192,6 @@ function ListaPedidosListos({ pedidos, loading, onSeleccionar }) {
 
 // ── Panel de cobro ─────────────────────────────────────────────────────────
 function PanelCobro({ pedidoId, onVolver, restauranteId }) {
-  const { user } = useAuth();
-
-  const [clienteId, setClienteId] = useState("");
   const [clienteBuscado, setClienteBuscado] = useState("");
   const [codigoCupon, setCodigoCupon] = useState("");
   const [cuponValidado, setCuponValidado] = useState(null);
@@ -216,18 +200,17 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
   const [cobrando, setCobrando] = useState(false);
   const [validandoCupon, setValidandoCupon] = useState(false);
 
-  // Pedido completo
   const { data: pedidoData, loading: pedidoLoading } = useQuery(GET_PEDIDO, {
     variables: { id: pedidoId },
     fetchPolicy: "cache-and-network",
   });
 
-  // Imágenes de platos — para mostrar en el detalle del pedido
   const { data: platosImgData } = useQuery(GET_PLATOS_IMG, {
     variables: { disponibles: restauranteId, activo: true },
     skip: !restauranteId,
     fetchPolicy: "cache-first",
   });
+
   const imagenMap = useMemo(() => {
     const map = {};
     (platosImgData?.platos ?? []).forEach((p) => {
@@ -236,21 +219,18 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
     return map;
   }, [platosImgData]);
 
-  // Puntos del cliente (si se buscó)
-  const {
-    data: puntosData,
-    loading: puntosLoading,
-    refetch: refetchPuntos,
-  } = useQuery(GET_PUNTOS_CLIENTE, {
-    variables: { clienteId: clienteBuscado },
-    skip: !clienteBuscado,
-    fetchPolicy: "network-only",
-  });
+  const { data: puntosData, loading: puntosLoading } = useQuery(
+    GET_PUNTOS_CLIENTE,
+    {
+      variables: { clienteId: clienteBuscado },
+      skip: !clienteBuscado,
+      fetchPolicy: "network-only",
+    },
+  );
 
-  // Validar cupón
-  const { data: cuponData, refetch: refetchCupon } = useQuery(VALIDAR_CUPON, {
+  const { refetch: refetchCupon } = useQuery(VALIDAR_CUPON, {
     variables: { codigo: codigoCupon.trim().toUpperCase() },
-    skip: true, // solo se llama manualmente
+    skip: true,
     fetchPolicy: "network-only",
   });
 
@@ -265,14 +245,13 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
   const puntosCliente = puntosData?.puntosCliente;
   const moneda = pedido?.moneda ?? "COP";
 
-  // Cálculo de descuentos y total
   const descuentoCupon = cuponValidado
     ? cuponValidado.tipoDescuento === "porcentaje"
       ? Math.round(((pedido?.total ?? 0) * cuponValidado.valorDescuento) / 100)
       : cuponValidado.valorDescuento
     : 0;
 
-  const valorPorPunto = moneda === "COP" ? 10 : 0.003; // 10 COP / punto
+  const valorPorPunto = moneda === "COP" ? 10 : 0.003;
   const descuentoPuntos = Math.round(puntosACanjear * valorPorPunto);
   const totalDescuentos = descuentoCupon + descuentoPuntos;
   const totalFinal = Math.max(0, (pedido?.total ?? 0) - totalDescuentos);
@@ -281,13 +260,8 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
   const puntosDisponibles = puntosCliente?.saldo ?? 0;
   const maxPuntosCanjeables = Math.min(
     puntosDisponibles,
-    Math.floor(((pedido?.total ?? 0) * 0.3) / valorPorPunto), // max 30% con puntos
+    Math.floor(((pedido?.total ?? 0) * 0.3) / valorPorPunto),
   );
-
-  const handleBuscarCliente = () => {
-    if (!clienteId.trim()) return;
-    setClienteBuscado(clienteId.trim());
-  };
 
   const handleValidarCupon = async () => {
     if (!codigoCupon.trim()) return;
@@ -325,14 +299,11 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
     if (!metodoPago || !pedido) return;
     setCobrando(true);
     try {
-      // 1. Canjear cupón si aplica
       if (cuponValidado) {
         await canjearCupon({
           variables: { id: cuponValidado.id, pedidoId: pedido.id },
         });
       }
-
-      // 2. Canjear puntos si aplica
       if (puntosACanjear > 0 && clienteBuscado) {
         await canjearPuntos({
           variables: {
@@ -343,10 +314,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
           },
         });
       }
-
-      // 3. Entregar el pedido (LISTO → ENTREGADO)
-
-      // 4. Acumular puntos al cliente
       if (clienteBuscado && puntosAGanar > 0) {
         await acumularPuntos({
           variables: {
@@ -358,8 +325,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
           },
         });
       }
-
-      // 5. Marcar como entregado
       await entregarPedido({
         variables: {
           id: pedido.id,
@@ -423,7 +388,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
 
   return (
     <div className="space-y-5">
-      {/* Volver */}
       <button
         onClick={onVolver}
         className="flex items-center gap-1.5 text-sm font-dm font-semibold text-stone-500 hover:text-stone-800 transition-colors"
@@ -459,7 +423,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
                 const img = d.imagenPlato || imagenMap[d.platoId];
                 return (
                   <div key={d.id} className="flex items-stretch gap-0">
-                    {/* Imagen cuadrada grande */}
                     <div
                       className="w-24 h-24 shrink-0 overflow-hidden relative"
                       style={{ background: "#f5f5f4" }}
@@ -480,7 +443,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
                           <span className="text-3xl">🍽</span>
                         </div>
                       )}
-                      {/* Badge cantidad sobre la imagen */}
                       <span
                         className="absolute top-2 left-2 w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold text-white shadow-sm"
                         style={{ background: G[900] }}
@@ -488,8 +450,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
                         {d.cantidad}
                       </span>
                     </div>
-
-                    {/* Info */}
                     <div className="flex-1 min-w-0 px-4 py-3 flex flex-col justify-between">
                       <div>
                         <p className="text-sm font-dm font-bold text-stone-900 leading-snug">
@@ -591,9 +551,9 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
           )}
         </div>
 
-        {/* Columna derecha — Cliente, descuentos y cobro */}
+        {/* Columna derecha */}
         <div className="space-y-4">
-          {/* Buscar cliente */}
+          {/* Buscar cliente — ClienteSelector */}
           <div
             className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3"
             style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
@@ -601,28 +561,18 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
             <p className="text-xs font-dm font-bold text-stone-500 uppercase tracking-wide">
               Cliente (opcional)
             </p>
-            <div className="flex gap-2">
-              <input
-                value={clienteId}
-                onChange={(e) => setClienteId(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleBuscarCliente()}
-                placeholder="UUID del cliente..."
-                className={icls + " flex-1"}
-                onFocus={fi}
-                onBlur={fb}
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleBuscarCliente}
-                disabled={!clienteId.trim()}
-              >
-                <Search size={13} />
-              </Button>
-            </div>
+
+            <ClienteSelector
+              value={clienteBuscado}
+              onChange={(id) => setClienteBuscado(id)}
+              onSelect={(cliente) => setClienteBuscado(cliente.id)}
+              placeholder="Buscar por nombre, cédula o email..."
+            />
 
             {puntosLoading && (
-              <p className="text-xs font-dm text-stone-400">Buscando...</p>
+              <p className="text-xs font-dm text-stone-400">
+                Buscando puntos...
+              </p>
             )}
 
             {puntosCliente && (

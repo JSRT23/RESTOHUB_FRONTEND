@@ -186,7 +186,7 @@ function LoginForm({ onEmailNoVerificado }) {
 }
 
 // ── Vista: Verificar código (solo si email no verificado) ─────────────────
-function VerificarCodigoForm({ email, onBack, codigoDev }) {
+function VerificarCodigoForm({ email, onBack }) {
   const [codigo, setCodigo] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -233,23 +233,6 @@ function VerificarCodigoForm({ email, onBack, codigoDev }) {
         <Mail size={13} className="text-stone-300 shrink-0" />
         <p className="text-sm font-dm text-stone-600 truncate">{email}</p>
       </div>
-
-      {codigoDev && (
-        <div
-          style={{ borderColor: G[100], background: `${G[50]}99` }}
-          className="rounded-xl px-4 py-3 border text-center"
-        >
-          <p className="text-[10px] font-dm text-stone-400 uppercase tracking-wider mb-1">
-            Código de desarrollo
-          </p>
-          <p
-            style={{ color: G[500], letterSpacing: "0.4em" }}
-            className="text-2xl font-bold font-mono"
-          >
-            {codigoDev}
-          </p>
-        </div>
-      )}
 
       {success ? (
         <div style={{ color: G[300] }} className="text-center py-6 space-y-2">
@@ -322,7 +305,6 @@ function VerificarCodigoForm({ email, onBack, codigoDev }) {
 export default function LoginPage() {
   const [vista, setVista] = useState("login");
   const [emailPending, setEmail] = useState("");
-  const [codigoDev, setCodigoDev] = useState(null);
 
   const titulos = {
     login: { h: "Bienvenido", sub: "Accede a tu panel de gestión" },
@@ -374,7 +356,6 @@ export default function LoginPage() {
             >
               Centro de control para la operación de tu restaurante
             </p>
-
             <p
               style={{ color: G[100] }}
               className="text-sm font-dm leading-relaxed mt-2"
@@ -434,7 +415,7 @@ export default function LoginPage() {
             </span>
           </div>
 
-          {/* Card con relieve */}
+          {/* Card */}
           <div
             className="rounded-2xl bg-white border border-stone-200 p-7"
             style={{
@@ -463,11 +444,7 @@ export default function LoginPage() {
             {vista === "verificar" && (
               <VerificarCodigoForm
                 email={emailPending}
-                codigoDev={codigoDev}
-                onBack={() => {
-                  setVista("login");
-                  setCodigoDev(null);
-                }}
+                onBack={() => setVista("login")}
               />
             )}
           </div>

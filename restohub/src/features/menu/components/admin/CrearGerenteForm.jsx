@@ -46,7 +46,6 @@ const PAIS_CODE = {
   Bolivia: "BO",
   Venezuela: "VE",
   España: "ES",
-  España: "ES",
   "Estados Unidos": "US",
   Panama: "PA",
   Panamá: "PA",

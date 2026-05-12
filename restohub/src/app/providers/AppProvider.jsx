@@ -8,7 +8,6 @@ import {
 import { ApolloProvider } from "@apollo/client/react";
 import { AuthProvider } from "../auth/AuthContext";
 
-// Apollo link que inyecta el JWT en cada request
 const authLink = new ApolloLink((operation, forward) => {
   const token = localStorage.getItem("restohub_access_token");
   operation.setContext(({ headers = {} }) => ({

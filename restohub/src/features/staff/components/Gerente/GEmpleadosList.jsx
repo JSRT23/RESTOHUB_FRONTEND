@@ -76,7 +76,6 @@ const G = {
 };
 
 // ── Constantes ─────────────────────────────────────────────────────────────
-// Roles que el gerente puede asignar (no puede crear otros gerentes)
 const ROLES_GERENTE = [
   { value: "supervisor", label: "Supervisor" },
   { value: "cocinero", label: "Cocinero" },
@@ -208,7 +207,6 @@ function PasswordField({ label, value, onChange, placeholder, required }) {
 // ── Modal: Crear empleado (auth + staff) ───────────────────────────────────
 function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
   const today = new Date().toISOString().split("T")[0];
-  // País viene del restaurante — puede llegar como código "CO" o label "Colombia"
   const paisRestaurante = (() => {
     const p = restaurantePais;
     if (!p) return "Colombia";
@@ -239,7 +237,7 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
   const [crearStaff] = useMutation(CREAR_EMPLEADO, {
     refetchQueries: ["GetEmpleados"],
   });
-  const [desactivarAuth] = useMutation(DESACTIVAR_USUARIO_AUTH); // rollback si staff falla
+  const [desactivarAuth] = useMutation(DESACTIVAR_USUARIO_AUTH);
 
   const handleSave = async () => {
     const {
@@ -252,7 +250,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
       rol,
     } = form;
 
-    // ── Validaciones ──────────────────────────────────────────────────────
     if (!nombre || !apellido || !documento || !email || !password || !rol) {
       Swal.fire({
         background: "#fff",
@@ -287,11 +284,9 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
     setLoading(true);
     const nombreCompleto = `${nombre.trim()} ${apellido.trim()}`;
     const emailTrim = email.trim();
-    // País resuelto automáticamente del restaurante (código ISO: "CO", "MX", etc.)
-    const paisEnviar = paisCode(paisRestaurante); // usa el país del restaurante directamente
+    const paisEnviar = paisCode(paisRestaurante);
 
     try {
-      // ── PASO 1: crear cuenta en auth_service ──────────────────────────
       const { data: d1 } = await registrarAuth({
         variables: {
           email: emailTrim,
@@ -314,7 +309,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
         return;
       }
 
-      // ── PASO 2: crear perfil en staff_service ─────────────────────────
       let staffOk = false;
       let staffError = "";
       try {
@@ -339,11 +333,14 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
       }
 
       if (!staffOk) {
-        // ── ROLLBACK: desactivar auth para no dejar cuenta huérfana ──────
         try {
           await desactivarAuth({ variables: { email: emailTrim } });
-        } catch (_) {}
-
+        } catch (rollbackErr) {
+          console.error(
+            "[Rollback auth] No se pudo revertir la cuenta:",
+            rollbackErr,
+          );
+        }
         Swal.fire({
           background: "#fff",
           icon: "error",
@@ -354,7 +351,7 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
               ${staffError}
             </p>
             <p style="font-size:12px;margin-top:8px">
-              La cuenta de acceso fue <b>revertida automáticamente</b>. Intenta de nuevo.
+              La cuenta de acceso fue <b>revertida automáticamente</b>. Si el problema persiste, verifica que el email no esté ya registrado.
             </p>
           </div>`,
           confirmButtonColor: G[900],
@@ -362,7 +359,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
         return;
       }
 
-      // ── PASO 3: todo OK ───────────────────────────────────────────────
       await Swal.fire({
         background: "#fff",
         icon: "success",
@@ -395,12 +391,12 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
       setLoading(false);
     }
   };
+
   if (!open) return null;
 
   return (
     <Modal open={open} onClose={onClose} title="Nuevo empleado" size="md">
       <div className="space-y-4">
-        {/* Nombre y apellido */}
         <div className="grid grid-cols-2 gap-3">
           <Field icon={UserCircle} label="Nombre" required>
             <input
@@ -424,7 +420,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
           </Field>
         </div>
 
-        {/* Documento y teléfono */}
         <div className="grid grid-cols-2 gap-3">
           <Field icon={FileText} label="Documento" required>
             <input
@@ -448,7 +443,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
           </Field>
         </div>
 
-        {/* Email */}
         <Field
           icon={Mail}
           label="Correo electrónico"
@@ -466,7 +460,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
           />
         </Field>
 
-        {/* Contraseñas */}
         <div className="grid grid-cols-2 gap-3">
           <PasswordField
             label="Contraseña"
@@ -484,7 +477,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
           />
         </div>
 
-        {/* Rol */}
         <Field icon={ShieldCheck} label="Rol" required>
           <div className="relative">
             <select
@@ -507,7 +499,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
           </div>
         </Field>
 
-        {/* País — asignado automáticamente del restaurante */}
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-dm"
           style={{
@@ -525,7 +516,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
           </span>
         </div>
 
-        {/* Fecha contratación */}
         <Field icon={Calendar} label="Fecha de contratación">
           <input
             type="date"
@@ -557,9 +547,6 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
 
 // ── Modal: Editar empleado ─────────────────────────────────────────────────
 function ModalEditar({ open, onClose, empleado }) {
-  // Inicializar vacío — useEffect sincroniza cada vez que cambia el empleado.
-  // Sin useEffect, useState solo se inicializa en el primer render y el modal
-  // muestra siempre los datos del primer empleado que se abrió.
   const [form, setForm] = useState({
     nombre: "",
     apellido: "",
@@ -595,7 +582,6 @@ function ModalEditar({ open, onClose, empleado }) {
       });
       return;
     }
-
     const confirm = await Swal.fire({
       background: "#fff",
       icon: "question",
@@ -608,7 +594,6 @@ function ModalEditar({ open, onClose, empleado }) {
       cancelButtonText: "Cancelar",
     });
     if (!confirm.isConfirmed) return;
-
     try {
       const { data } = await editar({
         variables: {
@@ -669,7 +654,6 @@ function ModalEditar({ open, onClose, empleado }) {
             />
           </Field>
         </div>
-
         <Field icon={Phone} label="Teléfono">
           <input
             className={cls}
@@ -680,7 +664,6 @@ function ModalEditar({ open, onClose, empleado }) {
             placeholder="+57 300 000 0000"
           />
         </Field>
-
         <Field icon={ShieldCheck} label="Rol">
           <div className="relative">
             <select
@@ -702,8 +685,6 @@ function ModalEditar({ open, onClose, empleado }) {
             />
           </div>
         </Field>
-
-        {/* Campos inmutables — solo info */}
         <div className="rounded-xl bg-stone-50 border border-stone-200 px-4 py-3 space-y-2">
           <p className="text-[10px] font-dm font-semibold text-stone-400 uppercase tracking-wide flex items-center gap-1">
             <Lock size={9} /> Datos de registro — no editables
@@ -722,7 +703,6 @@ function ModalEditar({ open, onClose, empleado }) {
             </div>
           ))}
         </div>
-
         <div className="flex justify-end gap-2 pt-1">
           <Button
             variant="ghost"
@@ -770,10 +750,8 @@ function ModalReactivar({ open, onClose, empleado }) {
       cancelButtonText: "Cancelar",
     });
     if (!confirm.isConfirmed) return;
-
     setLoading(true);
     try {
-      // 1. Activar en staff_service
       const { data: d1 } = await activar({
         variables: { empleadoId: empleado.id },
       });
@@ -781,17 +759,12 @@ function ModalReactivar({ open, onClose, empleado }) {
         throw new Error(
           d1?.activarEmpleado?.errores?.[0] || "Error al activar",
         );
-
-      // 2. Activar en auth_service — restaura el acceso al login
       await activarAuthMut({ variables: { email: empleado.email } });
-
-      // 3. Actualizar fecha de contratación
       if (fecha) {
         await editarFecha({
           variables: { empleadoId: empleado.id, fechaContratacion: fecha },
         });
       }
-
       await Swal.fire({
         background: "#fff",
         icon: "success",
@@ -829,7 +802,6 @@ function ModalReactivar({ open, onClose, empleado }) {
             operar de nuevo en el sistema.
           </p>
         </div>
-
         <Field
           icon={Calendar}
           label="Nueva fecha de contratación"
@@ -844,8 +816,6 @@ function ModalReactivar({ open, onClose, empleado }) {
             onChange={(e) => setFecha(e.target.value)}
           />
         </Field>
-
-        {/* Info del empleado */}
         <div className="rounded-xl bg-stone-50 border border-stone-200 px-4 py-3 space-y-1.5">
           {[
             { label: "Email", value: empleado.email },
@@ -858,7 +828,6 @@ function ModalReactivar({ open, onClose, empleado }) {
             </div>
           ))}
         </div>
-
         <div className="flex justify-end gap-2 pt-1">
           <Button
             variant="ghost"
@@ -895,7 +864,6 @@ function EmpleadoCard({
     <div
       className={`bg-white rounded-2xl border border-stone-200 p-4 flex gap-4 items-start transition-all hover:shadow-sm ${!emp.activo ? "opacity-60" : ""}`}
     >
-      {/* Avatar */}
       <div
         className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-dm font-bold flex-shrink-0"
         style={{ background: G[50], color: G[500] }}
@@ -903,7 +871,6 @@ function EmpleadoCard({
         {initials}
       </div>
 
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -950,7 +917,6 @@ function EmpleadoCard({
         </div>
       </div>
 
-      {/* Acciones — bloqueadas si es el propio gerente */}
       <div className="flex flex-col gap-1.5 flex-shrink-0">
         {esMismo ? (
           <div className="px-2 py-1.5 rounded-lg text-[10px] font-dm text-stone-300 text-center leading-tight">
@@ -971,7 +937,6 @@ function EmpleadoCard({
                 <Pencil size={14} />
               </button>
             )}
-            {/* Botón vincular — azul si no vinculado, gris si ya vinculado */}
             <button
               onClick={() => !vinculado && onVincular(emp)}
               disabled={vinculado || toggling === emp.id}
@@ -984,7 +949,6 @@ function EmpleadoCard({
               title={vinculado ? "Cuenta vinculada ✓" : "Vincular cuenta"}
             >
               {vinculado ? (
-                // Gris: ya vinculado — ícono check
                 <svg
                   width="14"
                   height="14"
@@ -1012,7 +976,6 @@ function EmpleadoCard({
                   <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                 </svg>
               ) : (
-                // Azul: no vinculado — ícono link
                 <svg
                   width="14"
                   height="14"
@@ -1081,7 +1044,6 @@ export default function GEmpleadosList() {
     fetchPolicy: "cache-and-network",
   });
 
-  // Cruce auth ↔ staff por email para detectar vinculación
   const { data: dataUsuarios, refetch: refetchUsuarios } = useQuery(
     GET_USUARIOS_RESTAURANTE,
     {
@@ -1091,7 +1053,6 @@ export default function GEmpleadosList() {
     },
   );
 
-  // Map email → empleadoId para saber si cada empleado tiene cuenta vinculada
   const usuariosPorEmail = useMemo(() => {
     const m = {};
     (dataUsuarios?.usuarios ?? []).forEach((u) => {
@@ -1109,9 +1070,6 @@ export default function GEmpleadosList() {
     refetchQueries: ["GetEmpleados"],
   });
 
-  // El backend devuelve todos los empleados del restaurante incluyendo
-  // al gerente (rol "gerente" o "gerente_local"). El gerente local NO
-  // puede gestionar a otros gerentes — eso es exclusivo del admin_central.
   const ROLES_GERENTE_ROL = ["gerente", "gerente_local"];
   const empleados = (data?.empleados ?? []).filter(
     (e) => !ROLES_GERENTE_ROL.includes(e.rol),
@@ -1144,7 +1102,6 @@ export default function GEmpleadosList() {
 
     setToggling(emp.id);
     try {
-      // Desactivar en staff_service
       const { data: dStaff } = await desactivar({
         variables: { empleadoId: emp.id },
       });
@@ -1152,14 +1109,12 @@ export default function GEmpleadosList() {
       if (!resStaff?.ok)
         throw new Error(resStaff?.errores?.[0] || "Error en staff");
 
-      // Desactivar en auth_service — revoca el acceso al login
       const { data: dAuth } = await desactivarAuth({
         variables: { email: emp.email },
       });
       const resAuth = dAuth?.desactivarUsuario;
 
       if (!resAuth?.ok) {
-        // Staff desactivado OK pero auth falló — igual mostramos éxito parcial
         Swal.fire({
           background: "#fff",
           icon: "warning",
@@ -1191,17 +1146,12 @@ export default function GEmpleadosList() {
   };
 
   const handleVincular = async (emp) => {
-    // Si ya está vinculado, no hacer nada
     if (emp.vinculado) return;
-
     const confirm = await Swal.fire({
       background: "#fff",
       icon: "question",
       title: `¿Vincular cuenta de ${emp.nombre}?`,
-      html: `<span style="font-family:'DM Sans';color:#78716c;font-size:13px">
-        Esto conectará el perfil de <b>${emp.nombre} ${emp.apellido}</b>
-        con su cuenta de acceso al sistema.
-      </span>`,
+      html: `<span style="font-family:'DM Sans';color:#78716c;font-size:13px">Esto conectará el perfil de <b>${emp.nombre} ${emp.apellido}</b> con su cuenta de acceso al sistema.</span>`,
       showCancelButton: true,
       confirmButtonColor: G[900],
       cancelButtonColor: "#d1d5db",
@@ -1221,13 +1171,11 @@ export default function GEmpleadosList() {
         background: "#fff",
         icon: "success",
         title: "¡Cuenta vinculada!",
-        html: `<span style="font-family:'DM Sans';color:#78716c">
-          <b>${emp.nombre} ${emp.apellido}</b> ya puede iniciar sesión en el portal.
-        </span>`,
+        html: `<span style="font-family:'DM Sans';color:#78716c"><b>${emp.nombre} ${emp.apellido}</b> ya puede iniciar sesión en el portal.</span>`,
         timer: 1800,
         showConfirmButton: false,
       });
-      refetchUsuarios(); // actualizar estado vinculado en las tarjetas
+      refetchUsuarios();
     } catch (err) {
       Swal.fire({
         background: "#fff",
@@ -1246,10 +1194,11 @@ export default function GEmpleadosList() {
 
   return (
     <div className="space-y-6">
+      {/* ← Fix: PageHeader solo acepta eyebrow, title, description, action */}
       <PageHeader
+        eyebrow="Gerente"
         title="Mi equipo"
-        subtitle={`${activos} activos · ${empleados.length} en total`}
-        icon={Users}
+        description={`${activos} activos · ${empleados.length} en total`}
         action={
           <Button size="sm" onClick={() => setShowCrear(true)}>
             <Plus size={14} /> Nuevo empleado
@@ -1299,7 +1248,6 @@ export default function GEmpleadosList() {
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
-
         <div className="relative">
           <select
             className="pl-3.5 pr-8 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-700 outline-none shadow-sm appearance-none cursor-pointer"
@@ -1318,7 +1266,6 @@ export default function GEmpleadosList() {
             className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
           />
         </div>
-
         <div className="relative">
           <select
             className="pl-3.5 pr-8 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-700 outline-none shadow-sm appearance-none cursor-pointer"
@@ -1400,7 +1347,6 @@ export default function GEmpleadosList() {
         </div>
       )}
 
-      {/* Modales */}
       <ModalCrear
         open={showCrear}
         onClose={() => setShowCrear(false)}
@@ -1409,13 +1355,11 @@ export default function GEmpleadosList() {
           user?.restaurantePais || empleados?.[0]?.pais || "Colombia"
         }
       />
-
       <ModalEditar
         open={!!empleadoEdit}
         onClose={() => setEmpleadoEdit(null)}
         empleado={empleadoEdit}
       />
-
       <ModalReactivar
         open={!!empleadoReactivar}
         onClose={() => setEmpleadoReactivar(null)}

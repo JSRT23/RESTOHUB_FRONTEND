@@ -255,7 +255,7 @@ const NAV_CONFIG = {
   // ── Cocinero ──────────────────────────────────────────────────────────────
   cocinero: [
     { label: "Comandas", href: "/cocina", icon: ChefHat },
-    { label: "Mis pedidos", href: "/cocina/pedidos", icon: ClipboardList },
+    { label: "Stock", href: "/cocina/stock", icon: Package },
     { label: "Mi turno", href: "/cocina/turno", icon: Clock },
   ],
 
@@ -600,7 +600,7 @@ export default function Navbar() {
   };
 
   const rol = normalizeRol(user?.rol);
-  const navItems = NAV_CONFIG[rol] || NAV_CONFIG.admin_central;
+  const navItems = NAV_CONFIG[rol] ?? []; // ← era || NAV_CONFIG.admin_central
 
   return (
     <>

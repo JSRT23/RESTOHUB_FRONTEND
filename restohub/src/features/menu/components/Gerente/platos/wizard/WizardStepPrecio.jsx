@@ -1,12 +1,4 @@
 // src/features/menu/components/Gerente/platos/wizard/WizardStepPrecio.jsx
-//
-// CREACIÓN (platoId undefined, ings[] tiene los ingredientes del wizard):
-//   → Consulta GET_RECETAS sin filtro de plato → obtiene costoUnitario por ingredienteId
-//   → Calcula costo = Σ (costoUnitario × cantidad) para cada ing del wizard
-//   → Ambos modos (manual y por margen) disponibles desde el principio
-//
-// EDICIÓN (platoId existe):
-//   → Usa GET_COSTO_PLATO (igual que antes)
 
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@apollo/client/react";
@@ -31,14 +23,11 @@ const hoyLocal = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-const MARGENES = Array.from({ length: 20 }, (_, i) => (i + 1) * 5);
-
 const calcularPrecio = (costo, margenPct) => {
   if (!costo || costo <= 0 || margenPct >= 100) return null;
   return Math.ceil(costo / (1 - margenPct / 100));
 };
 
-// ── Fila de ingrediente ───────────────────────────────────────────────────
 function IngredienteRow({ ing }) {
   const agotado = ing.estaAgotado;
   const bajo = !agotado && ing.necesitaReposicion;
@@ -89,7 +78,6 @@ function IngredienteRow({ ing }) {
   );
 }
 
-// ── Componente principal ──────────────────────────────────────────────────
 export default function WizardStepPrecio({
   precio,
   setPrecio,
@@ -104,23 +92,17 @@ export default function WizardStepPrecio({
   const [margenPct, setMargenPct] = useState(30);
   const [showReceta, setShowReceta] = useState(false);
 
-  // ── MODO EDICIÓN: plato ya existe → GET_COSTO_PLATO ──────────────────
   const { data: costoData, loading: costoLoading } = useQuery(GET_COSTO_PLATO, {
     variables: { platoId, restauranteId },
     skip: !platoId || !restauranteId,
     fetchPolicy: "cache-and-network",
   });
 
-  // ── MODO CREACIÓN: sin platoId → GET_RECETAS para costoUnitario ───────
-  // GET_RECETAS sin filtro de plato devuelve todas las recetas del sistema.
-  // Tomamos el costoUnitario del ingrediente (es el mismo independiente del plato —
-  // proviene del último precio de la orden de compra).
   const { data: recetasData, loading: recetasLoading } = useQuery(GET_RECETAS, {
     skip: !!platoId || ings.length === 0,
     fetchPolicy: "cache-and-network",
   });
 
-  // Mapa: ingredienteId → costoUnitario (de cualquier receta que lo use)
   const costoUnitarioMap = useMemo(() => {
     const map = {};
     (recetasData?.recetas ?? []).forEach((r) => {
@@ -131,7 +113,6 @@ export default function WizardStepPrecio({
     return map;
   }, [recetasData]);
 
-  // Costo calculado desde los ings del wizard (modo creación)
   const costoDesdeIngs = useMemo(() => {
     if (platoId || ings.length === 0) return null;
     const total = ings.reduce((acc, ing) => {
@@ -141,7 +122,6 @@ export default function WizardStepPrecio({
     return total > 0 ? total : null;
   }, [ings, costoUnitarioMap, platoId]);
 
-  // Ingredientes para mostrar en el panel (modo creación)
   const ingredientesCreacion = useMemo(() => {
     if (platoId) return [];
     return ings.map((ing) => {
@@ -160,7 +140,6 @@ export default function WizardStepPrecio({
     });
   }, [ings, costoUnitarioMap, platoId]);
 
-  // Fuente de verdad: edición usa GET_COSTO_PLATO, creación usa cálculo local
   const costoPlato = costoData?.costoPlato;
   const costoTotal = platoId
     ? (costoPlato?.costoTotal ?? null)
@@ -177,12 +156,11 @@ export default function WizardStepPrecio({
   const algunSinCosto =
     !platoId && ings.some((i) => !costoUnitarioMap[i.ingredienteId]);
 
-  // Recalcular precio cuando cambia margen o llega el costo
   useEffect(() => {
     if (modo !== "margen" || costoTotal === null) return;
     const p = calcularPrecio(costoTotal, margenPct);
     if (p) setPrecio((prev) => ({ ...prev, valor: String(p) }));
-  }, [modo, margenPct, costoTotal]);
+  }, [modo, margenPct, costoTotal, setPrecio]);
 
   const precioNum = parseFloat(precio.valor) || 0;
   const gananciaReal =
@@ -315,7 +293,6 @@ export default function WizardStepPrecio({
 
           {showReceta && ingredientes.length > 0 && (
             <div className="bg-white px-4 pb-4 pt-3 space-y-2">
-              {/* Advertencia si hay costos vacíos */}
               {(costoPlato?.advertencia || (!platoId && algunSinCosto)) && (
                 <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200">
                   <AlertTriangle
@@ -336,28 +313,65 @@ export default function WizardStepPrecio({
         </div>
       )}
 
-      {/* Modo margen */}
+      {/* Modo margen — slider continuo */}
       {modo === "margen" && (
         <div className="space-y-4">
-          <div>
-            <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider block mb-3">
-              Margen de ganancia
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {MARGENES.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMargenPct(m)}
-                  className="px-3 py-1.5 rounded-xl text-sm font-dm font-bold transition-all"
-                  style={
-                    margenPct === m
-                      ? { background: G[900], color: "#fff" }
-                      : { background: "#f5f5f4", color: "#78716c" }
-                  }
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
+                Margen de ganancia
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  step="1"
+                  value={margenPct}
+                  onChange={(e) => {
+                    const val = Math.min(
+                      99,
+                      Math.max(1, parseInt(e.target.value) || 1),
+                    );
+                    setMargenPct(val);
+                  }}
+                  className="w-16 px-2 py-1.5 rounded-xl border border-stone-200 text-sm font-dm font-bold text-center outline-none transition-all"
+                  style={{ color: G[500] }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "transparent";
+                    e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "#e2e8f0";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
+                <span
+                  className="text-sm font-dm font-semibold"
+                  style={{ color: G[300] }}
                 >
-                  {m}%
-                </button>
-              ))}
+                  %
+                </span>
+              </div>
+            </div>
+
+            <input
+              type="range"
+              min="1"
+              max="99"
+              step="1"
+              value={margenPct}
+              onChange={(e) => setMargenPct(parseInt(e.target.value))}
+              className="w-full"
+              style={{ accentColor: G[300] }}
+            />
+
+            <div className="flex justify-between text-[10px] font-dm text-stone-400 px-0.5">
+              <span>1%</span>
+              <span>25%</span>
+              <span>50%</span>
+              <span>75%</span>
+              <span>99%</span>
             </div>
           </div>
 

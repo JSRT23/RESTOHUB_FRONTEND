@@ -186,6 +186,7 @@ export const CREAR_PEDIDO = gql`
         estado
         total
         moneda
+        numeroDia
         fechaCreacion
       }
     }

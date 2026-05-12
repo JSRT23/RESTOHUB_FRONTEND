@@ -1,14 +1,8 @@
 // src/features/menu/components/Gerente/platos/detail/PlatoPrecios.jsx
-// CAMBIOS vs original:
-// 1. Form de nuevo precio usa WizardStepPrecio → tiene modo manual Y modo margen
-// 2. El formulario inline se reemplaza por WizardStepPrecio cuando showForm=true
-// La lógica de crear/desactivar precios (handleCrear) queda igual.
-
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@apollo/client/react";
+import { useMutation } from "@apollo/client/react";
 import { CheckCircle2, XCircle, Plus, Loader2 } from "lucide-react";
 import Swal from "sweetalert2";
-
 import { Divider } from "../../../../../../shared/components/ui";
 import {
   CREAR_PRECIO_PLATO,
@@ -47,7 +41,6 @@ export default function PlatoPrecios({
   moneda,
 }) {
   const [showForm, setShowForm] = useState(false);
-  // precioForm compatible con WizardStepPrecio: { valor, fechaInicio }
   const [precioForm, setPrecioForm] = useState({
     valor: "",
     fechaInicio: hoyLocal(),
@@ -55,7 +48,6 @@ export default function PlatoPrecios({
   const [toggling, setToggling] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // Resetear form cada vez que se abre
   useEffect(() => {
     if (showForm) {
       setPrecioForm({ valor: "", fechaInicio: hoyLocal() });
@@ -81,9 +73,9 @@ export default function PlatoPrecios({
       return;
     }
     setSaving(true);
+    const preciosActivos = precios.filter((p) => p.activo);
+    let desactivadosOk = false;
     try {
-      // 1. Desactivar precios activos actuales
-      const preciosActivos = precios.filter((p) => p.activo);
       if (preciosActivos.length > 0) {
         await Promise.all(
           preciosActivos.map((p) =>
@@ -91,7 +83,8 @@ export default function PlatoPrecios({
           ),
         );
       }
-      // 2. Crear nuevo precio
+      desactivadosOk = true;
+
       const { data } = await crearPrecio({
         variables: {
           platoId,
@@ -109,7 +102,10 @@ export default function PlatoPrecios({
         background: "#fff",
         icon: "error",
         title: "Error al guardar precio",
-        text: e.message,
+        html:
+          desactivadosOk && preciosActivos.length > 0
+            ? `<span style="font-family:'DM Sans';color:#78716c">${e.message}<br><br><b>⚠️ Los precios anteriores fueron desactivados.</b> Vuelve a asignar un precio al plato.</span>`
+            : `<span style="font-family:'DM Sans';color:#78716c">${e.message}</span>`,
         confirmButtonColor: G[900],
       });
     } finally {
@@ -139,7 +135,6 @@ export default function PlatoPrecios({
           </p>
         )}
 
-        {/* Lista de precios existentes */}
         {precios.map((p) => (
           <div
             key={p.id}
@@ -207,7 +202,6 @@ export default function PlatoPrecios({
           </div>
         ))}
 
-        {/* Form nuevo precio — usa WizardStepPrecio con modo margen */}
         {showForm ? (
           <div
             className="rounded-2xl border border-stone-200 bg-white p-4 space-y-4"
@@ -230,7 +224,6 @@ export default function PlatoPrecios({
               </div>
             )}
 
-            {/* WizardStepPrecio — incluye modo manual y modo margen con costo de producción */}
             <WizardStepPrecio
               precio={precioForm}
               setPrecio={setPrecioForm}

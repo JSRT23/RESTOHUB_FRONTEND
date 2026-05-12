@@ -47,6 +47,8 @@ export const CREAR_PROVEEDOR = gql`
   }
 `;
 
+// FIX: agregados alcance, paisDestino, ciudadDestino — necesarios cuando el admin
+// edita el alcance de un proveedor existente desde AProveedoresList.
 export const ACTUALIZAR_PROVEEDOR = gql`
   mutation ActualizarProveedor(
     $id: ID!
@@ -57,6 +59,9 @@ export const ACTUALIZAR_PROVEEDOR = gql`
     $email: String
     $monedaPreferida: String
     $activo: Boolean
+    $alcance: String
+    $paisDestino: String
+    $ciudadDestino: String
   ) {
     actualizarProveedor(
       id: $id
@@ -67,6 +72,9 @@ export const ACTUALIZAR_PROVEEDOR = gql`
       email: $email
       monedaPreferida: $monedaPreferida
       activo: $activo
+      alcance: $alcance
+      paisDestino: $paisDestino
+      ciudadDestino: $ciudadDestino
     ) {
       ok
       error
