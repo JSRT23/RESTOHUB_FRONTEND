@@ -42,6 +42,7 @@ import {
   Modal,
 } from "../../../../shared/components/ui";
 import { GET_EMPLEADOS } from "../../graphql/queries";
+import { GET_MI_RESTAURANTE } from "../../../menu/components/Gerente/graphql/operations";
 
 // Traer usuarios de auth para cruzar vinculación por email
 const GET_USUARIOS_RESTAURANTE = gql`
@@ -208,14 +209,18 @@ function PasswordField({ label, value, onChange, placeholder, required }) {
 function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
   const today = new Date().toISOString().split("T")[0];
   const paisRestaurante = (() => {
-    const p = restaurantePais;
+    const p = (restaurantePais ?? "").trim();
     if (!p) return "Colombia";
+    // Limpiar posibles concatenaciones como "co Colombia" → "Colombia"
+    const clean = p.replace(/^[a-z]{2}\s+/i, "").trim();
     const found = PAISES.find(
       (x) =>
         x.code.toLowerCase() === p.toLowerCase() ||
-        x.label.toLowerCase() === p.toLowerCase(),
+        x.code.toLowerCase() === clean.toLowerCase() ||
+        x.label.toLowerCase() === p.toLowerCase() ||
+        x.label.toLowerCase() === clean.toLowerCase(),
     );
-    return found?.label ?? p;
+    return found?.label ?? (clean || p);
   })();
   const INIT = {
     nombre: "",
@@ -234,11 +239,11 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const [registrarAuth] = useMutation(REGISTRAR_USUARIO_EMPLEADO);
-  const [crearStaff] = useMutation(CREAR_EMPLEADO, {
-    refetchQueries: ["GetEmpleados"],
-  });
+  const [crearStaff] = useMutation(CREAR_EMPLEADO);
   const [desactivarAuth] = useMutation(DESACTIVAR_USUARIO_AUTH);
-
+  const [vincularId] = useMutation(VINCULAR_EMPLEADO_ID, {
+    refetchQueries: ["GetEmpleados", "GetUsuariosRestaurante"],
+  });
   const handleSave = async () => {
     const {
       nombre,
@@ -311,6 +316,7 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
 
       let staffOk = false;
       let staffError = "";
+      let empId = null;
       try {
         const { data: d2 } = await crearStaff({
           variables: {
@@ -327,9 +333,23 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
         });
         const staff = d2?.crearEmpleado;
         staffOk = !!staff?.ok;
-        staffError = staff?.errores?.[0] ?? "Error desconocido en staff";
+        if (staffOk) empId = staff?.empleado?.id ?? null;
+        console.log(
+          "[CrearEmpleado] respuesta completa:",
+          JSON.stringify(staff),
+        );
+        console.log("[CrearEmpleado] staffOk:", staffOk, "empId:", empId);
+        // errores puede ser array o string según el backend
+        const errRaw = staff?.errores;
+        staffError = Array.isArray(errRaw)
+          ? errRaw[0]
+          : typeof errRaw === "string"
+            ? errRaw
+            : "Error desconocido en staff";
+        if (!staffOk) console.error("[Staff] crearEmpleado falló:", staff);
       } catch (staffErr) {
         staffError = staffErr.message;
+        console.error("[Staff] excepción:", staffErr);
       }
 
       if (!staffOk) {
@@ -359,21 +379,50 @@ function ModalCrear({ open, onClose, restauranteId, restaurantePais }) {
         return;
       }
 
+      // ── Paso 3: vincular desde frontend (fallback si el backend falló) ──
+      // El backend intenta vincular en staff/mutations.py pero puede fallar
+      // silenciosamente. El frontend garantiza la vinculación.
+      let vinculoOk = false;
+      if (empId) {
+        try {
+          const { data: dV } = await vincularId({
+            variables: { email: emailTrim, empleadoId: empId },
+          });
+          vinculoOk = !!dV?.vincularEmpleadoId?.ok;
+          if (!vinculoOk) {
+            console.warn(
+              "[Vincular] Backend rechazó:",
+              dV?.vincularEmpleadoId?.error,
+            );
+          }
+        } catch (ve) {
+          console.error("[Vincular] Excepción:", ve);
+        }
+      } else {
+        console.warn(
+          "[Vincular] empId no llegó en la respuesta de crearEmpleado",
+        );
+      }
+
       await Swal.fire({
         background: "#fff",
-        icon: "success",
+        icon: vinculoOk ? "success" : "warning",
         title: "¡Empleado registrado!",
-        html: `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.7;text-align:center">
-          <p style="margin:0 0 12px">
-            <b style="color:#163832">${nombreCompleto}</b> fue agregado al equipo.
-          </p>
-          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 14px;text-align:left">
-            <p style="color:#15803d;font-weight:700;font-size:13px;margin:0 0 3px">✅ Cuenta vinculada</p>
-            <p style="color:#16a34a;font-size:12px;margin:0;line-height:1.5">
-              <b>${emailTrim}</b> ya puede iniciar sesión con la contraseña asignada.
-            </p>
-          </div>
-        </div>`,
+        html: vinculoOk
+          ? `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.7;text-align:center">
+              <p style="margin:0 0 12px"><b style="color:#163832">${nombreCompleto}</b> fue agregado al equipo.</p>
+              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 14px;text-align:left">
+                <p style="color:#15803d;font-weight:700;font-size:13px;margin:0 0 3px">✅ Cuenta vinculada</p>
+                <p style="color:#16a34a;font-size:12px;margin:0;line-height:1.5"><b>${emailTrim}</b> ya puede iniciar sesión.</p>
+              </div>
+            </div>`
+          : `<div style="font-family:'DM Sans',sans-serif;color:#78716c;line-height:1.7;text-align:center">
+              <p style="margin:0 0 12px"><b style="color:#163832">${nombreCompleto}</b> fue agregado al equipo.</p>
+              <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 14px;text-align:left">
+                <p style="color:#d97706;font-weight:700;font-size:13px;margin:0 0 3px">⚠️ Vinculación pendiente</p>
+                <p style="color:#92400e;font-size:12px;margin:0;line-height:1.5">Usa el botón 🔗 en la tarjeta del empleado para vincular manualmente.</p>
+              </div>
+            </div>`,
         confirmButtonColor: G[900],
         confirmButtonText: "Entendido",
       });
@@ -1019,6 +1068,12 @@ export default function GEmpleadosList() {
   const { user } = useAuth();
   const restauranteId = user?.restauranteId;
 
+  // Consultar el restaurante para obtener el país real (el JWT no lo tiene)
+  const { data: restauranteData } = useQuery(GET_MI_RESTAURANTE, {
+    variables: { id: restauranteId },
+    skip: !restauranteId,
+  });
+
   const [busqueda, setBusqueda] = useState("");
   const [filtroRol, setFiltroRol] = useState("todos");
   const [filtroActivo, setFiltroActivo] = useState("activos");
@@ -1034,7 +1089,12 @@ export default function GEmpleadosList() {
         ? false
         : undefined;
 
-  const { data, loading, error } = useQuery(GET_EMPLEADOS, {
+  const {
+    data,
+    loading,
+    error,
+    refetch: refetchEmpleados,
+  } = useQuery(GET_EMPLEADOS, {
     variables: {
       restauranteId,
       rol: filtroRol !== "todos" ? filtroRol : undefined,
@@ -1349,11 +1409,16 @@ export default function GEmpleadosList() {
 
       <ModalCrear
         open={showCrear}
-        onClose={() => setShowCrear(false)}
+        onClose={() => {
+          setShowCrear(false);
+          // Refetch ambas queries para mostrar el nuevo empleado y su estado de vínculo
+          setTimeout(() => {
+            refetchEmpleados();
+            refetchUsuarios();
+          }, 400);
+        }}
         restauranteId={restauranteId}
-        restaurantePais={
-          user?.restaurantePais || empleados?.[0]?.pais || "Colombia"
-        }
+        restaurantePais={restauranteData?.restaurante?.pais}
       />
       <ModalEditar
         open={!!empleadoEdit}

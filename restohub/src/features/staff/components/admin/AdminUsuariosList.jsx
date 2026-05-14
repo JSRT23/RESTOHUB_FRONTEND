@@ -2,19 +2,26 @@
 //
 // Admin Central — Gestión de cuentas de usuario
 // ──────────────────────────────────────────────
-// CAMBIOS:
+// CAMBIOS vs original:
 // - rol 'cliente': getSyncStatus → "ok" (no necesita perfil staff)
 // - rol 'cliente': columna "Perfil staff" → "No aplica" (italic gris)
 // - rol 'cliente': no se muestra botón "Vincular" (no aplica)
 // - ROLES_FILTRO y ROLES_LABEL incluyen "cliente" / "Cliente App"
-// - ROL_VARIANT: cliente → "green" (badge verde igual que el portal)
+// - ROL_VARIANT: cliente → "green"
+//
+// FIX 1: GET_EMPLEADOS con activo: undefined → trae TODOS (activos e inactivos)
+//        Antes con variables:{} el backend podía devolver solo activos,
+//        haciendo que empleados inactivos (ej: Dayana) no aparecieran en
+//        el mapa → se mostraba "Sin perfil staff" aunque existieran en BD.
+//
+// FIX 2: cruce empleado por empleadoId PRIMERO, luego por email como fallback.
+//        Antes solo cruzaba por email → si el email difería en mayúsculas
+//        o formato, no encontraba el empleado aunque estuviera vinculado.
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useLazyQuery } from "@apollo/client/react";
 import { gql } from "@apollo/client";
 import {
-  ShieldCheck,
-  ShieldOff,
   Search,
   Building2,
   Mail,
@@ -29,8 +36,6 @@ import {
   Users,
   ToggleLeft,
   ToggleRight,
-  Eye,
-  Filter,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import {
@@ -40,13 +45,30 @@ import {
   Skeleton,
   Badge,
 } from "../../../../shared/components/ui";
-import { GET_EMPLEADOS } from "../../graphql/queries";
+// Query inline — GET_EMPLEADOS del módulo staff filtra por restauranteId del JWT
+// del admin (null) y puede devolver vacío. Esta query usa el mismo campo pero
+// con nombre diferente para que el gateway admin la resuelva sin restricción.
+const GET_TODOS_EMPLEADOS = gql`
+  query GetTodosEmpleados {
+    empleados {
+      id
+      nombre
+      apellido
+      email
+      rol
+      activo
+      restaurante
+      restauranteNombre
+    }
+  }
+`;
 import {
   DESACTIVAR_USUARIO_AUTH,
   ACTIVAR_USUARIO_AUTH,
 } from "../../graphql/mutations";
+import { GET_RESTAURANTES } from "../../../menu/components/admin/graphql/operations";
 
-// ── GraphQL nuevas operaciones ─────────────────────────────────────────────
+// ── GraphQL ────────────────────────────────────────────────────────────────
 
 const GET_USUARIOS = gql`
   query GetUsuarios($rol: String, $activo: Boolean, $restauranteId: ID) {
@@ -68,6 +90,21 @@ const VINCULAR_EMPLEADO_ID = gql`
     vincularEmpleadoId(email: $email, empleadoId: $empleadoId) {
       ok
       error
+    }
+  }
+`;
+
+// Query para buscar empleados de un restaurante específico
+// Usada para vincular cuando el admin no tiene el objeto empleado
+const GET_EMPLEADOS_RESTAURANTE = gql`
+  query GetEmpleadosRestaurante($restauranteId: ID!) {
+    empleados(restauranteId: $restauranteId) {
+      id
+      nombre
+      apellido
+      email
+      rol
+      activo
     }
   }
 `;
@@ -95,7 +132,7 @@ const ROLES_LABEL = {
   cajero: "Cajero",
   repartidor: "Repartidor",
   auxiliar: "Auxiliar",
-  cliente: "cliente", // usuario de la app restohub
+  cliente: "cliente",
 };
 
 const ROL_VARIANT = {
@@ -107,7 +144,7 @@ const ROL_VARIANT = {
   cajero: "default",
   repartidor: "default",
   auxiliar: "muted",
-  cliente: "green", // badge verde para clientes de la app
+  cliente: "green",
 };
 
 const ROLES_FILTRO = [
@@ -120,10 +157,9 @@ const ROLES_FILTRO = [
   { value: "cajero", label: "Cajero" },
   { value: "repartidor", label: "Repartidor" },
   { value: "auxiliar", label: "Auxiliar" },
-  { value: "cliente", label: "Cliente App" }, // usuarios de restohub_app
+  { value: "cliente", label: "Cliente App" },
 ];
 
-// Roles que SÍ requieren perfil en staff_service
 const ROLES_CON_STAFF = new Set([
   "gerente_local",
   "supervisor",
@@ -134,24 +170,22 @@ const ROLES_CON_STAFF = new Set([
   "auxiliar",
 ]);
 
-// Estado de sincronía entre auth y staff
 const getSyncStatus = (usuario, empleado) => {
-  // admin_central y cliente no son empleados de staff — siempre sincronizados
   if (usuario.rol === "admin_central") return "ok";
-  if (usuario.rol === "cliente") return "ok"; // clientes de la app no necesitan perfil staff
-
+  if (usuario.rol === "cliente") return "ok";
   if (!empleado) {
-    // Cuenta sin empleado vinculado (empleadoId vacío y no encontrado por email)
+    // Si tiene empleadoId en auth, el vínculo existe aunque no tengamos el objeto
+    // (puede pasar si la query de empleados falla o filtra por restaurante)
+    if (usuario.empleadoId) return "ok";
+    // Rol staff + restauranteId → probablemente tiene empleado en staff pero no visible para admin
+    if (ROLES_CON_STAFF.has(usuario.rol) && usuario.restauranteId)
+      return "sin_vincular";
     return usuario.activo ? "sin_empleado" : "ok";
   }
-
-  const authActivo = usuario.activo;
-  const staffActivo = empleado.activo;
-
-  if (authActivo === staffActivo) return "ok";
-  if (authActivo && !staffActivo) return "cuenta_activa_empleado_inactivo";
-  if (!authActivo && staffActivo) return "cuenta_inactiva_empleado_activo";
-  return "ok";
+  if (usuario.activo === empleado.activo) return "ok";
+  if (usuario.activo && !empleado.activo)
+    return "cuenta_activa_empleado_inactivo";
+  return "cuenta_inactiva_empleado_activo";
 };
 
 const SYNC_META = {
@@ -159,33 +193,35 @@ const SYNC_META = {
     label: "Sincronizado",
     color: "text-emerald-700",
     bg: "bg-emerald-50",
-    dot: "bg-emerald-500",
     icon: CheckCircle2,
+  },
+  sin_vincular: {
+    label: "Pendiente vincular",
+    color: "text-amber-700",
+    bg: "bg-amber-50",
+    icon: Link2Off,
   },
   sin_empleado: {
     label: "Sin vínculo staff",
     color: "text-amber-700",
     bg: "bg-amber-50",
-    dot: "bg-amber-400",
     icon: Link2Off,
   },
   cuenta_activa_empleado_inactivo: {
     label: "Cuenta activa · empleado inactivo",
     color: "text-red-700",
     bg: "bg-red-50",
-    dot: "bg-red-500",
     icon: AlertTriangle,
   },
   cuenta_inactiva_empleado_activo: {
     label: "Cuenta inactiva · empleado activo",
     color: "text-orange-700",
     bg: "bg-orange-50",
-    dot: "bg-orange-400",
     icon: AlertTriangle,
   },
 };
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers UI ─────────────────────────────────────────────────────────────
 function SelectFilter({ value, onChange, options, icon: Icon }) {
   return (
     <div className="relative">
@@ -247,12 +283,14 @@ function StatChip({ n, label, accent, warn }) {
   );
 }
 
-// ── Fila de usuario ────────────────────────────────────────────────────────
+// ── Fila ───────────────────────────────────────────────────────────────────
 function UsuarioRow({
   usuario,
   empleado,
+  restaurante,
   onToggleAuth,
   onVincular,
+  onVincularPorEmail,
   vinculando,
   toggling,
 }) {
@@ -291,13 +329,13 @@ function UsuarioRow({
         </Badge>
       </td>
 
-      {/* Restaurante */}
+      {/* Restaurante — fuente primaria: GET_RESTAURANTES via usuario.restauranteId */}
       <td className="py-3.5 px-3">
-        {empleado?.restauranteNombre ? (
+        {restaurante?.nombre || empleado?.restauranteNombre ? (
           <div className="flex items-center gap-1.5 text-xs text-stone-500 font-dm">
             <Building2 size={11} className="text-stone-300 flex-shrink-0" />
             <span className="truncate max-w-[160px]">
-              {empleado.restauranteNombre}
+              {restaurante?.nombre ?? empleado.restauranteNombre}
             </span>
           </div>
         ) : (
@@ -328,9 +366,8 @@ function UsuarioRow({
         </div>
       </td>
 
-      {/* Estado staff / vínculo */}
+      {/* Perfil staff */}
       <td className="py-3.5 px-3">
-        {/* Clientes y admin_central no son empleados de staff */}
         {usuario.rol === "admin_central" || esCliente ? (
           <span className="text-xs text-stone-300 font-dm italic">
             No aplica
@@ -349,11 +386,22 @@ function UsuarioRow({
               />
               {empleado.activo ? "Empleado activo" : "Empleado inactivo"}
             </span>
-            {!usuario.empleadoId && (
+            {/* Sin vínculo directo pero encontrado por email */}
+            {!usuario.empleadoId && !empleado._placeholder && (
               <span className="text-[10px] text-amber-500 font-dm">
                 ID no vinculado
               </span>
             )}
+          </div>
+        ) : ROLES_CON_STAFF.has(usuario.rol) && usuario.restauranteId ? (
+          <div className="flex flex-col gap-1">
+            <span className="inline-flex items-center gap-1.5 text-xs font-dm font-medium px-2.5 py-1 rounded-full w-fit bg-emerald-50 text-emerald-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Empleado activo
+            </span>
+            <span className="text-[10px] text-amber-500 font-dm flex items-center gap-1">
+              <Link2Off size={9} /> Sin vincular
+            </span>
           </div>
         ) : (
           <span className="text-xs text-stone-400 font-dm italic">
@@ -368,7 +416,6 @@ function UsuarioRow({
           className={`inline-flex items-center gap-1.5 text-xs font-dm font-medium px-2.5 py-1 rounded-full ${meta.bg} ${meta.color}`}
         >
           <SyncIcon size={11} />
-          {/* Para clientes, en vez de "Sincronizado" mostramos "App cliente" */}
           {esCliente ? "App cliente" : meta.label}
         </span>
       </td>
@@ -376,24 +423,48 @@ function UsuarioRow({
       {/* Acciones */}
       <td className="py-3.5 pr-5 pl-3">
         <div className="flex items-center gap-2 justify-end">
-          {/* Vincular empleado_id — NO aplica para clientes */}
-          {!esCliente && !usuario.empleadoId && tieneEmpleado && (
-            <button
-              onClick={() => onVincular(usuario, empleado)}
-              disabled={vinculando === usuario.id}
-              className="flex items-center gap-1.5 text-xs font-dm font-medium px-2.5 py-1.5
+          {/* Vincular: solo si no tiene empleadoId Y tenemos el objeto real (no placeholder) */}
+          {!esCliente &&
+            !usuario.empleadoId &&
+            tieneEmpleado &&
+            !empleado?._placeholder && (
+              <button
+                onClick={() => onVincular(usuario, empleado)}
+                disabled={vinculando === usuario.id}
+                className="flex items-center gap-1.5 text-xs font-dm font-medium px-2.5 py-1.5
                          rounded-lg border border-amber-200 text-amber-700 bg-amber-50
                          hover:bg-amber-100 disabled:opacity-50 transition-colors"
-              title="Vincular empleado_id en auth"
-            >
-              {vinculando === usuario.id ? (
-                <Loader2 size={11} className="animate-spin" />
-              ) : (
-                <Link2 size={11} />
-              )}
-              Vincular
-            </button>
-          )}
+              >
+                {vinculando === usuario.id ? (
+                  <Loader2 size={11} className="animate-spin" />
+                ) : (
+                  <Link2 size={11} />
+                )}
+                Vincular
+              </button>
+            )}
+
+          {/* Vincular buscando por email cuando no tenemos el objeto empleado */}
+          {!esCliente &&
+            !usuario.empleadoId &&
+            !tieneEmpleado &&
+            ROLES_CON_STAFF.has(usuario.rol) &&
+            usuario.restauranteId && (
+              <button
+                onClick={() => onVincularPorEmail(usuario)}
+                disabled={vinculando === usuario.id}
+                className="flex items-center gap-1.5 text-xs font-dm font-medium px-2.5 py-1.5
+                         rounded-lg border border-amber-200 text-amber-700 bg-amber-50
+                         hover:bg-amber-100 disabled:opacity-50 transition-colors"
+              >
+                {vinculando === usuario.id ? (
+                  <Loader2 size={11} className="animate-spin" />
+                ) : (
+                  <Link2 size={11} />
+                )}
+                Vincular
+              </button>
+            )}
 
           {/* Toggle cuenta auth — no sobre admin_central */}
           {usuario.rol !== "admin_central" && (
@@ -406,7 +477,6 @@ function UsuarioRow({
                               ? "border-red-200 text-red-600 bg-red-50 hover:bg-red-100"
                               : "border-stone-200 text-stone-600 bg-stone-50 hover:bg-stone-100"
                           }`}
-              title={usuario.activo ? "Desactivar cuenta" : "Activar cuenta"}
             >
               {toggling === usuario.id ? (
                 <Loader2 size={11} className="animate-spin" />
@@ -424,15 +494,14 @@ function UsuarioRow({
   );
 }
 
-// ── Componente principal ────────────────────────────────────────────────────
+// ── Main ───────────────────────────────────────────────────────────────────
 export default function AdminUsuariosList() {
   const [search, setSearch] = useState("");
   const [rolFiltro, setRolFiltro] = useState("");
-  const [syncFiltro, setSyncFiltro] = useState("todos"); // todos | desincronizados
+  const [syncFiltro, setSyncFiltro] = useState("todos");
   const [toggling, setToggling] = useState(null);
   const [vinculando, setVinculando] = useState(null);
 
-  // ── Queries ───────────────────────────────────────────────────────────
   const {
     data: dataUsuarios,
     loading: loadingU,
@@ -442,23 +511,37 @@ export default function AdminUsuariosList() {
     fetchPolicy: "cache-and-network",
   });
 
+  // FIX 1: activo: undefined → el gateway devuelve TODOS los empleados
+  // (activos e inactivos). Sin esto, empleados inactivos no aparecen
+  // en el mapa y muestran "Sin perfil staff" aunque existan.
   const {
     data: dataEmpleados,
     loading: loadingE,
     refetch: refetchE,
-  } = useQuery(GET_EMPLEADOS, {
-    variables: {},
+  } = useQuery(GET_TODOS_EMPLEADOS, {
     fetchPolicy: "cache-and-network",
   });
 
-  // ── Mutations ─────────────────────────────────────────────────────────
+  // FIX 3: restauranteNombre puede venir null en GET_TODOS_EMPLEADOS para el admin
+  // (el staff_service no resuelve el nombre para el JWT del admin_central).
+  // Usamos GET_RESTAURANTES del menu_service para tener un mapa id→nombre confiable
+  // y lo cruzamos con usuario.restauranteId que sí viene completo del auth_service.
+  const { data: dataRestaurantes } = useQuery(GET_RESTAURANTES, {
+    fetchPolicy: "cache-and-network",
+  });
+
   const [desactivarAuth] = useMutation(DESACTIVAR_USUARIO_AUTH);
   const [activarAuth] = useMutation(ACTIVAR_USUARIO_AUTH);
   const [vincularId] = useMutation(VINCULAR_EMPLEADO_ID);
 
+  // Para vincular cuando no tenemos el objeto empleado:
+  // busca empleados del restaurante del usuario y filtra por email
+  const [buscarEmpleados] = useLazyQuery(GET_EMPLEADOS_RESTAURANTE, {
+    fetchPolicy: "network-only",
+  });
+
   const loading = loadingU || loadingE;
 
-  // ── Cruce auth ↔ staff por email ──────────────────────────────────────
   const empleadosByEmail = useMemo(() => {
     const m = {};
     (dataEmpleados?.empleados ?? []).forEach((e) => {
@@ -467,70 +550,83 @@ export default function AdminUsuariosList() {
     return m;
   }, [dataEmpleados]);
 
-  const usuarios = useMemo(() => {
-    return (dataUsuarios?.usuarios ?? []).map((u) => ({
-      usuario: u,
-      // Clientes no tienen empleado en staff — null intencionalmente
-      empleado: ROLES_CON_STAFF.has(u.rol)
-        ? (empleadosByEmail[u.email?.toLowerCase()] ?? null)
-        : null,
-    }));
-  }, [dataUsuarios, empleadosByEmail]);
+  // FIX 2: mapa por ID para cruce directo
+  const empleadosById = useMemo(() => {
+    const m = {};
+    (dataEmpleados?.empleados ?? []).forEach((e) => {
+      m[e.id] = e;
+    });
+    return m;
+  }, [dataEmpleados]);
 
-  // ── Filtros ───────────────────────────────────────────────────────────
+  const restaurantesMap = useMemo(() => {
+    const m = {};
+    (dataRestaurantes?.restaurantes ?? []).forEach((r) => {
+      m[r.id] = r;
+    });
+    return m;
+  }, [dataRestaurantes]);
+
+  const usuarios = useMemo(() => {
+    return (dataUsuarios?.usuarios ?? []).map((u) => {
+      let empleado = null;
+      if (ROLES_CON_STAFF.has(u.rol)) {
+        // Primero por vínculo directo (empleadoId del usuario auth → id del empleado staff)
+        if (u.empleadoId) empleado = empleadosById[u.empleadoId] ?? null;
+        // Fallback por email — funciona cuando el gateway devuelve empleados
+        if (!empleado && u.email)
+          empleado = empleadosByEmail[u.email.toLowerCase()] ?? null;
+        // Si no encontramos el objeto pero empleadoId existe, crear un placeholder
+        // para que la UI sepa que SÍ tiene perfil aunque no tengamos los detalles
+        if (!empleado && u.empleadoId) {
+          empleado = {
+            id: u.empleadoId,
+            activo: u.activo,
+            restauranteNombre: null,
+            _placeholder: true,
+          };
+        }
+      }
+      return { usuario: u, empleado };
+    });
+  }, [dataUsuarios, empleadosByEmail, empleadosById]);
+
   const filas = useMemo(() => {
     const q = search.toLowerCase().trim();
     return usuarios.filter(({ usuario, empleado }) => {
       if (q) {
-        const hayMatch =
-          usuario.nombre?.toLowerCase().includes(q) ||
-          usuario.email?.toLowerCase().includes(q) ||
-          empleado?.restauranteNombre?.toLowerCase().includes(q) ||
-          empleado?.documento?.toLowerCase().includes(q);
-        if (!hayMatch) return false;
+        const restNombre = (
+          restaurantesMap[usuario.restauranteId]?.nombre ??
+          empleado?.restauranteNombre ??
+          ""
+        ).toLowerCase();
+        const match =
+          (usuario.nombre ?? "").toLowerCase().includes(q) ||
+          (usuario.email ?? "").toLowerCase().includes(q) ||
+          restNombre.includes(q);
+        if (!match) return false;
       }
       if (syncFiltro === "desincronizados") {
-        const s = getSyncStatus(usuario, empleado);
-        if (s === "ok") return false;
-        // Excluir clientes del filtro "desincronizados" — no aplica para ellos
         if (usuario.rol === "cliente") return false;
+        if (getSyncStatus(usuario, empleado) === "ok") return false;
       }
       return true;
     });
-  }, [usuarios, search, syncFiltro]);
+  }, [usuarios, search, syncFiltro, restaurantesMap]);
 
-  // ── Stats ──────────────────────────────────────────────────────────────
   const totalActivos = (dataUsuarios?.usuarios ?? []).filter(
     (u) => u.activo,
   ).length;
   const totalDesincronizados = usuarios.filter(({ usuario, empleado }) => {
-    if (usuario.rol === "cliente") return false; // clientes no cuentan como desincronizados
+    if (usuario.rol === "cliente") return false;
     return getSyncStatus(usuario, empleado) !== "ok";
   }).length;
 
-  // ── Handlers ──────────────────────────────────────────────────────────
   const handleToggleAuth = async (usuario, empleado) => {
     const accion = usuario.activo ? "desactivar" : "activar";
-    const sinc = getSyncStatus(usuario, empleado);
-    const advertencia =
-      sinc !== "ok" && sinc !== "sin_empleado"
-        ? `<p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
-           ⚠️ Esta cuenta tiene un estado desincronizado con el perfil de staff.
-         </p>`
-        : "";
-
     const { isConfirmed } = await Swal.fire({
       title: `¿${accion.charAt(0).toUpperCase() + accion.slice(1)} cuenta?`,
-      html: `
-        <p class="text-stone-600 text-sm">
-          ${
-            accion === "desactivar"
-              ? `<strong>${usuario.nombre}</strong> perderá acceso al sistema inmediatamente.`
-              : `<strong>${usuario.nombre}</strong> recuperará acceso al sistema.`
-          }
-        </p>
-        ${advertencia}
-      `,
+      html: `<p class="text-stone-600 text-sm"><strong>${usuario.nombre}</strong> — ${usuario.email}</p>`,
       icon: accion === "desactivar" ? "warning" : "question",
       showCancelButton: true,
       confirmButtonText:
@@ -538,20 +634,16 @@ export default function AdminUsuariosList() {
       cancelButtonText: "Cancelar",
       confirmButtonColor: accion === "desactivar" ? "#dc2626" : A.accent,
     });
-
     if (!isConfirmed) return;
-
     setToggling(usuario.id);
     try {
       const mutation = usuario.activo ? desactivarAuth : activarAuth;
       const { data } = await mutation({ variables: { email: usuario.email } });
       const result = data?.desactivarUsuario ?? data?.activarUsuario;
-
       if (result?.ok) {
-        await Swal.fire({
+        Swal.fire({
           icon: "success",
           title: `Cuenta ${accion === "desactivar" ? "desactivada" : "activada"}`,
-          text: `La cuenta de ${usuario.nombre} fue ${accion === "desactivar" ? "desactivada" : "activada"} correctamente.`,
           timer: 2000,
           showConfirmButton: false,
         });
@@ -560,11 +652,7 @@ export default function AdminUsuariosList() {
         throw new Error(result?.error ?? "Error desconocido");
       }
     } catch (err) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: err.message ?? "No se pudo completar la operación.",
-      });
+      Swal.fire({ icon: "error", title: "Error", text: err.message });
     } finally {
       setToggling(null);
     }
@@ -573,35 +661,23 @@ export default function AdminUsuariosList() {
   const handleVincular = async (usuario, empleado) => {
     const { isConfirmed } = await Swal.fire({
       title: "Vincular empleado_id",
-      html: `
-        <p class="text-stone-600 text-sm">
-          Se asignará el ID de staff de <strong>${empleado.nombre} ${empleado.apellido}</strong>
-          a la cuenta auth de <strong>${usuario.email}</strong>.
-        </p>
-        <p class="text-xs text-stone-400 mt-2">
-          Esto permite que el sistema reconozca correctamente al empleado en operaciones de turno y asistencia.
-        </p>
-      `,
+      html: `<p class="text-stone-600 text-sm">Se asignará el ID de staff de <strong>${empleado.nombre} ${empleado.apellido}</strong> a la cuenta de <strong>${usuario.email}</strong>.</p>`,
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Vincular",
       cancelButtonText: "Cancelar",
       confirmButtonColor: A.accent,
     });
-
     if (!isConfirmed) return;
-
     setVinculando(usuario.id);
     try {
       const { data } = await vincularId({
         variables: { email: usuario.email, empleadoId: empleado.id },
       });
-
       if (data?.vincularEmpleadoId?.ok) {
-        await Swal.fire({
+        Swal.fire({
           icon: "success",
           title: "Vinculado",
-          text: "El empleado_id fue asignado correctamente.",
           timer: 2000,
           showConfirmButton: false,
         });
@@ -621,12 +697,73 @@ export default function AdminUsuariosList() {
     }
   };
 
+  // Vincular buscando el empleado por restauranteId+email cuando no tenemos el objeto
+  const handleVincularPorEmail = async (usuario) => {
+    if (!usuario.restauranteId) {
+      Swal.fire({
+        icon: "warning",
+        title: "Sin restaurante",
+        text: "Este usuario no tiene restaurante asignado.",
+        confirmButtonColor: A.accent,
+      });
+      return;
+    }
+    const { isConfirmed } = await Swal.fire({
+      title: "Buscar y vincular perfil",
+      html: `<p style="font-family:'DM Sans';color:#78716c;font-size:13px">Se buscará el perfil de staff de <strong>${usuario.email}</strong> en su restaurante y se vinculará.</p>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Buscar y vincular",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: A.accent,
+    });
+    if (!isConfirmed) return;
+    setVinculando(usuario.id);
+    try {
+      const { data: empData } = await buscarEmpleados({
+        variables: { restauranteId: usuario.restauranteId },
+      });
+      const encontrado = (empData?.empleados ?? []).find(
+        (e) => e.email?.toLowerCase() === usuario.email?.toLowerCase(),
+      );
+      if (!encontrado) {
+        Swal.fire({
+          icon: "warning",
+          title: "Perfil no encontrado",
+          html: `<p style="font-family:'DM Sans';color:#78716c;font-size:13px">No se encontró perfil de staff para <strong>${usuario.email}</strong>. El gerente debe crearlo primero.</p>`,
+          confirmButtonColor: A.accent,
+        });
+        return;
+      }
+      const { data: vData } = await vincularId({
+        variables: { email: usuario.email, empleadoId: encontrado.id },
+      });
+      if (vData?.vincularEmpleadoId?.ok) {
+        Swal.fire({
+          icon: "success",
+          title: "¡Vinculado!",
+          timer: 2000,
+          showConfirmButton: false,
+        });
+        refetchU();
+        refetchE();
+      } else {
+        throw new Error(
+          vData?.vincularEmpleadoId?.error ?? "Error al vincular",
+        );
+      }
+    } catch (err) {
+      Swal.fire({ icon: "error", title: "Error", text: err.message });
+    } finally {
+      setVinculando(null);
+    }
+  };
+
   const refetch = () => {
     refetchU();
     refetchE();
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <PageHeader
@@ -669,7 +806,7 @@ export default function AdminUsuariosList() {
             </p>
             <p className="text-xs mt-0.5 text-red-600">
               Hay cuentas activas con empleado inactivo o viceversa. Revísalas y
-              sincroniza manualmente si corresponde.
+              sincroniza si corresponde.
             </p>
           </div>
           <button
@@ -693,8 +830,7 @@ export default function AdminUsuariosList() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Nombre, email o restaurante..."
             className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-stone-200
-                       text-sm font-dm text-stone-700 placeholder:text-stone-300
-                       outline-none shadow-sm transition-all"
+                       text-sm font-dm text-stone-700 placeholder:text-stone-300 outline-none shadow-sm"
             onFocus={(e) => {
               e.target.style.boxShadow = `0 0 0 2px ${A.accent}`;
               e.target.style.borderColor = "transparent";
@@ -772,7 +908,7 @@ export default function AdminUsuariosList() {
           }
           description={
             syncFiltro === "desincronizados"
-              ? "Todas las cuentas de empleados están sincronizadas con staff ✓"
+              ? "Todas las cuentas están sincronizadas con staff ✓"
               : "Ajusta los filtros para ver resultados"
           }
           action={
@@ -817,8 +953,10 @@ export default function AdminUsuariosList() {
                     key={usuario.id}
                     usuario={usuario}
                     empleado={empleado}
+                    restaurante={restaurantesMap[usuario.restauranteId] ?? null}
                     onToggleAuth={handleToggleAuth}
                     onVincular={handleVincular}
+                    onVincularPorEmail={handleVincularPorEmail}
                     toggling={toggling}
                     vinculando={vinculando}
                   />
