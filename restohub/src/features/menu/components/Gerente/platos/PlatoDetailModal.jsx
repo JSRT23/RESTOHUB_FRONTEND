@@ -1,11 +1,7 @@
 // src/features/menu/components/Gerente/platos/PlatoDetailModal.jsx
-// FIXES:
-// 1. Los precios en el modal mostraban precios de TODOS los restaurantes.
-//    Se filtra plato.precios por restauranteId antes de pasar a PlatoPrecios.
-// 2. El precio vigente del header también se filtra por restauranteId.
 import { useState } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
-import { Pencil, ToggleLeft, ToggleRight, ImageOff } from "lucide-react";
+import { Pencil, ToggleLeft, ToggleRight, ImageOff, Globe } from "lucide-react";
 import { Skeleton } from "../../../../../shared/components/ui";
 import {
   GET_PLATO_DETALLE,
@@ -28,7 +24,6 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
     fetchPolicy: "cache-and-network",
   });
 
-  // Ingredientes disponibles: globales + propios del restaurante
   const { data: iData } = useQuery(GET_INGREDIENTES_DISPONIBLES, {
     variables: { disponibles: restauranteId, activo: true },
     skip: !restauranteId,
@@ -54,19 +49,17 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
   const plato = data?.plato;
   if (!plato) return null;
 
+  // Un plato es global si restauranteId es null / vacío
+  const esGlobal = !plato.restauranteId;
+
   const todosIngredientes = iData?.ingredientes ?? [];
   const disponibles = todosIngredientes.filter(
     (i) => !plato.ingredientes?.some((s) => s.ingredienteId === i.id),
   );
 
-  // FIX CRÍTICO: filtra precios solo de este restaurante.
-  // Sin este filtro el modal mostraba precios de todos los restaurantes
-  // que tienen ese plato asignado (ej: ARS 35.000 de Argentina + COP de Colombia).
   const preciosDelRestaurante = (plato.precios ?? []).filter(
     (p) => p.restauranteId === restauranteId,
   );
-
-  // El precio vigente del header también filtra por restaurante
   const vigente = preciosDelRestaurante.find((p) => p.estaVigente && p.activo);
 
   const handleTogglePlato = () => {
@@ -109,6 +102,20 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
             >
               {plato.nombre}
             </h2>
+            {/* ── Badge Global ── */}
+            {esGlobal && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-dm font-bold px-2 py-1 rounded-full shrink-0"
+                style={{
+                  background: "#eff6ff",
+                  color: "#2563eb",
+                  border: "1px solid #bfdbfe",
+                }}
+              >
+                <Globe size={10} />
+                Global
+              </span>
+            )}
             {plato.categoriaNombre && (
               <span
                 className="text-[10px] font-dm font-semibold px-2 py-1 rounded-full shrink-0"
@@ -140,13 +147,16 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
         </div>
 
         <div className="flex flex-col gap-2 shrink-0">
-          <button
-            onClick={abrirEdicion}
-            title="Editar información"
-            className="w-8 h-8 rounded-xl flex items-center justify-center border transition-all bg-stone-50 border-stone-200 text-stone-500 hover:bg-stone-100"
-          >
-            <Pencil size={12} />
-          </button>
+          {/* Platos globales no se pueden editar */}
+          {!esGlobal && (
+            <button
+              onClick={abrirEdicion}
+              title="Editar información"
+              className="w-8 h-8 rounded-xl flex items-center justify-center border transition-all bg-stone-50 border-stone-200 text-stone-500 hover:bg-stone-100"
+            >
+              <Pencil size={12} />
+            </button>
+          )}
           <button
             onClick={handleTogglePlato}
             title={plato.activo ? "Desactivar plato" : "Activar plato"}
@@ -170,8 +180,8 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
         </div>
       </div>
 
-      {/* Estado */}
-      <div className="flex items-center gap-2">
+      {/* Estado + aviso global */}
+      <div className="flex items-center gap-2 flex-wrap">
         <span
           className="text-[10px] font-dm font-bold px-2.5 py-1 rounded-full"
           style={
@@ -198,10 +208,15 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
             year: "numeric",
           })}
         </span>
+        {esGlobal && (
+          <span className="text-[10px] font-dm text-blue-500">
+            · Plato global — solo puedes asignarle precio
+          </span>
+        )}
       </div>
 
-      {/* Edición inline */}
-      {editando && editForm && (
+      {/* Edición inline — solo si no es global */}
+      {editando && editForm && !esGlobal && (
         <PlatoEditForm
           platoId={platoId}
           editForm={editForm}
@@ -217,7 +232,7 @@ export default function PlatoDetailModal({ platoId, restauranteId, moneda }) {
         disponibles={disponibles}
       />
 
-      {/* FIX: pasa solo los precios de este restaurante, no todos */}
+      {/* Precios — siempre disponibles, incluso para globales */}
       <PlatoPrecios
         platoId={platoId}
         restauranteId={restauranteId}

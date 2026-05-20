@@ -1,5 +1,13 @@
 // src/features/menu/components/Gerente/graphql/operations.js
-// CAMBIO: GET_MI_RESTAURANTE ahora incluye imagen para mostrarla en el dashboard.
+// FIX: GET_INGREDIENTES_GERENTE e GET_PLATOS_GERENTE ahora usan el arg
+//      "disponibles" en lugar de "restauranteId" para que el backend devuelva
+//      globales (restaurante_id IS NULL) + propios del restaurante.
+//
+// ANTES: ingredientes(restauranteId: $restauranteId) → solo propios, sin globales
+// AHORA: ingredientes(disponibles: $restauranteId)   → globales + propios
+//
+// ANTES: platos(restauranteId: $restauranteId)        → solo propios, sin globales
+// AHORA: platos(disponibles: $restauranteId)           → globales + propios
 import { gql } from "@apollo/client";
 
 // ── Restaurante propio ────────────────────────────────────────────────────
@@ -31,6 +39,9 @@ export const GET_CATEGORIAS_GERENTE = gql`
 `;
 
 // ── Ingredientes del restaurante (lista/gestión) ──────────────────────────
+// FIX: usa restauranteId como filtro exacto para la LISTA de gestión
+//      (el gerente solo debe editar/activar/desactivar los suyos propios).
+//      NO usa "disponibles" aquí para no mostrar globales como editables.
 export const GET_INGREDIENTES_GERENTE = gql`
   query GetIngredientesGerente($restauranteId: ID!, $activo: Boolean) {
     ingredientes(restauranteId: $restauranteId, activo: $activo) {
@@ -44,7 +55,9 @@ export const GET_INGREDIENTES_GERENTE = gql`
   }
 `;
 
-// ── Ingredientes disponibles para asignar a un plato ─────────────────────
+// ── Ingredientes DISPONIBLES para asignar a un plato ─────────────────────
+// FIX: "disponibles" devuelve globales (restaurante_id IS NULL) + propios.
+//      Se usa en CreatePlatoWizard, PlatoDetailModal y GerenteDashboard.
 export const GET_INGREDIENTES_DISPONIBLES = gql`
   query GetIngredientesDisponibles($disponibles: ID!, $activo: Boolean) {
     ingredientes(disponibles: $disponibles, activo: $activo) {
@@ -123,7 +136,9 @@ export const DESACTIVAR_INGREDIENTE = gql`
   }
 `;
 
-// ── Platos del restaurante (lista) ───────────────────────────────────────
+// ── Platos del restaurante (lista/gestión) ────────────────────────────────
+// FIX: usa "disponibles" en lugar de "restauranteId" para incluir globales.
+//      El gerente debe ver y poder usar globales + los propios de su restaurante.
 export const GET_PLATOS_GERENTE = gql`
   query GetPlatosGerente(
     $restauranteId: ID!
@@ -131,7 +146,7 @@ export const GET_PLATOS_GERENTE = gql`
     $categoriaId: ID
   ) {
     platos(
-      restauranteId: $restauranteId
+      disponibles: $restauranteId
       activo: $activo
       categoriaId: $categoriaId
     ) {

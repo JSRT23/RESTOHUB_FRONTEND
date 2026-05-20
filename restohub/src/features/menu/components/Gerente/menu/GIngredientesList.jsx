@@ -10,10 +10,11 @@ import {
   ToggleRight,
   Loader2,
   X,
+  Globe,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import {
-  GET_INGREDIENTES_GERENTE,
+  GET_INGREDIENTES_DISPONIBLES,
   CREAR_INGREDIENTE,
   ACTUALIZAR_INGREDIENTE,
   ACTIVAR_INGREDIENTE,
@@ -60,10 +61,10 @@ function IngredienteModal({ ingrediente, onClose, onSaved, restauranteId }) {
     descripcion: ingrediente?.descripcion || "",
   });
   const [crear, { loading: lc }] = useMutation(CREAR_INGREDIENTE, {
-    refetchQueries: ["GetIngredientesGerente"],
+    refetchQueries: ["GetIngredientesDisponibles"],
   });
   const [actualizar, { loading: la }] = useMutation(ACTUALIZAR_INGREDIENTE, {
-    refetchQueries: ["GetIngredientesGerente"],
+    refetchQueries: ["GetIngredientesDisponibles"],
   });
   const loading = lc || la;
 
@@ -77,8 +78,8 @@ function IngredienteModal({ ingrediente, onClose, onSaved, restauranteId }) {
       });
       return;
     }
-    let res;
     try {
+      let res;
       if (editando) {
         const { data } = await actualizar({
           variables: {
@@ -89,7 +90,6 @@ function IngredienteModal({ ingrediente, onClose, onSaved, restauranteId }) {
         });
         res = data?.actualizarIngrediente;
       } else {
-        // Scope de restaurante asegurado
         const { data } = await crear({
           variables: {
             nombre: form.nombre.trim(),
@@ -100,14 +100,12 @@ function IngredienteModal({ ingrediente, onClose, onSaved, restauranteId }) {
         });
         res = data?.crearIngrediente;
       }
-
       if (!res?.ok) throw new Error(res?.error || "Error desconocido");
-
       Swal.fire({
         background: "#fff",
         icon: "success",
         draggable: true,
-        title: editando ? "¡Ingrediente actualizado!" : "¡Ingrediente creado!",
+        title: editando ? "¡Actualizado!" : "¡Creado!",
         html: `<span style="font-family:'DM Sans';color:#78716c"><b>${form.nombre}</b> ${editando ? "fue actualizado" : "fue creado"}.</span>`,
         confirmButtonColor: G[900],
         timer: 1800,
@@ -254,7 +252,11 @@ function IngredienteModal({ ingrediente, onClose, onSaved, restauranteId }) {
   );
 }
 
+// ── IngredienteRow ─────────────────────────────────────────────────────────
 function IngredienteRow({ ing, onEdit, onToggle, toggling }) {
+  // Un ingrediente es global si no tiene restauranteId
+  const esGlobal = !ing.restauranteId;
+
   return (
     <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-stone-50/60 transition-colors group">
       <div
@@ -267,13 +269,27 @@ function IngredienteRow({ ing, onEdit, onToggle, toggling }) {
         />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <p className="text-sm font-dm font-semibold text-stone-800 truncate">
             {ing.nombre}
           </p>
           <span className="text-[10px] font-dm text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-md shrink-0">
             {ing.unidadMedida}
           </span>
+          {/* ── Badge Global ── */}
+          {esGlobal && (
+            <span
+              className="inline-flex items-center gap-1 text-[9px] font-dm font-bold px-1.5 py-0.5 rounded-full shrink-0"
+              style={{
+                background: "#eff6ff",
+                color: "#2563eb",
+                border: "1px solid #bfdbfe",
+              }}
+            >
+              <Globe size={8} />
+              Global
+            </span>
+          )}
         </div>
         {ing.descripcion && (
           <p className="text-[11px] font-dm text-stone-400 mt-0.5 truncate">
@@ -300,34 +316,43 @@ function IngredienteRow({ ing, onEdit, onToggle, toggling }) {
         {ing.activo ? "ACTIVO" : "INACTIVO"}
       </span>
       <div className="flex items-center gap-1.5 shrink-0">
-        <button
-          onClick={() => onEdit(ing)}
-          className="w-8 h-8 rounded-xl flex items-center justify-center text-stone-400 bg-white border border-stone-200 hover:border-stone-300 hover:text-stone-700 transition-all shadow-sm"
-        >
-          <Pencil size={12} />
-        </button>
-        <button
-          onClick={() => onToggle(ing)}
-          disabled={toggling === ing.id}
-          className="w-8 h-8 rounded-xl flex items-center justify-center border transition-all shadow-sm disabled:opacity-50"
-          style={
-            ing.activo
-              ? {
-                  background: "#fef2f2",
-                  color: "#dc2626",
-                  borderColor: "#fecaca",
-                }
-              : { background: G[50], color: G[300], borderColor: G[100] }
-          }
-        >
-          {toggling === ing.id ? (
-            <Loader2 size={12} className="animate-spin" />
-          ) : ing.activo ? (
-            <ToggleRight size={13} />
-          ) : (
-            <ToggleLeft size={13} />
-          )}
-        </button>
+        {/* Globales: solo lectura, no se pueden editar ni desactivar */}
+        {esGlobal ? (
+          <span className="text-[10px] font-dm text-stone-300 pr-1">
+            Solo lectura
+          </span>
+        ) : (
+          <>
+            <button
+              onClick={() => onEdit(ing)}
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-stone-400 bg-white border border-stone-200 hover:border-stone-300 hover:text-stone-700 transition-all shadow-sm"
+            >
+              <Pencil size={12} />
+            </button>
+            <button
+              onClick={() => onToggle(ing)}
+              disabled={toggling === ing.id}
+              className="w-8 h-8 rounded-xl flex items-center justify-center border transition-all shadow-sm disabled:opacity-50"
+              style={
+                ing.activo
+                  ? {
+                      background: "#fef2f2",
+                      color: "#dc2626",
+                      borderColor: "#fecaca",
+                    }
+                  : { background: G[50], color: G[300], borderColor: G[100] }
+              }
+            >
+              {toggling === ing.id ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : ing.activo ? (
+                <ToggleRight size={13} />
+              ) : (
+                <ToggleLeft size={13} />
+              )}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -342,22 +367,23 @@ export default function GIngredientesList() {
   const [modal, setModal] = useState(null);
   const [toggling, setToggling] = useState(null);
 
-  const { data, loading, refetch } = useQuery(GET_INGREDIENTES_GERENTE, {
-    variables: { restauranteId },
+  const { data, loading, refetch } = useQuery(GET_INGREDIENTES_DISPONIBLES, {
+    variables: { disponibles: restauranteId },
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
 
   const [activar] = useMutation(ACTIVAR_INGREDIENTE, {
-    refetchQueries: ["GetIngredientesGerente"],
+    refetchQueries: ["GetIngredientesDisponibles"],
   });
   const [desactivar] = useMutation(DESACTIVAR_INGREDIENTE, {
-    refetchQueries: ["GetIngredientesGerente"],
+    refetchQueries: ["GetIngredientesDisponibles"],
   });
 
   const todos = data?.ingredientes ?? [];
   const activos = todos.filter((i) => i.activo).length;
   const inactivos = todos.filter((i) => !i.activo).length;
+
   const filtered = todos
     .filter((i) => {
       const q = search.toLowerCase();
@@ -410,11 +436,11 @@ export default function GIngredientesList() {
     setToggling(null);
   };
 
-  const fi = (e) => {
+  const fiFn = (e) => {
     e.target.style.borderColor = "transparent";
     e.target.style.boxShadow = `0 0 0 2px ${G[300]}`;
   };
-  const fb = (e) => {
+  const fbFn = (e) => {
     e.target.style.borderColor = "#e2e8f0";
     e.target.style.boxShadow = "none";
   };
@@ -424,7 +450,7 @@ export default function GIngredientesList() {
       <PageHeader
         eyebrow="Gerente · Menú"
         title="Ingredientes"
-        description="Ingredientes de tu restaurante. La unidad de medida no se puede cambiar tras crearlo."
+        description="Ingredientes de tu restaurante. Los globales son de solo lectura."
         action={
           <Button onClick={() => setModal("nuevo")} variant="primary" size="md">
             <Plus size={15} /> Nuevo ingrediente
@@ -479,8 +505,8 @@ export default function GIngredientesList() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar ingrediente..."
             className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-dm text-stone-700 placeholder:text-stone-300 outline-none shadow-sm transition-all"
-            onFocus={fi}
-            onBlur={fb}
+            onFocus={fiFn}
+            onBlur={fbFn}
           />
         </div>
         <div className="flex items-center gap-1 bg-white border border-stone-200 rounded-xl p-1 shadow-sm">

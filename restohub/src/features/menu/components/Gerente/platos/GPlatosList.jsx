@@ -1,7 +1,14 @@
 // src/features/menu/components/Gerente/platos/GPlatosList.jsx
 import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
-import { UtensilsCrossed, Plus, Search, Eye, ImageOff } from "lucide-react";
+import {
+  UtensilsCrossed,
+  Plus,
+  Search,
+  Eye,
+  ImageOff,
+  Globe,
+} from "lucide-react";
 import {
   GET_PLATOS_GERENTE,
   GET_PRECIOS_RESTAURANTE,
@@ -35,7 +42,6 @@ export default function GPlatosList() {
     skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
-  // Query separada de precios — el endpoint platos(restauranteId) no los incluye
   const { data: preciosData } = useQuery(GET_PRECIOS_RESTAURANTE, {
     variables: { restauranteId },
     skip: !restauranteId,
@@ -51,7 +57,6 @@ export default function GPlatosList() {
   const cats = cData?.categorias ?? [];
   const moneda = rData?.restaurante?.moneda || "COP";
 
-  // Índice platoId → precio vigente activo
   const precioVigenteIdx = {};
   for (const p of preciosData?.precios ?? []) {
     if (p.estaVigente && p.activo) {
@@ -123,7 +128,6 @@ export default function GPlatosList() {
         }
       />
 
-      {/* Stats */}
       {!loading && platos.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">
           {[
@@ -257,6 +261,8 @@ export default function GPlatosList() {
           </div>
           {filtered.map((p) => {
             const vigente = precioVigenteIdx[p.id];
+            // Un plato es global si no tiene restauranteId propio
+            const esGlobal = !p.restauranteId;
             return (
               <div
                 key={p.id}
@@ -275,13 +281,27 @@ export default function GPlatosList() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <p
                       className="font-semibold text-stone-800 text-sm truncate"
                       style={{ fontFamily: "'Playfair Display', serif" }}
                     >
                       {p.nombre}
                     </p>
+                    {/* ── Badge Global ── */}
+                    {esGlobal && (
+                      <span
+                        className="inline-flex items-center gap-1 text-[9px] font-dm font-bold px-1.5 py-0.5 rounded-full shrink-0"
+                        style={{
+                          background: "#eff6ff",
+                          color: "#2563eb",
+                          border: "1px solid #bfdbfe",
+                        }}
+                      >
+                        <Globe size={8} />
+                        Global
+                      </span>
+                    )}
                     {p.categoriaNombre && (
                       <span
                         className="text-[9px] font-dm px-1.5 py-0.5 rounded-full shrink-0"
