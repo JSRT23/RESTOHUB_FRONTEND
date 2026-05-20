@@ -1,9 +1,7 @@
 // src/shared/components/Navbar.jsx
-// CAMBIO: Los links del dropdown de usuario apuntan a rutas específicas del dashboard
-//   Mi cuenta   → /perfil  (dashboard)
-//   Mis cupones → /cupones (tab cupones)
-//   Mis puntos  → /puntos  (tab puntos)
-//   Mis pedidos → /perfil  (tab dashboard, donde se ven últimos movimientos)
+// FIX MÓVIL: En pantallas pequeñas solo se muestra logo + ubicación + hamburguesa.
+// Carrito y cuenta se ocultan del header y quedan accesibles desde el menú móvil.
+
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation as useRouterLocation } from "react-router-dom";
 import { useCart } from "../../features/cart/context/CartContext";
@@ -37,6 +35,108 @@ const NavLink = ({ to, children, onClick }) => (
   </Link>
 );
 
+const IconCart = () => (
+  <svg
+    width="17"
+    height="17"
+    fill="none"
+    stroke="rgba(255,255,255,0.82)"
+    strokeWidth="2"
+    viewBox="0 0 24 24"
+  >
+    <circle cx="9" cy="21" r="1" />
+    <circle cx="20" cy="21" r="1" />
+    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+  </svg>
+);
+
+const IconChevron = ({ open }) => (
+  <svg
+    width="10"
+    height="10"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    viewBox="0 0 24 24"
+    style={{
+      transition: "transform 0.2s",
+      transform: open ? "rotate(180deg)" : "rotate(0deg)",
+    }}
+  >
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+
+const USER_MENU = [
+  {
+    to: "/perfil",
+    label: "Mi cuenta",
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+      >
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    ),
+  },
+  {
+    to: "/puntos",
+    label: "Mis puntos",
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+      >
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+    ),
+  },
+  {
+    to: "/cupones",
+    label: "Mis cupones",
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+      >
+        <rect x="2" y="6" width="20" height="12" rx="2" />
+        <path d="M2 10h20" />
+      </svg>
+    ),
+  },
+  {
+    to: "/perfil",
+    label: "Mis pedidos",
+    icon: (
+      <svg
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+      >
+        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+        <rect x="9" y="3" width="6" height="4" rx="1" />
+      </svg>
+    ),
+  },
+];
+
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -69,114 +169,10 @@ export default function Navbar() {
   }, []);
 
   const darkBg = !isHome || scrolled;
-
   const handleLogout = () => {
     setUserOpen(false);
     logout();
   };
-
-  const IconCart = () => (
-    <svg
-      width="17"
-      height="17"
-      fill="none"
-      stroke="rgba(255,255,255,0.82)"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-    >
-      <circle cx="9" cy="21" r="1" />
-      <circle cx="20" cy="21" r="1" />
-      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-    </svg>
-  );
-
-  const IconChevron = ({ open }) => (
-    <svg
-      width="10"
-      height="10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      viewBox="0 0 24 24"
-      style={{
-        transition: "transform 0.2s",
-        transform: open ? "rotate(180deg)" : "rotate(0deg)",
-      }}
-    >
-      <path d="M6 9l6 6 6-6" />
-    </svg>
-  );
-
-  // Opciones del dropdown de usuario — ahora con rutas correctas
-  const USER_MENU = [
-    {
-      to: "/perfil",
-      label: "Mi cuenta",
-      icon: (
-        <svg
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-        >
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
-        </svg>
-      ),
-    },
-    {
-      to: "/puntos",
-      label: "Mis puntos",
-      icon: (
-        <svg
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-        >
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-        </svg>
-      ),
-    },
-    {
-      to: "/cupones",
-      label: "Mis cupones",
-      icon: (
-        <svg
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-        >
-          <rect x="2" y="6" width="20" height="12" rx="2" />
-          <path d="M2 10h20" />
-        </svg>
-      ),
-    },
-    {
-      to: "/perfil",
-      label: "Mis pedidos",
-      icon: (
-        <svg
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-        >
-          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-          <rect x="9" y="3" width="6" height="4" rx="1" />
-        </svg>
-      ),
-    },
-  ];
 
   return (
     <>
@@ -201,7 +197,7 @@ export default function Navbar() {
             height: "68px",
           }}
         >
-          {/* Logo */}
+          {/* ── Logo ──────────────────────────────────────────────────────── */}
           <Link
             to="/"
             style={{
@@ -246,7 +242,7 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Ubicación */}
+          {/* ── Ubicación (visible en desktop y móvil) ────────────────────── */}
           {city && (
             <button
               onClick={() => setShowPicker(true)}
@@ -280,11 +276,12 @@ export default function Navbar() {
             </button>
           )}
 
-          {/* Derecha */}
+          {/* ── Derecha ───────────────────────────────────────────────────── */}
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            {/* Carrito */}
+            {/* Carrito — solo desktop */}
             <Link
               to="/carrito"
+              className="nav-desktop-only"
               style={{
                 position: "relative",
                 width: 38,
@@ -328,9 +325,13 @@ export default function Navbar() {
               )}
             </Link>
 
-            {/* Usuario autenticado */}
+            {/* Cuenta — solo desktop */}
             {isAuthenticated ? (
-              <div ref={userRef} style={{ position: "relative" }}>
+              <div
+                ref={userRef}
+                className="nav-desktop-only"
+                style={{ position: "relative" }}
+              >
                 <button
                   onClick={() => setUserOpen((o) => !o)}
                   style={{
@@ -390,7 +391,6 @@ export default function Navbar() {
                       zIndex: 200,
                     }}
                   >
-                    {/* Header dropdown */}
                     <div
                       style={{
                         padding: "14px 16px",
@@ -417,8 +417,6 @@ export default function Navbar() {
                         {user?.email}
                       </p>
                     </div>
-
-                    {/* Links */}
                     <div style={{ padding: "6px" }}>
                       {USER_MENU.map(({ to, label, icon }) => (
                         <NavLink
@@ -491,16 +489,17 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
+              /* Login — solo desktop */
               <Link
                 to="/login"
-                className="btn-cream"
+                className="btn-cream nav-desktop-only"
                 style={{ padding: "8px 18px", fontSize: "11px", flexShrink: 0 }}
               >
                 Ingresar
               </Link>
             )}
 
-            {/* Hamburguesa */}
+            {/* ── Hamburguesa — solo móvil ────────────────────────────────── */}
             <button
               onClick={() => setMenuOpen((m) => !m)}
               className="nav-hamburger"
@@ -518,6 +517,7 @@ export default function Navbar() {
                 border: "none",
                 cursor: "pointer",
               }}
+              aria-label="Menú"
             >
               {[0, 1, 2].map((i) => (
                 <span
@@ -543,15 +543,16 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Menú móvil */}
+        {/* ── Menú móvil ──────────────────────────────────────────────────── */}
         {menuOpen && (
           <div
             style={{
               background: "var(--green2)",
-              padding: "8px 16px 16px",
+              padding: "8px 16px 20px",
               borderTop: "1px solid rgba(255,255,255,0.07)",
             }}
           >
+            {/* Ubicación en el menú móvil */}
             {city && (
               <button
                 onClick={() => {
@@ -576,39 +577,179 @@ export default function Navbar() {
                 {country?.flag} {city}, {country?.name} — Cambiar
               </button>
             )}
+
             <NavLink to="/" onClick={() => setMenuOpen(false)}>
               Inicio
             </NavLink>
-            <NavLink to="/carrito" onClick={() => setMenuOpen(false)}>
-              Carrito {count > 0 && `(${count})`}
-            </NavLink>
+
+            {/* Carrito con badge en menú móvil */}
+            <Link
+              to="/carrito"
+              onClick={() => setMenuOpen(false)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 14px",
+                color: "rgba(255,255,255,0.75)",
+                fontSize: "14px",
+                fontWeight: 500,
+                borderRadius: "8px",
+                fontFamily: "DM Sans, sans-serif",
+                transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.07)";
+                e.currentTarget.style.color = "#fff";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "rgba(255,255,255,0.75)";
+              }}
+            >
+              <span
+                style={{ display: "flex", alignItems: "center", gap: "10px" }}
+              >
+                <IconCart /> Carrito
+              </span>
+              {count > 0 && (
+                <span
+                  style={{
+                    background: "var(--cream)",
+                    color: "var(--green)",
+                    borderRadius: "20px",
+                    fontSize: "10px",
+                    fontWeight: 800,
+                    padding: "2px 8px",
+                  }}
+                >
+                  {count}
+                </span>
+              )}
+            </Link>
+
+            {/* Sección autenticado */}
             {isAuthenticated ? (
               <>
-                <NavLink to="/perfil" onClick={() => setMenuOpen(false)}>
-                  Mi cuenta
-                </NavLink>
-                <NavLink to="/puntos" onClick={() => setMenuOpen(false)}>
-                  Mis puntos
-                </NavLink>
-                <NavLink to="/cupones" onClick={() => setMenuOpen(false)}>
-                  Mis cupones
-                </NavLink>
+                {/* Mini perfil */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "12px 14px",
+                    margin: "6px 0",
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "10px",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: "50%",
+                      background: "var(--cream)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "13px",
+                      fontWeight: 800,
+                      color: "var(--green)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {user?.nombre?.charAt(0)?.toUpperCase() || "U"}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <p
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        color: "#fff",
+                        margin: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {user?.nombre}
+                    </p>
+                    <p
+                      style={{
+                        fontSize: "11px",
+                        color: "rgba(255,255,255,0.4)",
+                        margin: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {user?.email}
+                    </p>
+                  </div>
+                </div>
+
+                {USER_MENU.map(({ to, label, icon }) => (
+                  <NavLink
+                    key={label}
+                    to={to}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    <span
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                      }}
+                    >
+                      {icon}
+                      {label}
+                    </span>
+                  </NavLink>
+                ))}
+
+                <div
+                  style={{
+                    borderTop: "1px solid rgba(255,255,255,0.08)",
+                    margin: "8px 0",
+                  }}
+                />
+
                 <button
-                  onClick={handleLogout}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    handleLogout();
+                  }}
                   style={{
                     width: "100%",
                     padding: "10px 14px",
                     background: "transparent",
                     border: "none",
-                    color: "rgba(255,80,80,0.75)",
+                    color: "rgba(255,80,80,0.8)",
                     fontSize: "14px",
                     fontWeight: 500,
                     textAlign: "left",
                     cursor: "pointer",
                     fontFamily: "DM Sans, sans-serif",
                     borderRadius: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
                   }}
                 >
+                  <svg
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
                   Cerrar sesión
                 </button>
               </>
@@ -616,6 +757,7 @@ export default function Navbar() {
               <Link
                 to="/login"
                 className="btn-cream"
+                onClick={() => setMenuOpen(false)}
                 style={{
                   display: "block",
                   textAlign: "center",
@@ -630,9 +772,15 @@ export default function Navbar() {
       </nav>
 
       <style>{`
+        /* Móvil: mostrar hamburguesa, ocultar carrito y cuenta */
         @media (max-width: 640px) {
-          .nav-hamburger { display: flex !important; }
-          .nav-user-name { display: none; }
+          .nav-hamburger     { display: flex !important; }
+          .nav-desktop-only  { display: none !important; }
+          .nav-user-name     { display: none; }
+        }
+        /* Desktop: hamburguesa oculta */
+        @media (min-width: 641px) {
+          .nav-hamburger { display: none !important; }
         }
       `}</style>
     </>

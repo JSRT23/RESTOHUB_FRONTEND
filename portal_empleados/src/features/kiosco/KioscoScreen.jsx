@@ -1,8 +1,5 @@
 // portal_empleados/src/features/kiosco/KioscoScreen.jsx
-// Kiosco supervisor — pantalla táctil grande.
-// SIN botón de acción manual en el panel QR.
-// En su lugar: aviso importante en azul/amarillo debajo del QR.
-// El supervisor puede iniciar manualmente SOLO desde el log lateral.
+// FIX: estado "programado" usa verde RestoHub en lugar de azul
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
@@ -33,14 +30,16 @@ const fmtHora = (iso) =>
       })
     : "—";
 
+// programado = verde claro (G[100]/#8EB69B) — igual al modal del supervisor
+// activo     = verde oscuro (G[300]/#235347) — turno ya en curso
 const ECFG = {
   programado: {
     label: "Programado",
-    color: "#2563eb",
-    bg: "#eff6ff",
-    border: "#bfdbfe",
-    qrColor: "2563eb",
-    accent: "rgba(37,99,235,.08)",
+    color: G[100],
+    bg: G[50],
+    border: "#c5dfc8",
+    qrColor: "8EB69B",
+    accent: "rgba(142,182,155,.15)",
   },
   activo: {
     label: "En curso",
@@ -68,7 +67,7 @@ const ECFG = {
   },
 };
 
-/* ── Icons ─────────────────────────────────────────────────────────────── */
+/* ── Icons ────────────────────────────────────────────────────────────────── */
 const IcoSearch = ({ size = 22 }) => (
   <svg
     width={size}
@@ -174,37 +173,10 @@ const IcoWarning = () => (
     <line x1="12" y1="17" x2="12.01" y2="17" />
   </svg>
 );
-const IcoPlay = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-    <polygon points="5,3 19,12 5,21" />
-  </svg>
-);
-const IcoStop = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-  </svg>
-);
-const IcoRefresh = () => (
-  <svg
-    width="15"
-    height="15"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M23 4v6h-6" />
-    <path d="M1 20v-6h6" />
-    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-  </svg>
-);
 
-/* ── QR Panel: sin botón manual, con aviso ──────────────────────────────── */
+/* ── QR Panel ─────────────────────────────────────────────────────────────── */
 function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
   const [segs, setSegs] = useState(null);
-  const [qrKey, setQrKey] = useState(0); // forzar reload del QR
 
   useEffect(() => {
     setSegs(null);
@@ -220,8 +192,8 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
 
   const exp = segs !== null && segs <= 0;
   const urgente = segs !== null && segs > 0 && segs < 60;
-  const cfg = accion === "iniciar" ? ECFG.programado : ECFG.activo;
-
+  // ✅ Siempre verde — tanto para iniciar (programado) como finalizar (activo)
+  const cfg = ECFG.activo;
   const minutos = segs !== null && segs > 0 ? Math.floor(segs / 60) : 0;
   const secs = segs !== null && segs > 0 ? segs % 60 : 0;
 
@@ -234,7 +206,7 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
         gap: "20px",
       }}
     >
-      {/* Header acción */}
+      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -242,39 +214,37 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
           justifyContent: "space-between",
         }}
       >
-        <div>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "12px",
+            fontWeight: "700",
+            textTransform: "uppercase",
+            letterSpacing: ".1em",
+            padding: "5px 14px",
+            borderRadius: "20px",
+            background: cfg.bg,
+            color: cfg.color,
+            border: `1px solid ${cfg.border}`,
+          }}
+        >
           <span
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              fontSize: "12px",
-              fontWeight: "700",
-              textTransform: "uppercase",
-              letterSpacing: ".1em",
-              padding: "5px 14px",
-              borderRadius: "20px",
-              background: cfg.bg,
-              color: cfg.color,
-              border: `1px solid ${cfg.border}`,
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              background: cfg.color,
+              display: "inline-block",
+              animation:
+                accion === "finalizar"
+                  ? "kiosco-pulse 1.5s ease-in-out infinite"
+                  : "none",
             }}
-          >
-            <span
-              style={{
-                width: "6px",
-                height: "6px",
-                borderRadius: "50%",
-                background: cfg.color,
-                display: "inline-block",
-                animation:
-                  accion === "finalizar"
-                    ? "pulse 1.5s ease-in-out infinite"
-                    : "none",
-              }}
-            />
-            {accion === "iniciar" ? "Iniciando turno" : "Registrando salida"}
-          </span>
-        </div>
+          />
+          {accion === "iniciar" ? "Iniciando turno" : "Registrando salida"}
+        </span>
         <button
           onClick={onVolver}
           style={{
@@ -297,7 +267,7 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
         </button>
       </div>
 
-      {/* Nombre empleado */}
+      {/* Nombre */}
       <div>
         <h2
           style={{
@@ -325,7 +295,7 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
         </p>
       </div>
 
-      {/* QR grande centrado */}
+      {/* QR */}
       <div
         style={{
           display: "flex",
@@ -352,42 +322,41 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
           }}
         >
           <img
-            key={qrKey}
             src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(token)}&color=${exp ? "9ca3af" : cfg.qrColor}&bgcolor=ffffff&format=svg&qzone=1`}
             alt="QR de turno"
             width={260}
             height={260}
             style={{ display: "block", borderRadius: "12px" }}
           />
-          {/* Esquinas decorativas estilo iPhone (solo cuando activo) */}
+          {/* Esquinas decorativas verdes */}
           {!exp &&
             [
               {
                 top: 0,
                 left: 0,
-                borderTop: `3px solid ${cfg.color}`,
-                borderLeft: `3px solid ${cfg.color}`,
+                borderTop: `3px solid ${G[300]}`,
+                borderLeft: `3px solid ${G[300]}`,
                 borderTopLeftRadius: "20px",
               },
               {
                 top: 0,
                 right: 0,
-                borderTop: `3px solid ${cfg.color}`,
-                borderRight: `3px solid ${cfg.color}`,
+                borderTop: `3px solid ${G[300]}`,
+                borderRight: `3px solid ${G[300]}`,
                 borderTopRightRadius: "20px",
               },
               {
                 bottom: 0,
                 left: 0,
-                borderBottom: `3px solid ${cfg.color}`,
-                borderLeft: `3px solid ${cfg.color}`,
+                borderBottom: `3px solid ${G[300]}`,
+                borderLeft: `3px solid ${G[300]}`,
                 borderBottomLeftRadius: "20px",
               },
               {
                 bottom: 0,
                 right: 0,
-                borderBottom: `3px solid ${cfg.color}`,
-                borderRight: `3px solid ${cfg.color}`,
+                borderBottom: `3px solid ${G[300]}`,
+                borderRight: `3px solid ${G[300]}`,
                 borderBottomRightRadius: "20px",
               },
             ].map((s, i) => (
@@ -433,13 +402,13 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
           </div>
         )}
 
-        {/* ── AVISO IMPORTANTE — sin botón manual ────────────────────────── */}
+        {/* Aviso ─ sin botón manual, verde en lugar de azul */}
         <div
           style={{
             width: "100%",
             maxWidth: "480px",
-            background: exp ? "#fffbeb" : "rgba(59,130,246,.06)",
-            border: `1.5px solid ${exp ? "#fde68a" : "rgba(59,130,246,.25)"}`,
+            background: exp ? "#fffbeb" : G[50],
+            border: `1.5px solid ${exp ? "#fde68a" : G[100]}`,
             borderRadius: "16px",
             padding: "14px 18px",
             display: "flex",
@@ -449,7 +418,7 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
         >
           <span
             style={{
-              color: exp ? "#d97706" : "#2563eb",
+              color: exp ? "#d97706" : G[300],
               flexShrink: 0,
               marginTop: "1px",
             }}
@@ -462,7 +431,7 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
                 fontFamily: "'DM Sans',sans-serif",
                 fontSize: "14px",
                 fontWeight: "700",
-                color: exp ? "#92400e" : "#1d4ed8",
+                color: exp ? "#92400e" : G[500],
                 margin: "0 0 3px",
               }}
             >
@@ -475,7 +444,7 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
                 fontFamily: "'DM Sans',sans-serif",
                 fontSize: "13px",
                 lineHeight: "1.5",
-                color: exp ? "#92400e" : "#3b82f6",
+                color: exp ? "#92400e" : G[300],
                 margin: 0,
               }}
             >
@@ -486,15 +455,15 @@ function QRPanel({ token, expiraEn, nombre, accion, onVolver }) {
           </div>
         </div>
         <style>{`
-          @keyframes spin  { to { transform:rotate(360deg); } }
-          @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+          @keyframes kiosco-spin  { to { transform:rotate(360deg); } }
+          @keyframes kiosco-pulse { 0%,100%{opacity:1}50%{opacity:.4} }
         `}</style>
       </div>
     </div>
   );
 }
 
-/* ── Fichaje row ────────────────────────────────────────────────────────── */
+/* ── FichajeRow ───────────────────────────────────────────────────────────── */
 function FichajeRow({ f, isNew }) {
   return (
     <div
@@ -616,8 +585,6 @@ export default function KioscoScreen() {
     skip: !buscado?.id,
     fetchPolicy: "network-only",
   });
-
-  // Turnos del restaurante hoy — para contadores reales del header
   const { data: tRestData, refetch: rRestT } = useQuery(GET_TURNOS, {
     variables: {
       restauranteId: user?.restauranteId,
@@ -632,16 +599,12 @@ export default function KioscoScreen() {
   const [iniciarTurno] = useMutation(INICIAR_TURNO);
   const [registrarSalida] = useMutation(REGISTRAR_SALIDA);
 
-  // ── Auto-cancelar turno ACTIVO si pasaron 30min después de fechaFin ───────
   const canceladosAutoRef = useRef(new Set());
   useEffect(() => {
     if (!turno || turno.estado !== "activo" || !turno.fechaFin) return;
     const check = () => {
-      const limiteCancel = new Date(turno.fechaFin).getTime() + 30 * 60000;
-      if (
-        Date.now() > limiteCancel &&
-        !canceladosAutoRef.current.has(turno.id)
-      ) {
+      const limite = new Date(turno.fechaFin).getTime() + 30 * 60000;
+      if (Date.now() > limite && !canceladosAutoRef.current.has(turno.id)) {
         canceladosAutoRef.current.add(turno.id);
         rT()
           .then(() => limpiar())
@@ -710,14 +673,14 @@ export default function KioscoScreen() {
         if (!r?.registrarSalida?.ok)
           throw new Error(r?.registrarSalida?.errores ?? "Error");
       }
-      const nuevoFichaje = {
+      const nf = {
         nombre,
         tipo,
         hora: fmtHora(new Date().toISOString()),
         id: Date.now(),
       };
-      setFichajes((p) => [nuevoFichaje, ...p.slice(0, 19)]);
-      setNewFichajeId(nuevoFichaje.id);
+      setFichajes((p) => [nf, ...p.slice(0, 19)]);
+      setNewFichajeId(nf.id);
       setTimeout(() => setNewFichajeId(null), 3000);
       Swal.fire({
         background: "#fff",
@@ -749,31 +712,25 @@ export default function KioscoScreen() {
   const nombre = buscado ? `${buscado.nombre} ${buscado.apellido}` : "";
   const cfgT = turno ? (ECFG[turno.estado] ?? ECFG.programado) : null;
 
-  // Ventana del QR de salida: desde -15min antes de fechaFin hasta +30min después
   const enVentanaSalida = (() => {
     if (!esFin || !turno?.fechaFin) return false;
     const ahora = Date.now();
-    const inicio = new Date(turno.fechaFin).getTime() - 15 * 60000; // -15min
-    const fin = new Date(turno.fechaFin).getTime() + 30 * 60000; // +30min
+    const inicio = new Date(turno.fechaFin).getTime() - 15 * 60000;
+    const fin = new Date(turno.fechaFin).getTime() + 30 * 60000;
     return ahora >= inicio && ahora <= fin;
   })();
 
-  // QR de salida disponible a las (fechaFin - 15min)
   const horaActivacionSalida = turno?.fechaFin
     ? fmtHora(
         new Date(new Date(turno.fechaFin).getTime() - 15 * 60000).toISOString(),
       )
     : null;
 
-  // Mostrar panel QR: entrada siempre, salida solo en ventana
   const mostrarQR =
     buscado && turno && turno.qrToken && (esInit || (esFin && enVentanaSalida));
-
-  // Si turno activo pero fuera de ventana — mostrar aviso en lugar del QR
   const mostrarAvisoFueraVentana =
     buscado && esFin && !enVentanaSalida && turno?.qrToken;
 
-  // Contadores reales basados en turnos del restaurante hoy
   const turnosHoy = tRestData?.turnos ?? [];
   const entradas = turnosHoy.filter(
     (t) => t.estado === "activo" || t.estado === "completado",
@@ -791,7 +748,7 @@ export default function KioscoScreen() {
         fontFamily: "'DM Sans', system-ui, sans-serif",
       }}
     >
-      {/* ── HEADER ────────────────────────────────────────────────────────── */}
+      {/* HEADER */}
       <header
         style={{
           background: "#fff",
@@ -991,61 +948,39 @@ export default function KioscoScreen() {
         </div>
       </header>
 
-      {/* ── ESTILOS RESPONSIVE ───────────────────────────────────────────── */}
+      {/* ESTILOS RESPONSIVE */}
       <style>{`
-        .kiosco-body {
-          flex: 1;
-          display: grid;
-          gap: 20px;
-          padding: 24px 32px;
-          align-items: start;
-          width: 100%;
-          max-width: 1600px;
-          margin: 0 auto;
-          box-sizing: border-box;
+        .kiosco-body { flex:1;display:grid;gap:20px;padding:24px 32px;align-items:start;width:100%;max-width:1600px;margin:0 auto;box-sizing:border-box; }
+        @media (min-width:1024px) {
+          .kiosco-body.modo-busqueda { grid-template-columns:1fr 360px; }
+          .kiosco-body.modo-qr       { grid-template-columns:340px 1fr 300px; }
+          .kiosco-body.modo-espera   { grid-template-columns:340px 1fr 300px; }
         }
-        /* Desktop: 3 col cuando hay QR/espera, 2 col en búsqueda */
-        @media (min-width: 1024px) {
-          .kiosco-body.modo-busqueda   { grid-template-columns: 1fr 360px; }
-          .kiosco-body.modo-qr         { grid-template-columns: 340px 1fr 300px; }
-          .kiosco-body.modo-espera     { grid-template-columns: 340px 1fr 300px; }
+        @media (min-width:640px) and (max-width:1023px) {
+          .kiosco-body.modo-busqueda { grid-template-columns:1fr 320px; }
+          .kiosco-body.modo-qr       { grid-template-columns:1fr 280px; }
+          .kiosco-body.modo-espera   { grid-template-columns:1fr 280px; }
+          .kiosco-col-busqueda-qr    { display:none !important; }
         }
-        /* Tablet: 2 col siempre */
-        @media (min-width: 640px) and (max-width: 1023px) {
-          .kiosco-body.modo-busqueda   { grid-template-columns: 1fr 320px; }
-          .kiosco-body.modo-qr         { grid-template-columns: 1fr 280px; }
-          .kiosco-body.modo-espera     { grid-template-columns: 1fr 280px; }
-          .kiosco-col-busqueda-qr      { display: none !important; }
+        @media (max-width:639px) {
+          .kiosco-body { grid-template-columns:1fr !important;padding:16px;gap:14px; }
+          .kiosco-header-clock       { display:none !important; }
+          .kiosco-col-busqueda-qr    { display:none !important; }
         }
-        /* Móvil: 1 col */
-        @media (max-width: 639px) {
-          .kiosco-body { grid-template-columns: 1fr !important; padding: 16px; gap: 14px; }
-          .kiosco-header-clock         { display: none !important; }
-          .kiosco-col-busqueda-qr      { display: none !important; }
+        @media (max-width:767px) {
+          .kiosco-header { padding:0 16px !important; }
+          .kiosco-header-brand p:last-child { display:none; }
         }
-        /* Header responsive */
-        @media (max-width: 767px) {
-          .kiosco-header { padding: 0 16px !important; }
-          .kiosco-header-brand p:last-child { display: none; }
-          .kiosco-header-clock { font-size: 18px !important; }
-          .kiosco-stats-label { display: none; }
-        }
-        @media (max-width: 480px) {
-          .kiosco-header-clock { display: none !important; }
-        }
-        /* Log panel: se mueve abajo en móvil/tablet */
-        @media (max-width: 1023px) {
-          .kiosco-log { max-height: 280px !important; }
-        }
+        @media (max-width:1023px) { .kiosco-log { max-height:280px !important; } }
         @keyframes kiosco-spin  { to { transform:rotate(360deg); } }
         @keyframes kiosco-pulse { 0%,100%{opacity:1}50%{opacity:.4} }
       `}</style>
 
-      {/* ── BODY ──────────────────────────────────────────────────────────── */}
+      {/* BODY */}
       <div
         className={`kiosco-body ${mostrarQR ? "modo-qr" : mostrarAvisoFueraVentana ? "modo-espera" : "modo-busqueda"}`}
       >
-        {/* ── COL 1: Búsqueda (visible siempre excepto en tablet/móvil cuando hay QR) */}
+        {/* COL 1: Búsqueda */}
         <div
           className={
             mostrarQR || mostrarAvisoFueraVentana
@@ -1054,7 +989,6 @@ export default function KioscoScreen() {
           }
           style={{ display: "flex", flexDirection: "column", gap: "16px" }}
         >
-          {/* Título — solo en modo búsqueda */}
           {!mostrarQR && !mostrarAvisoFueraVentana && (
             <div>
               <h1
@@ -1125,7 +1059,7 @@ export default function KioscoScreen() {
                   color: "#1c1917",
                   outline: "none",
                   boxShadow: "0 2px 8px rgba(0,0,0,.05)",
-                  transition: "border-color .15s, box-shadow .15s",
+                  transition: "border-color .15s,box-shadow .15s",
                   boxSizing: "border-box",
                 }}
                 onFocus={(e) => {
@@ -1166,7 +1100,6 @@ export default function KioscoScreen() {
                 <IcoSearch size={18} /> Buscar empleado
               </button>
             )}
-            {/* Botón buscar compacto cuando hay QR/espera */}
             {(mostrarQR || mostrarAvisoFueraVentana) && (
               <button
                 onClick={() => {
@@ -1403,7 +1336,7 @@ export default function KioscoScreen() {
           )}
         </div>
 
-        {/* ── COL CENTRAL: QR o Panel de espera ───────────────────────────────── */}
+        {/* COL CENTRAL: QR o aviso espera */}
         {(mostrarQR || mostrarAvisoFueraVentana) && (
           <div
             style={{
@@ -1414,7 +1347,6 @@ export default function KioscoScreen() {
               boxShadow: "0 4px 24px rgba(0,0,0,.07)",
             }}
           >
-            {/* ── QR panel ─────────────────────────────────────────────────── */}
             {mostrarQR && (
               <QRPanel
                 token={turno.qrToken}
@@ -1424,8 +1356,6 @@ export default function KioscoScreen() {
                 onVolver={limpiar}
               />
             )}
-
-            {/* ── Panel de espera (activo fuera de ventana) ──────────────── */}
             {mostrarAvisoFueraVentana && (
               <div
                 style={{
@@ -1436,7 +1366,6 @@ export default function KioscoScreen() {
                   padding: "8px 0",
                 }}
               >
-                {/* Estado */}
                 <span
                   style={{
                     display: "inline-flex",
@@ -1465,8 +1394,6 @@ export default function KioscoScreen() {
                   />
                   Turno activo
                 </span>
-
-                {/* Nombre */}
                 <div style={{ textAlign: "center" }}>
                   <h2
                     style={{
@@ -1491,8 +1418,6 @@ export default function KioscoScreen() {
                     {fmtHora(turno?.fechaInicio)} – {fmtHora(turno?.fechaFin)}
                   </p>
                 </div>
-
-                {/* Reloj + hora activación */}
                 <div
                   style={{
                     display: "flex",
@@ -1507,7 +1432,7 @@ export default function KioscoScreen() {
                     boxSizing: "border-box",
                   }}
                 >
-                  <IcoClock size={36} style={{ color: "#d97706" }} />
+                  <IcoClock size={36} />
                   <div style={{ textAlign: "center" }}>
                     <p
                       style={{
@@ -1546,7 +1471,6 @@ export default function KioscoScreen() {
                     </p>
                   </div>
                 </div>
-
                 <button
                   onClick={limpiar}
                   style={{
@@ -1571,7 +1495,7 @@ export default function KioscoScreen() {
           </div>
         )}
 
-        {/* ── COL LOG: Fichajes de hoy ─────────────────────────────────────── */}
+        {/* COL LOG */}
         <div
           className="kiosco-log"
           style={{
@@ -1615,7 +1539,7 @@ export default function KioscoScreen() {
               {fichajes.length} registros
             </span>
           </div>
-          <div style={{ flex: 1, overflowY: "auto" }} className="noscroll">
+          <div style={{ flex: 1, overflowY: "auto" }}>
             {fichajes.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 20px" }}>
                 <div

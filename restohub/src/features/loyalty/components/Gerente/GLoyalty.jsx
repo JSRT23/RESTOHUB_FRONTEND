@@ -1,7 +1,5 @@
 // src/features/loyalty/components/Gerente/GLoyalty.jsx
-// CAMBIO PRINCIPAL: ModalCrearCupon ahora tiene ClienteSelector en vez de input libre de UUID.
-// Admin ve clientes de cualquier restaurante (pasa restauranteId al selector).
-// Gerente solo ve clientes de su restaurante (usa su restauranteId automáticamente).
+// FIX: fechas correctas para crear promociones y cupones (400 Bad Request)
 
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useLazyQuery } from "@apollo/client/react";
@@ -75,6 +73,13 @@ const fb = (e) => {
   e.target.style.boxShadow = "none";
 };
 
+// ── Helper fechas ─────────────────────────────────────────────────────────────
+// datetime-local input  → "2026-05-20T09:00"   necesita ":00"
+const toISODatetime = (v) => (v ? v + ":00Z" : "");
+// date input            → "2026-05-20"          necesita "T00:00:00" / "T23:59:59"
+const toISODateStart = (v) => (v ? v + "T00:00:00Z" : "");
+const toISODateEnd = (v) => (v ? v + "T23:59:59Z" : "");
+
 function Field({ label, required, children }) {
   return (
     <div className="space-y-1.5">
@@ -101,10 +106,7 @@ const BENEFICIO_META = {
   "2x1": { label: "2×1", icon: Hash, color: "#f59e0b" },
 };
 
-// ═══════════════════════════════════════════════════════════════
-// SELECTOR DE CLIENTES — reemplaza el input de UUID
-// ═══════════════════════════════════════════════════════════════
-
+// ── ClienteSelector ───────────────────────────────────────────────────────────
 export function ClienteSelector({
   value,
   onChange,
@@ -113,9 +115,8 @@ export function ClienteSelector({
 }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState(null); // objeto cliente seleccionado
+  const [selected, setSelected] = useState(null);
 
-  // Lazy query — solo busca cuando el usuario escribe
   const [buscarClientes, { data, loading }] = useLazyQuery(
     GET_CLIENTES_RESTAURANTE,
     {
@@ -127,12 +128,8 @@ export function ClienteSelector({
     (q) => {
       setSearch(q);
       setOpen(true);
-      if (q.trim().length >= 1) {
-        // NO filtramos por restauranteId porque los clientes se registran globalmente
-        // (AutoRegistroView crea Cliente sin restaurante_id asignado).
-        // Buscamos por texto: nombre, cédula o email.
+      if (q.trim().length >= 1)
         buscarClientes({ variables: { search: q.trim() } });
-      }
     },
     [buscarClientes],
   );
@@ -142,7 +139,7 @@ export function ClienteSelector({
   const handleSelect = (cliente) => {
     setSelected(cliente);
     onChange(cliente.id);
-    if (onSelect) onSelect(cliente); // callback extra para TabPuntos
+    if (onSelect) onSelect(cliente);
     setSearch("");
     setOpen(false);
   };
@@ -153,8 +150,7 @@ export function ClienteSelector({
     setSearch("");
   };
 
-  // Si hay cliente seleccionado, mostrar chip
-  if (selected) {
+  if (selected)
     return (
       <div
         className="flex items-center gap-2 px-3 py-2.5 rounded-xl border bg-white shadow-sm"
@@ -183,7 +179,6 @@ export function ClienteSelector({
         </button>
       </div>
     );
-  }
 
   return (
     <div className="relative">
@@ -206,7 +201,6 @@ export function ClienteSelector({
           <Loader2 size={12} className="text-stone-300 animate-spin shrink-0" />
         )}
       </div>
-
       {open && search.trim().length >= 1 && (
         <div
           className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-xl shadow-xl overflow-hidden"
@@ -220,7 +214,7 @@ export function ClienteSelector({
             <div className="flex items-center gap-2 px-4 py-3">
               <Users size={12} className="text-stone-300" />
               <p className="text-xs font-dm text-stone-400">
-                Sin clientes que coincidan con "{search}"
+                Sin clientes para "{search}"
               </p>
             </div>
           ) : (
@@ -243,35 +237,23 @@ export function ClienteSelector({
                   <p className="text-[10px] font-dm text-stone-400 truncate">
                     {c.tipoDocumento} {c.cedula}
                     {c.email ? ` · ${c.email}` : ""}
-                    {c.telefono ? ` · ${c.telefono}` : ""}
                   </p>
                 </div>
-                {!c.activo && (
-                  <span className="text-[9px] font-dm font-bold px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-400 shrink-0">
-                    INACTIVO
-                  </span>
-                )}
               </button>
             ))
           )}
         </div>
       )}
-
-      {/* Hint cuando no hay texto */}
       {!open && !search && (
         <p className="text-[11px] font-dm text-stone-400 mt-1 pl-1">
-          Escribe nombre, cédula o email para buscar. Deja vacío para cupón
-          genérico.
+          Escribe nombre, cédula o email. Vacío = cupón genérico.
         </p>
       )}
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// TAB 1 — PROMOCIONES (igual que antes)
-// ═══════════════════════════════════════════════════════════════
-
+// ── ModalCrearPromocion ───────────────────────────────────────────────────────
 function ModalCrearPromocion({ open, onClose, restauranteId }) {
   const INIT = {
     nombre: "",
@@ -291,24 +273,26 @@ function ModalCrearPromocion({ open, onClose, restauranteId }) {
   const handleSave = async () => {
     if (!form.nombre.trim() || !form.fechaInicio || !form.fechaFin) return;
     try {
-      const variables = {
-        nombre: form.nombre.trim(),
-        descripcion: form.descripcion || null,
-        alcance: "local",
-        restauranteId,
-        tipoBeneficio: form.tipoBeneficio,
-        valor:
-          form.tipoBeneficio !== "puntos_extra"
-            ? parseFloat(form.valor) || 0
-            : 0,
-        puntosBonus:
-          form.tipoBeneficio === "puntos_extra"
-            ? parseInt(form.puntosBonus) || 0
-            : 0,
-        fechaInicio: new Date(form.fechaInicio).toISOString(),
-        fechaFin: new Date(form.fechaFin).toISOString(),
-      };
-      const { data } = await crear({ variables });
+      const { data } = await crear({
+        variables: {
+          nombre: form.nombre.trim(),
+          descripcion: form.descripcion || null,
+          alcance: "local",
+          restauranteId,
+          tipoBeneficio: form.tipoBeneficio,
+          valor:
+            form.tipoBeneficio !== "puntos_extra"
+              ? parseFloat(form.valor) || 0
+              : 0,
+          puntosBonus:
+            form.tipoBeneficio === "puntos_extra"
+              ? parseInt(form.puntosBonus) || 0
+              : 0,
+          // ✅ FIX: datetime-local da "2026-05-20T09:00" → agregar ":00"
+          fechaInicio: toISODatetime(form.fechaInicio),
+          fechaFin: toISODatetime(form.fechaFin),
+        },
+      });
       if (!data?.crearPromocion?.ok)
         throw new Error(data?.crearPromocion?.error ?? "Error");
       Swal.fire({
@@ -346,8 +330,8 @@ function ModalCrearPromocion({ open, onClose, restauranteId }) {
           className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-dm"
           style={{ background: G[50], borderColor: G[100], color: G[300] }}
         >
-          <Building2 size={12} /> Se creará como promoción local — solo visible
-          para tu restaurante.
+          <Building2 size={12} /> Promoción local — solo visible para tu
+          restaurante.
         </div>
         <Field label="Nombre" required>
           <input
@@ -400,7 +384,7 @@ function ModalCrearPromocion({ open, onClose, restauranteId }) {
               value={form.valor}
               onChange={set("valor")}
               placeholder={
-                form.tipoBeneficio === "descuento_pct" ? "Ej: 15" : "Ej: 5000"
+                form.tipoBeneficio === "descuento_pct" ? "15" : "5000"
               }
               className={icls}
               onFocus={fi}
@@ -416,7 +400,7 @@ function ModalCrearPromocion({ open, onClose, restauranteId }) {
               step="1"
               value={form.puntosBonus}
               onChange={set("puntosBonus")}
-              placeholder="Ej: 100"
+              placeholder="100"
               className={icls}
               onFocus={fi}
               onBlur={fb}
@@ -470,8 +454,8 @@ function ModalCrearPromocion({ open, onClose, restauranteId }) {
   );
 }
 
-function PromocionCard({ promo, onToggle, toggling, restauranteId }) {
-  // Como restauranteId no viene en el response, una promo local ya es del restaurante del gerente
+// ── PromocionCard ─────────────────────────────────────────────────────────────
+function PromocionCard({ promo, onToggle, toggling }) {
   const esPropia = promo.alcance === "local";
   const beneficio =
     BENEFICIO_META[promo.tipoBeneficio] ?? BENEFICIO_META.descuento_pct;
@@ -480,6 +464,7 @@ function PromocionCard({ promo, onToggle, toggling, restauranteId }) {
   const inicio = new Date(promo.fechaInicio);
   const fin = new Date(promo.fechaFin);
   const vigente = promo.activa && inicio <= ahora && fin >= ahora;
+  const programada = promo.activa && inicio > ahora;
   const vencida = fin < ahora;
 
   return (
@@ -492,9 +477,11 @@ function PromocionCard({ promo, onToggle, toggling, restauranteId }) {
         style={{
           background: vigente
             ? `linear-gradient(90deg,${G[300]},${G[100]})`
-            : vencida
-              ? "linear-gradient(90deg,#d4d4d4,#e5e5e5)"
-              : `linear-gradient(90deg,${beneficio.color}88,${beneficio.color}44)`,
+            : programada
+              ? `linear-gradient(90deg,${G[100]},${G[50]})`
+              : vencida
+                ? "linear-gradient(90deg,#d4d4d4,#e5e5e5)"
+                : `linear-gradient(90deg,${beneficio.color}88,${beneficio.color}44)`,
         }}
       />
       <div className="p-4 space-y-3">
@@ -535,32 +522,67 @@ function PromocionCard({ promo, onToggle, toggling, restauranteId }) {
             >
               {promo.alcance === "global" ? (
                 <>
-                  <Globe size={9} /> Global
+                  <Globe size={9} />
+                  Global
                 </>
               ) : (
                 <>
-                  <Building2 size={9} /> Local
+                  <Building2 size={9} />
+                  Local
                 </>
               )}
             </span>
             <Badge
-              variant={vigente ? "green" : vencida ? "red" : "default"}
+              variant={
+                vigente
+                  ? "green"
+                  : vencida
+                    ? "red"
+                    : programada
+                      ? "yellow"
+                      : "default"
+              }
               size="xs"
             >
               {vigente ? (
                 <>
-                  <CheckCircle2 size={9} /> Activa
+                  <CheckCircle2 size={9} />
+                  Activa
                 </>
               ) : vencida ? (
                 <>
-                  <XCircle size={9} /> Vencida
+                  <XCircle size={9} />
+                  Vencida
+                </>
+              ) : programada ? (
+                <>
+                  <Clock size={9} />
+                  Programada
                 </>
               ) : (
                 <>
-                  <AlertTriangle size={9} /> Inactiva
+                  <AlertTriangle size={9} />
+                  Inactiva
                 </>
               )}
             </Badge>
+            {/* Mensaje hora de inicio si está programada */}
+            {programada && (
+              <span className="text-[9px] font-dm text-stone-400 mt-0.5 text-right leading-tight">
+                Activa desde
+                <br />
+                <span className="font-semibold" style={{ color: G[100] }}>
+                  {inicio.toLocaleDateString("es-CO", {
+                    day: "2-digit",
+                    month: "short",
+                  })}{" "}
+                  {inicio.toLocaleTimeString("es-CO", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </span>
+            )}
           </div>
         </div>
         {promo.descripcion && (
@@ -582,7 +604,6 @@ function PromocionCard({ promo, onToggle, toggling, restauranteId }) {
           })}
         </div>
         <div className="flex items-center justify-between pt-1 border-t border-stone-100">
-          {/* totalAplicaciones no expuesto en el gateway — omitido */}
           {esPropia ? (
             <button
               onClick={() => onToggle(promo)}
@@ -593,11 +614,13 @@ function PromocionCard({ promo, onToggle, toggling, restauranteId }) {
                 <Loader2 size={11} className="animate-spin" />
               ) : promo.activa ? (
                 <>
-                  <ToggleLeft size={13} /> Desactivar
+                  <ToggleLeft size={13} />
+                  Desactivar
                 </>
               ) : (
                 <>
-                  <ToggleRight size={13} /> Activar
+                  <ToggleRight size={13} />
+                  Activar
                 </>
               )}
             </button>
@@ -612,6 +635,7 @@ function PromocionCard({ promo, onToggle, toggling, restauranteId }) {
   );
 }
 
+// ── TabPromociones ────────────────────────────────────────────────────────────
 function TabPromociones({ restauranteId }) {
   const [modal, setModal] = useState(false);
   const [search, setSearch] = useState("");
@@ -620,7 +644,8 @@ function TabPromociones({ restauranteId }) {
 
   const { data, loading } = useQuery(GET_PROMOCIONES, {
     variables: { restauranteId },
-    fetchPolicy: "cache-and-network",
+    fetchPolicy: "network-only",
+    skip: !restauranteId || restauranteId.length < 10,
   });
   const [activar] = useMutation(ACTIVAR_PROMOCION, {
     refetchQueries: ["GetPromociones"],
@@ -630,7 +655,6 @@ function TabPromociones({ restauranteId }) {
   });
 
   const promociones = data?.promociones ?? [];
-  // El backend ya filtra por restaurante; todas las locales son del restaurante del gerente
   const propias = promociones.filter((p) => p.alcance === "local");
   const globales = promociones.filter((p) => p.alcance === "global");
 
@@ -643,7 +667,7 @@ function TabPromociones({ restauranteId }) {
       if (filtro === "activa" && !p.activa) return false;
       return true;
     });
-  }, [promociones, search, filtro, restauranteId]);
+  }, [promociones, search, filtro]);
 
   const handleToggle = async (promo) => {
     const { isConfirmed } = await Swal.fire({
@@ -689,7 +713,8 @@ function TabPromociones({ restauranteId }) {
           globales visibles
         </div>
         <Button size="sm" onClick={() => setModal(true)}>
-          <Plus size={13} /> Nueva promoción
+          <Plus size={13} />
+          Nueva promoción
         </Button>
       </div>
       <div className="flex flex-col sm:flex-row gap-3">
@@ -751,7 +776,8 @@ function TabPromociones({ restauranteId }) {
           action={
             !search && (
               <Button size="sm" onClick={() => setModal(true)}>
-                <Plus size={13} /> Nueva
+                <Plus size={13} />
+                Nueva
               </Button>
             )
           }
@@ -764,7 +790,6 @@ function TabPromociones({ restauranteId }) {
               promo={p}
               onToggle={handleToggle}
               toggling={toggling}
-              restauranteId={restauranteId}
             />
           ))}
         </div>
@@ -778,11 +803,8 @@ function TabPromociones({ restauranteId }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// TAB 2 — CUPONES (con ClienteSelector)
-// ═══════════════════════════════════════════════════════════════
-
-function ModalCrearCupon({ open, onClose, restauranteId }) {
+// ── ModalCrearCupon ───────────────────────────────────────────────────────────
+function ModalCrearCupon({ open, onClose }) {
   const INIT = {
     clienteId: "",
     tipoDescuento: "porcentaje",
@@ -794,7 +816,6 @@ function ModalCrearCupon({ open, onClose, restauranteId }) {
   };
   const [form, setForm] = useState({ ...INIT });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
   const [crear, { loading }] = useMutation(CREAR_CUPON, {
     refetchQueries: ["GetCupones"],
   });
@@ -814,8 +835,9 @@ function ModalCrearCupon({ open, onClose, restauranteId }) {
           tipoDescuento: form.tipoDescuento,
           valorDescuento: parseFloat(form.valorDescuento),
           limiteUso: parseInt(form.limiteUso) || 1,
-          fechaInicio: form.fechaInicio,
-          fechaFin: form.fechaFin,
+          // ✅ FIX: date input da "2026-05-20" → agregar hora
+          fechaInicio: toISODateStart(form.fechaInicio),
+          fechaFin: toISODateEnd(form.fechaFin),
           codigo: form.codigo || null,
         },
       });
@@ -844,7 +866,6 @@ function ModalCrearCupon({ open, onClose, restauranteId }) {
   return (
     <Modal open={open} onClose={onClose} title="Nuevo cupón" size="sm">
       <div className="space-y-4">
-        {/* Selector de cliente — reemplaza el input de UUID */}
         <Field label="Cliente (opcional — vacío = cupón genérico)">
           <ClienteSelector
             value={form.clienteId}
@@ -852,8 +873,6 @@ function ModalCrearCupon({ open, onClose, restauranteId }) {
             placeholder="Buscar por nombre, cédula o email..."
           />
         </Field>
-
-        {/* Aviso cupón genérico */}
         {!form.clienteId && (
           <div
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-dm border"
@@ -863,12 +882,10 @@ function ModalCrearCupon({ open, onClose, restauranteId }) {
               color: "#d97706",
             }}
           >
-            <AlertTriangle size={11} />
-            Sin cliente seleccionado el cupón será genérico — cualquiera puede
-            usarlo.
+            <AlertTriangle size={11} /> Sin cliente = cupón genérico, cualquiera
+            puede usarlo.
           </div>
         )}
-
         <div className="grid grid-cols-2 gap-3">
           <Field label="Tipo descuento" required>
             <select
@@ -899,7 +916,6 @@ function ModalCrearCupon({ open, onClose, restauranteId }) {
             />
           </Field>
         </div>
-
         <div className="grid grid-cols-2 gap-3">
           <Field label="Límite de usos">
             <input
@@ -923,7 +939,6 @@ function ModalCrearCupon({ open, onClose, restauranteId }) {
             />
           </Field>
         </div>
-
         <div className="grid grid-cols-2 gap-3">
           <Field label="Fecha inicio" required>
             <input
@@ -946,7 +961,6 @@ function ModalCrearCupon({ open, onClose, restauranteId }) {
             />
           </Field>
         </div>
-
         <div className="flex justify-end gap-2 pt-1">
           <Button
             variant="ghost"
@@ -972,14 +986,13 @@ function ModalCrearCupon({ open, onClose, restauranteId }) {
   );
 }
 
+// ── TabCupones ────────────────────────────────────────────────────────────────
 function TabCupones({ restauranteId }) {
   const [modal, setModal] = useState(false);
   const [search, setSearch] = useState("");
-
   const { data, loading } = useQuery(GET_CUPONES, {
     fetchPolicy: "cache-and-network",
   });
-
   const cupones = data?.cupones ?? [];
   const filtered = cupones.filter((c) =>
     c.codigo.toLowerCase().includes(search.toLowerCase()),
@@ -998,10 +1011,10 @@ function TabCupones({ restauranteId }) {
           total
         </span>
         <Button size="sm" onClick={() => setModal(true)}>
-          <Plus size={13} /> Nuevo cupón
+          <Plus size={13} />
+          Nuevo cupón
         </Button>
       </div>
-
       <div
         className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 max-w-sm"
         style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
@@ -1014,7 +1027,6 @@ function TabCupones({ restauranteId }) {
           className="flex-1 bg-transparent text-sm text-stone-800 placeholder:text-stone-300 outline-none font-dm"
         />
       </div>
-
       {loading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
@@ -1025,10 +1037,11 @@ function TabCupones({ restauranteId }) {
         <EmptyState
           icon={Ticket}
           title="Sin cupones"
-          description="Crea el primer cupón para tus clientes."
+          description="Crea el primer cupón."
           action={
             <Button size="sm" onClick={() => setModal(true)}>
-              <Plus size={13} /> Nuevo
+              <Plus size={13} />
+              Nuevo
             </Button>
           }
         />
@@ -1086,11 +1099,13 @@ function TabCupones({ restauranteId }) {
                     >
                       {c.disponible ? (
                         <>
-                          <CheckCircle2 size={9} /> Disponible
+                          <CheckCircle2 size={9} />
+                          Disponible
                         </>
                       ) : (
                         <>
-                          <XCircle size={9} /> No disponible
+                          <XCircle size={9} />
+                          No disponible
                         </>
                       )}
                     </Badge>
@@ -1101,7 +1116,6 @@ function TabCupones({ restauranteId }) {
           </table>
         </div>
       )}
-
       <ModalCrearCupon
         open={modal}
         onClose={() => setModal(false)}
@@ -1111,11 +1125,7 @@ function TabCupones({ restauranteId }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// TAB 3 — PUNTOS con búsqueda por cédula/nombre y movimientos
-// ═══════════════════════════════════════════════════════════════
-
-// Progreso hacia el siguiente nivel
+// ── TabPuntos (igual que antes) ───────────────────────────────────────────────
 const NIVEL_PROGRESO = {
   bronce: { next: "plata", puntosNext: 500, color: "#d97706" },
   plata: { next: "oro", puntosNext: 1500, color: "#64748b" },
@@ -1141,7 +1151,7 @@ function NivelBadge({ nivel }) {
 
 function BarraProgreso({ saldo, nivel }) {
   const prog = NIVEL_PROGRESO[nivel];
-  if (!prog || !prog.puntosNext) {
+  if (!prog || !prog.puntosNext)
     return (
       <div
         className="flex items-center gap-2 text-xs font-dm"
@@ -1150,7 +1160,6 @@ function BarraProgreso({ saldo, nivel }) {
         <Award size={13} /> Nivel máximo alcanzado
       </div>
     );
-  }
   const pct = Math.min(100, Math.round((saldo / prog.puntosNext) * 100));
   return (
     <div className="space-y-1.5">
@@ -1218,7 +1227,7 @@ function MovimientoRow({ mov }) {
 }
 
 function TabPuntos() {
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null); // objeto cliente
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
   const [skipPuntos, setSkipPuntos] = useState(true);
   const [skipMovs, setSkipMovs] = useState(true);
   const [mostrarMovs, setMostrarMovs] = useState(false);
@@ -1231,7 +1240,6 @@ function TabPuntos() {
       fetchPolicy: "network-only",
     },
   );
-
   const { data: dataMovs, loading: loadingMovs } = useQuery(GET_TRANSACCIONES, {
     variables: { clienteId: clienteSeleccionado?.id ?? "" },
     skip: skipMovs,
@@ -1244,7 +1252,6 @@ function TabPuntos() {
     setSkipMovs(false);
     setMostrarMovs(false);
   };
-
   const handleLimpiar = () => {
     setClienteSeleccionado(null);
     setSkipPuntos(true);
@@ -1266,13 +1273,11 @@ function TabPuntos() {
 
   return (
     <div className="space-y-5 max-w-2xl">
-      {/* Buscador de cliente */}
       <div className="space-y-2">
         <label className="text-xs font-dm font-semibold text-stone-500 uppercase tracking-wider">
           Buscar cliente
         </label>
         {clienteSeleccionado ? (
-          /* Cliente seleccionado — chip con opción de cambiar */
           <div
             className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-white"
             style={{
@@ -1316,7 +1321,6 @@ function TabPuntos() {
         )}
       </div>
 
-      {/* Loading */}
       {!skipPuntos && loadingPuntos && (
         <div className="space-y-3">
           <div className="h-28 rounded-2xl bg-stone-100 animate-pulse" />
@@ -1331,7 +1335,6 @@ function TabPuntos() {
         </div>
       )}
 
-      {/* Sin cuenta */}
       {!skipPuntos && !loadingPuntos && clienteSeleccionado && !cuenta && (
         <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl border border-stone-200 bg-stone-50">
           <XCircle size={16} className="text-stone-400 shrink-0" />
@@ -1340,17 +1343,14 @@ function TabPuntos() {
               Sin cuenta de puntos
             </p>
             <p className="text-[11px] font-dm text-stone-400">
-              {clienteSeleccionado.nombre} todavía no ha acumulado puntos en
-              ninguna compra.
+              {clienteSeleccionado.nombre} no ha acumulado puntos aún.
             </p>
           </div>
         </div>
       )}
 
-      {/* Tarjeta de estadísticas */}
       {cuenta && nivelMeta && !loadingPuntos && (
         <div className="space-y-4">
-          {/* Hero puntos + nivel */}
           <div
             className="rounded-2xl overflow-hidden"
             style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}
@@ -1358,13 +1358,13 @@ function TabPuntos() {
             <div
               className="relative px-6 py-5"
               style={{
-                background: `linear-gradient(135deg, ${G[900]} 0%, ${G[500]} 100%)`,
+                background: `linear-gradient(135deg,${G[900]} 0%,${G[500]} 100%)`,
               }}
             >
               <div
                 className="absolute inset-0 opacity-10"
                 style={{
-                  backgroundImage: `radial-gradient(circle at 80% 50%, ${G[50]} 0%, transparent 60%)`,
+                  backgroundImage: `radial-gradient(circle at 80% 50%,${G[50]} 0%,transparent 60%)`,
                 }}
               />
               <div className="relative flex items-center justify-between">
@@ -1391,13 +1391,11 @@ function TabPuntos() {
                 <NivelBadge nivel={cuenta.nivel} />
               </div>
             </div>
-            {/* Barra de progreso */}
             <div className="bg-white px-6 py-4 border-b border-stone-100">
               <BarraProgreso saldo={cuenta.saldo} nivel={cuenta.nivel} />
             </div>
           </div>
 
-          {/* KPIs */}
           <div className="grid grid-cols-3 gap-3">
             {[
               {
@@ -1449,7 +1447,6 @@ function TabPuntos() {
             ))}
           </div>
 
-          {/* Movimientos */}
           <div
             className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
             style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
@@ -1477,7 +1474,6 @@ function TabPuntos() {
                 className={`text-stone-400 transition-transform ${mostrarMovs ? "rotate-180" : ""}`}
               />
             </button>
-
             {mostrarMovs && (
               <div className="border-t border-stone-100">
                 {loadingMovs ? (
@@ -1493,7 +1489,7 @@ function TabPuntos() {
                   <div className="flex items-center gap-2.5 px-5 py-4">
                     <XCircle size={13} className="text-stone-300" />
                     <p className="text-xs font-dm text-stone-400">
-                      Sin movimientos registrados.
+                      Sin movimientos.
                     </p>
                   </div>
                 ) : (
@@ -1506,7 +1502,6 @@ function TabPuntos() {
               </div>
             )}
           </div>
-
           <p className="text-[10px] font-dm text-stone-300 text-right">
             Actualizado:{" "}
             {new Date(cuenta.ultimaActualizacion).toLocaleString("es-CO")}
@@ -1517,10 +1512,7 @@ function TabPuntos() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// MAIN
-// ═══════════════════════════════════════════════════════════════
-
+// ── MAIN ──────────────────────────────────────────────────────────────────────
 const TABS = [
   { id: "promociones", label: "Promociones", icon: Star },
   { id: "cupones", label: "Cupones", icon: Ticket },
@@ -1539,7 +1531,6 @@ export default function GLoyalty() {
         title="Fidelización"
         description="Gestiona tus promociones locales, cupones y consulta puntos de clientes."
       />
-
       <div className="flex items-center gap-1 p-1 bg-white border border-stone-200 rounded-xl w-fit">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
@@ -1552,11 +1543,11 @@ export default function GLoyalty() {
                 : { color: "#78716c" }
             }
           >
-            <Icon size={13} /> {label}
+            <Icon size={13} />
+            {label}
           </button>
         ))}
       </div>
-
       {tab === "promociones" && (
         <TabPromociones restauranteId={restauranteId} />
       )}
