@@ -93,7 +93,7 @@ const calcularPuntos = (total, moneda) => {
   return Math.floor(total);
 };
 
-// ── Lista de pedidos listos ────────────────────────────────────────────────
+// ── Lista de pedidos listos ───────────────────────────────────────────────
 function ListaPedidosListos({ pedidos, loading, onSeleccionar }) {
   const [search, setSearch] = useState("");
 
@@ -173,6 +173,7 @@ function ListaPedidosListos({ pedidos, loading, onSeleccionar }) {
                   {fmtHora(p.fechaCreacion)}
                 </p>
               </div>
+              {/* FIX: mostrar total con tachado si hay descuento previo */}
               <div className="text-right shrink-0">
                 <p className="font-playfair text-lg font-bold text-stone-900">
                   {fmtMoney(p.total, p.moneda)}
@@ -190,7 +191,7 @@ function ListaPedidosListos({ pedidos, loading, onSeleccionar }) {
   );
 }
 
-// ── Panel de cobro ─────────────────────────────────────────────────────────
+// ── Panel de cobro ────────────────────────────────────────────────────────
 function PanelCobro({ pedidoId, onVolver, restauranteId }) {
   const [clienteBuscado, setClienteBuscado] = useState("");
   const [codigoCupon, setCodigoCupon] = useState("");
@@ -204,13 +205,11 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
     variables: { id: pedidoId },
     fetchPolicy: "cache-and-network",
   });
-
   const { data: platosImgData } = useQuery(GET_PLATOS_IMG, {
     variables: { disponibles: restauranteId, activo: true },
     skip: !restauranteId,
     fetchPolicy: "cache-first",
   });
-
   const imagenMap = useMemo(() => {
     const map = {};
     (platosImgData?.platos ?? []).forEach((p) => {
@@ -227,7 +226,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
       fetchPolicy: "network-only",
     },
   );
-
   const { refetch: refetchCupon } = useQuery(VALIDAR_CUPON, {
     variables: { codigo: codigoCupon.trim().toUpperCase() },
     skip: true,
@@ -256,7 +254,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
   const totalDescuentos = descuentoCupon + descuentoPuntos;
   const totalFinal = Math.max(0, (pedido?.total ?? 0) - totalDescuentos);
   const puntosAGanar = calcularPuntos(totalFinal, moneda);
-
   const puntosDisponibles = puntosCliente?.saldo ?? 0;
   const maxPuntosCanjeables = Math.min(
     puntosDisponibles,
@@ -325,10 +322,12 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
           },
         });
       }
+      // FIX: pasar totalCobrado para registrar el total real con descuentos
       await entregarPedido({
         variables: {
           id: pedido.id,
           metodoPago,
+          totalCobrado: totalFinal !== (pedido?.total ?? 0) ? totalFinal : null,
           descripcion: `Cobrado · ${METODOS_PAGO.find((m) => m.id === metodoPago)?.label ?? metodoPago}`,
         },
       });
@@ -337,17 +336,12 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
         background: "#fff",
         icon: "success",
         title: "¡Cobro exitoso!",
-        html: `
-          <div style="font-family:'DM Sans';color:#78716c;text-align:left;line-height:1.8">
-            <p>Pedido <b>${pedido.numeroDia ? `#${pedido.numeroDia}` : `#${pedido.id.slice(-8).toUpperCase()}`}</b></p>
-            <p>Total cobrado: <b>${fmtMoney(totalFinal, moneda)}</b></p>
-            <p>Método: <b>${METODOS_PAGO.find((m) => m.id === metodoPago)?.label}</b></p>
-            ${
-              clienteBuscado && puntosAGanar > 0
-                ? `<p style="color:${G[300]}">+${puntosAGanar} puntos acumulados</p>`
-                : ""
-            }
-          </div>`,
+        html: `<div style="font-family:'DM Sans';color:#78716c;text-align:left;line-height:1.8">
+          <p>Pedido <b>${pedido.numeroDia ? `#${pedido.numeroDia}` : `#${pedido.id.slice(-8).toUpperCase()}`}</b></p>
+          <p>Total cobrado: <b>${fmtMoney(totalFinal, moneda)}</b></p>
+          <p>Método: <b>${METODOS_PAGO.find((m) => m.id === metodoPago)?.label}</b></p>
+          ${clienteBuscado && puntosAGanar > 0 ? `<p style="color:${G[300]}">+${puntosAGanar} puntos acumulados</p>` : ""}
+        </div>`,
         confirmButtonColor: G[900],
         confirmButtonText: "Nuevo cobro",
       });
@@ -396,7 +390,7 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
       </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Columna izquierda — Ítems del pedido */}
+        {/* Columna izquierda */}
         <div className="space-y-4">
           <div
             className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
@@ -553,7 +547,7 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
 
         {/* Columna derecha */}
         <div className="space-y-4">
-          {/* Buscar cliente — ClienteSelector */}
+          {/* Cliente */}
           <div
             className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3"
             style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
@@ -561,20 +555,17 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
             <p className="text-xs font-dm font-bold text-stone-500 uppercase tracking-wide">
               Cliente (opcional)
             </p>
-
             <ClienteSelector
               value={clienteBuscado}
               onChange={(id) => setClienteBuscado(id)}
               onSelect={(cliente) => setClienteBuscado(cliente.id)}
               placeholder="Buscar por nombre, cédula o email..."
             />
-
             {puntosLoading && (
               <p className="text-xs font-dm text-stone-400">
                 Buscando puntos...
               </p>
             )}
-
             {puntosCliente && (
               <div className="space-y-2">
                 <div
@@ -594,7 +585,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
                     {puntosCliente.nivelDisplay}
                   </Badge>
                 </div>
-
                 {puntosDisponibles > 0 && (
                   <div className="space-y-1.5">
                     <label className="text-xs font-dm text-stone-500">
@@ -621,7 +611,6 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
                     />
                   </div>
                 )}
-
                 {puntosAGanar > 0 && (
                   <p
                     className="text-xs font-dm font-semibold"
@@ -753,7 +742,7 @@ function PanelCobro({ pedidoId, onVolver, restauranteId }) {
   );
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────
 export default function CCobrar() {
   const { user } = useAuth();
   const restauranteId = user?.restauranteId;

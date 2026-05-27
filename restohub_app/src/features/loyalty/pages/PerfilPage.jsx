@@ -1,8 +1,10 @@
 // src/features/loyalty/pages/PerfilPage.jsx
-// Dashboard profesional del cliente — puntos, cupones, promociones, pedidos
-import { useState, useEffect, useCallback } from "react";
+// FIX: si user.clienteId no existe en la sesión, busca el Cliente vinculado
+// automáticamente via query al gateway sin necesidad de hacer logout/login.
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@apollo/client/react";
+import { gql } from "@apollo/client";
 import { useAuth } from "../../../app/auth/AuthContext";
 import {
   GET_PUNTOS_CLIENTE,
@@ -11,9 +13,16 @@ import {
   GET_PROMOCIONES_ACTIVAS,
 } from "../queries";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constantes de nivel
-// ─────────────────────────────────────────────────────────────────────────────
+// Query para obtener el Cliente vinculado al usuario actual
+// Busca por usuario_id (que es el user.id del JWT) via el gateway
+const GET_CLIENTE_POR_USUARIO = gql`
+  query GetClientePorUsuario($usuarioId: ID!) {
+    clientePorUsuarioId(usuarioId: $usuarioId) {
+      id
+    }
+  }
+`;
+
 const NIVEL_META = {
   bronce: {
     color: "#CD7F32",
@@ -44,19 +53,14 @@ const NIVEL_META = {
     nextLabel: null,
   },
 };
-
 const NIVEL_THRESHOLDS = { bronce: 0, plata: 1000, oro: 5000, diamante: 10000 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 const fmt = (n, m = "COP") =>
   new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency: m,
     maximumFractionDigits: 0,
   }).format(n || 0);
-
 const fmtDate = (iso) =>
   iso
     ? new Date(iso).toLocaleDateString("es-CO", {
@@ -65,20 +69,15 @@ const fmtDate = (iso) =>
         year: "numeric",
       })
     : "—";
-
 const fmtRelative = (iso) => {
   if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
-  const d = Math.floor(diff / 86400000);
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
   if (d === 0) return "Hoy";
   if (d === 1) return "Ayer";
   if (d < 7) return `Hace ${d} días`;
   return fmtDate(iso);
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tabs config
-// ─────────────────────────────────────────────────────────────────────────────
 const TABS = [
   { id: "dashboard", label: "Inicio" },
   { id: "puntos", label: "Mis puntos" },
@@ -87,9 +86,6 @@ const TABS = [
   { id: "cuenta", label: "Mi cuenta" },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SVG Icons
-// ─────────────────────────────────────────────────────────────────────────────
 const IcoStar = ({ s = 18 }) => (
   <svg
     width={s}
@@ -277,9 +273,6 @@ const IcoPercent = ({ s = 18 }) => (
   </svg>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Componentes pequeños
-// ─────────────────────────────────────────────────────────────────────────────
 function Skeleton({ w = "100%", h = 16, r = 8 }) {
   return (
     <div
@@ -308,8 +301,6 @@ function StatCard({
         padding: "20px",
         cursor: onClick ? "pointer" : "default",
         transition: "all 0.2s",
-        position: "relative",
-        overflow: "hidden",
       }}
       onMouseEnter={(e) =>
         onClick &&
@@ -455,13 +446,11 @@ function CuponCard({ cupon, full = false }) {
       setTimeout(() => setCopied(false), 2200);
     });
   };
-
   const isDisp = cupon.disponible;
   const tipoPct =
     cupon.tipoDescuento === "PORCENTAJE" ||
     cupon.tipoDescuentoDisplay?.includes("%") ||
     cupon.tipoDescuento === "porcentaje";
-
   return (
     <div
       style={{
@@ -473,7 +462,6 @@ function CuponCard({ cupon, full = false }) {
         transition: "all 0.2s",
       }}
     >
-      {/* Franja superior */}
       <div
         style={{
           background: isDisp ? "var(--green)" : "#9CA3AF",
@@ -519,8 +507,6 @@ function CuponCard({ cupon, full = false }) {
           {isDisp ? "Disponible" : "No disponible"}
         </span>
       </div>
-
-      {/* Cuerpo */}
       <div style={{ padding: "14px 18px" }}>
         {cupon.promocionNombre && (
           <p
@@ -534,8 +520,6 @@ function CuponCard({ cupon, full = false }) {
             {cupon.promocionNombre}
           </p>
         )}
-
-        {/* Código copiable */}
         <button
           onClick={isDisp ? copy : undefined}
           disabled={!isDisp}
@@ -584,7 +568,6 @@ function CuponCard({ cupon, full = false }) {
             {copied ? "Copiado" : "Copiar"}
           </span>
         </button>
-
         {full && (
           <div
             style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}
@@ -618,9 +601,7 @@ function NivelProgress({ puntos }) {
   const nivel = (puntos.nivel || "bronce").toLowerCase();
   const meta = NIVEL_META[nivel] || NIVEL_META.bronce;
   const hist = puntos.puntosTotalesHistoricos || 0;
-  const nextThreshold = meta.next;
-
-  if (!nextThreshold) {
+  if (!meta.next)
     return (
       <div
         style={{
@@ -645,13 +626,9 @@ function NivelProgress({ puntos }) {
         </p>
       </div>
     );
-  }
-
-  const prevThreshold = NIVEL_THRESHOLDS[nivel] || 0;
-  const range = nextThreshold - prevThreshold;
-  const progress = Math.min(100, ((hist - prevThreshold) / range) * 100);
-  const needed = nextThreshold - hist;
-
+  const prev = NIVEL_THRESHOLDS[nivel] || 0;
+  const progress = Math.min(100, ((hist - prev) / (meta.next - prev)) * 100);
+  const needed = meta.next - hist;
   return (
     <div
       style={{
@@ -708,10 +685,10 @@ function NivelProgress({ puntos }) {
         }}
       >
         <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
-          {prevThreshold.toLocaleString("es-CO")} pts
+          {prev.toLocaleString("es-CO")} pts
         </span>
         <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
-          {nextThreshold.toLocaleString("es-CO")} pts
+          {meta.next.toLocaleString("es-CO")} pts
         </span>
       </div>
     </div>
@@ -733,11 +710,9 @@ function PromoCard({ p }) {
     regalo: "#B45309",
     "2x1": "#DC2626",
   };
-
   const tipo = p.tipoBeneficio || "";
   const color = BENE_COLOR[tipo] || "var(--green)";
   const icon = BENE_ICON[tipo] || <IcoPromo s={20} />;
-
   return (
     <div
       style={{
@@ -836,10 +811,56 @@ function PromoCard({ p }) {
                 color: "var(--text3)",
               }}
             >
-              <IcoCalendar s={10} /> Hasta {fmtDate(p.fechaFin)}
+              <IcoCalendar s={10} />
+              Hasta {fmtDate(p.fechaFin)}
             </span>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function NivelProgressMini({ puntos, nivelMeta }) {
+  const nivel = (puntos?.nivel || "bronce").toLowerCase();
+  const meta = NIVEL_META[nivel] || NIVEL_META.bronce;
+  if (!meta.next) return null;
+  const hist = puntos?.puntosTotalesHistoricos || 0;
+  const prev = NIVEL_THRESHOLDS[nivel] || 0;
+  const pct = Math.min(100, ((hist - prev) / (meta.next - prev)) * 100);
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginBottom: 6,
+        }}
+      >
+        <span style={{ fontSize: 11, color: "var(--text3)" }}>
+          Progreso hacia {meta.nextLabel}
+        </span>
+        <span style={{ fontSize: 11, color: "var(--text3)" }}>
+          {(meta.next - hist).toLocaleString("es-CO")} pts restantes
+        </span>
+      </div>
+      <div
+        style={{
+          height: 6,
+          background: "var(--bg3)",
+          borderRadius: 99,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            borderRadius: 99,
+            width: `${pct}%`,
+            background: `linear-gradient(90deg, ${meta.color}66, ${meta.color})`,
+            transition: "width 0.8s ease",
+          }}
+        />
       </div>
     </div>
   );
@@ -861,7 +882,49 @@ export default function PerfilPage({ tab: tabProp }) {
     if (t) setTab(t);
   }, [tabProp, searchParams]);
 
-  // ── Guard no autenticado ──────────────────────────────────────────────────
+  // ── TODOS LOS HOOKS ANTES DE CUALQUIER RETURN (Rules of Hooks) ──────────
+  const usuarioId = user?.id;
+  const clienteIdGuardado = user?.clienteId;
+
+  // Si la sesión no tiene clienteId (sesión antigua), lo resuelve por usuarioId
+  const { data: clienteData } = useQuery(GET_CLIENTE_POR_USUARIO, {
+    variables: { usuarioId: usuarioId ?? "" },
+    skip: !isAuthenticated || !usuarioId || !!clienteIdGuardado,
+    fetchPolicy: "network-only",
+  });
+
+  // clienteId resuelto: del JWT (sesión nueva) o de la query (sesión antigua)
+  const clienteId =
+    clienteIdGuardado ?? clienteData?.clientePorUsuarioId?.id ?? usuarioId;
+
+  const { data: puntosData, loading: loadingPuntos } = useQuery(
+    GET_PUNTOS_CLIENTE,
+    {
+      variables: { clienteId: clienteId ?? "" },
+      skip: !isAuthenticated || !clienteId,
+    },
+  );
+  const { data: cuponesData, loading: loadingCupones } = useQuery(
+    GET_CUPONES_CLIENTE,
+    {
+      variables: { clienteId: clienteId ?? "" },
+      skip: !isAuthenticated || !clienteId,
+    },
+  );
+  const { data: txData, loading: loadingTx } = useQuery(
+    GET_TRANSACCIONES_CLIENTE,
+    {
+      variables: { clienteId: clienteId ?? "" },
+      skip: !isAuthenticated || !clienteId,
+    },
+  );
+  const { data: promoData, loading: loadingPromo } = useQuery(
+    GET_PROMOCIONES_ACTIVAS,
+    { variables: { activa: true }, skip: !isAuthenticated },
+  );
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Guard no autenticado — DESPUÉS de todos los hooks
   if (!isAuthenticated) {
     return (
       <div
@@ -910,36 +973,6 @@ export default function PerfilPage({ tab: tabProp }) {
     );
   }
 
-  const clienteId = user?.id;
-
-  const { data: puntosData, loading: loadingPuntos } = useQuery(
-    GET_PUNTOS_CLIENTE,
-    {
-      variables: { clienteId },
-      skip: !clienteId,
-    },
-  );
-  const { data: cuponesData, loading: loadingCupones } = useQuery(
-    GET_CUPONES_CLIENTE,
-    {
-      variables: { clienteId },
-      skip: !clienteId,
-    },
-  );
-  const { data: txData, loading: loadingTx } = useQuery(
-    GET_TRANSACCIONES_CLIENTE,
-    {
-      variables: { clienteId },
-      skip: !clienteId,
-    },
-  );
-  const { data: promoData, loading: loadingPromo } = useQuery(
-    GET_PROMOCIONES_ACTIVAS,
-    {
-      variables: { activa: true },
-    },
-  );
-
   const puntos = puntosData?.puntosCliente;
   const cupones = cuponesData?.cupones || [];
   const transacs = txData?.transaccionesPuntos || [];
@@ -948,23 +981,19 @@ export default function PerfilPage({ tab: tabProp }) {
 
   const nivel = (puntos?.nivel || "bronce").toLowerCase();
   const nivelMeta = NIVEL_META[nivel] || NIVEL_META.bronce;
-
   const goTab = (t) => setTab(t);
 
-  // ── HERO ─────────────────────────────────────────────────────────────────
   return (
-    <div
-      style={{ paddingTop: 68, minHeight: "100vh", background: "var(--bg)" }}
-    >
-      {/* ── Hero Header ── */}
+    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      {/* Hero Header */}
       <div
         style={{
           background: "var(--green)",
           position: "relative",
           overflow: "hidden",
+          paddingTop: 68,
         }}
       >
-        {/* Círculos decorativos */}
         <div
           style={{
             position: "absolute",
@@ -987,23 +1016,20 @@ export default function PerfilPage({ tab: tabProp }) {
             background: "rgba(255,250,202,0.04)",
           }}
         />
-
         <div className="container" style={{ position: "relative" }}>
-          {/* Info usuario */}
           <div
             style={{
-              padding: "32px 0 0",
+              padding: "20px 0 0",
               display: "flex",
               alignItems: "center",
               gap: 20,
               flexWrap: "wrap",
             }}
           >
-            {/* Avatar con inicial */}
             <div
               style={{
-                width: 72,
-                height: 72,
+                width: 56,
+                height: 56,
                 borderRadius: "50%",
                 flexShrink: 0,
                 background: "var(--cream)",
@@ -1016,7 +1042,7 @@ export default function PerfilPage({ tab: tabProp }) {
               <span
                 style={{
                   fontFamily: "Playfair Display, serif",
-                  fontSize: 28,
+                  fontSize: 22,
                   fontWeight: 700,
                   color: "var(--green)",
                 }}
@@ -1024,8 +1050,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 {user?.nombre?.charAt(0)?.toUpperCase() || "U"}
               </span>
             </div>
-
-            {/* Nombre + detalles */}
             <div style={{ flex: 1 }}>
               <h1
                 style={{
@@ -1047,10 +1071,7 @@ export default function PerfilPage({ tab: tabProp }) {
               >
                 {user?.email}
               </p>
-
-              {/* Badges nivel + cuenta activa */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {/* Nivel */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {puntos && (
                   <div
                     style={{
@@ -1088,7 +1109,6 @@ export default function PerfilPage({ tab: tabProp }) {
                     </span>
                   </div>
                 )}
-                {/* Cuenta activa */}
                 <div
                   style={{
                     display: "inline-flex",
@@ -1117,8 +1137,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 </div>
               </div>
             </div>
-
-            {/* Botón logout desktop */}
             <button
               onClick={logout}
               style={{
@@ -1152,14 +1170,12 @@ export default function PerfilPage({ tab: tabProp }) {
               Salir
             </button>
           </div>
-
-          {/* Tabs */}
           <div
             style={{
               display: "flex",
               gap: 2,
               overflowX: "auto",
-              marginTop: 28,
+              marginTop: 16,
               paddingBottom: 0,
             }}
           >
@@ -1189,17 +1205,14 @@ export default function PerfilPage({ tab: tabProp }) {
         </div>
       </div>
 
-      {/* ── Contenido principal ── */}
+      {/* Contenido */}
       <div
         className="container"
         style={{ paddingTop: 32, paddingBottom: 80, maxWidth: 960 }}
       >
-        {/* ═══════════════════════════════════════════════════
-            TAB: DASHBOARD / INICIO
-            ═══════════════════════════════════════════════ */}
+        {/* TAB: DASHBOARD */}
         {tab === "dashboard" && (
           <div style={{ display: "grid", gap: 24 }}>
-            {/* Stats grid */}
             <div
               style={{
                 display: "grid",
@@ -1258,8 +1271,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 onClick={() => goTab("promociones")}
               />
             </div>
-
-            {/* Tarjeta de nivel completa */}
             {puntos && (
               <div
                 style={{
@@ -1341,13 +1352,8 @@ export default function PerfilPage({ tab: tabProp }) {
                 </div>
               </div>
             )}
-
-            {/* Últimas transacciones */}
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "1fr",
-                gap: 0,
                 background: "#fff",
                 border: "1px solid var(--border)",
                 borderRadius: 16,
@@ -1423,8 +1429,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 transacs.slice(0, 5).map((tx) => <TxRow key={tx.id} tx={tx} />)
               )}
             </div>
-
-            {/* Cupones destacados */}
             {cuponesDisp.length > 0 && (
               <div
                 style={{
@@ -1481,8 +1485,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 </div>
               </div>
             )}
-
-            {/* Promociones vigentes (snippet) */}
             {promociones.length > 0 && (
               <div
                 style={{
@@ -1535,12 +1537,9 @@ export default function PerfilPage({ tab: tabProp }) {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════
-            TAB: PUNTOS
-            ═══════════════════════════════════════════════ */}
+        {/* TAB: PUNTOS */}
         {tab === "puntos" && (
           <div style={{ display: "grid", gap: 24 }}>
-            {/* Tarjeta hero de puntos */}
             <div
               style={{
                 background: "var(--green)",
@@ -1638,8 +1637,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 <NivelProgress puntos={puntos} />
               </div>
             </div>
-
-            {/* Info niveles */}
             <div
               style={{
                 background: "#fff",
@@ -1726,8 +1723,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 ))}
               </div>
             </div>
-
-            {/* Historial completo */}
             <div
               style={{
                 background: "#fff",
@@ -1762,9 +1757,6 @@ export default function PerfilPage({ tab: tabProp }) {
                       <Skeleton w={36} h={36} r={18} />
                       <div style={{ flex: 1 }}>
                         <Skeleton h={13} w="55%" r={6} />
-                        <div style={{ marginTop: 6 }}>
-                          <Skeleton h={11} w="30%" r={4} />
-                        </div>
                       </div>
                     </div>
                   ))}
@@ -1801,12 +1793,9 @@ export default function PerfilPage({ tab: tabProp }) {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════
-            TAB: CUPONES
-            ═══════════════════════════════════════════════ */}
+        {/* TAB: CUPONES */}
         {tab === "cupones" && (
           <div style={{ display: "grid", gap: 24 }}>
-            {/* Contadores */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <div
                 style={{
@@ -1868,7 +1857,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 </span>
               </div>
             </div>
-
             {loadingCupones ? (
               <div
                 style={{
@@ -1982,9 +1970,7 @@ export default function PerfilPage({ tab: tabProp }) {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════
-            TAB: PROMOCIONES
-            ═══════════════════════════════════════════════ */}
+        {/* TAB: PROMOCIONES */}
         {tab === "promociones" && (
           <div style={{ display: "grid", gap: 16 }}>
             {loadingPromo ? (
@@ -2034,12 +2020,9 @@ export default function PerfilPage({ tab: tabProp }) {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════
-            TAB: MI CUENTA
-            ═══════════════════════════════════════════════ */}
+        {/* TAB: MI CUENTA */}
         {tab === "cuenta" && (
           <div style={{ display: "grid", gap: 20, maxWidth: 580 }}>
-            {/* Info personal */}
             <div
               style={{
                 background: "#fff",
@@ -2106,7 +2089,6 @@ export default function PerfilPage({ tab: tabProp }) {
                     </p>
                   </div>
                 ))}
-                {/* Estado cuenta */}
                 <div>
                   <p
                     style={{
@@ -2183,8 +2165,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 </div>
               </div>
             </div>
-
-            {/* Resumen fidelización */}
             <div
               style={{
                 background: "#fff",
@@ -2287,8 +2267,6 @@ export default function PerfilPage({ tab: tabProp }) {
                 )}
               </div>
             </div>
-
-            {/* Cerrar sesión */}
             <button
               onClick={logout}
               style={{
@@ -2322,52 +2300,6 @@ export default function PerfilPage({ tab: tabProp }) {
             </button>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-// Mini progress para pestaña Cuenta
-function NivelProgressMini({ puntos, nivelMeta }) {
-  const nivel = (puntos?.nivel || "bronce").toLowerCase();
-  const meta = NIVEL_META[nivel] || NIVEL_META.bronce;
-  if (!meta.next) return null;
-  const hist = puntos?.puntosTotalesHistoricos || 0;
-  const prev = NIVEL_THRESHOLDS[nivel] || 0;
-  const pct = Math.min(100, ((hist - prev) / (meta.next - prev)) * 100);
-  return (
-    <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: 6,
-        }}
-      >
-        <span style={{ fontSize: 11, color: "var(--text3)" }}>
-          Progreso hacia {meta.nextLabel}
-        </span>
-        <span style={{ fontSize: 11, color: "var(--text3)" }}>
-          {(meta.next - hist).toLocaleString("es-CO")} pts restantes
-        </span>
-      </div>
-      <div
-        style={{
-          height: 6,
-          background: "var(--bg3)",
-          borderRadius: 99,
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            borderRadius: 99,
-            width: `${pct}%`,
-            background: `linear-gradient(90deg, ${meta.color}66, ${meta.color})`,
-            transition: "width 0.8s ease",
-          }}
-        />
       </div>
     </div>
   );

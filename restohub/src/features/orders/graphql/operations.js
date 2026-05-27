@@ -1,10 +1,5 @@
 // src/features/orders/graphql/operations.js
-// Queries y mutations de order_service vía gateway GraphQL.
-// Usadas por supervisor, mesero, cocinero y cajero.
-
 import { gql } from "@apollo/client";
-
-// ── PEDIDOS ───────────────────────────────────────────────────────────────
 
 export const GET_PEDIDOS = gql`
   query GetPedidos(
@@ -26,6 +21,7 @@ export const GET_PEDIDOS = gql`
       estado
       prioridad
       total
+      totalCobrado
       moneda
       mesaId
       metodoPago
@@ -46,6 +42,7 @@ export const GET_PEDIDO = gql`
       estado
       prioridad
       total
+      totalCobrado
       moneda
       mesaId
       metodoPago
@@ -88,8 +85,6 @@ export const GET_PEDIDO = gql`
     }
   }
 `;
-
-// ── ACCIONES DE ESTADO ────────────────────────────────────────────────────
 
 export const CONFIRMAR_PEDIDO = gql`
   mutation ConfirmarPedido($id: ID!, $descripcion: String) {
@@ -139,11 +134,17 @@ export const MARCAR_LISTO_PEDIDO = gql`
 `;
 
 export const ENTREGAR_PEDIDO = gql`
-  mutation EntregarPedido($id: ID!, $descripcion: String, $metodoPago: String) {
+  mutation EntregarPedido(
+    $id: ID!
+    $descripcion: String
+    $metodoPago: String
+    $totalCobrado: Float
+  ) {
     entregarPedido(
       id: $id
       descripcion: $descripcion
       metodoPago: $metodoPago
+      totalCobrado: $totalCobrado
     ) {
       ok
       error
@@ -151,12 +152,11 @@ export const ENTREGAR_PEDIDO = gql`
         id
         estado
         metodoPago
+        totalCobrado
       }
     }
   }
 `;
-
-// ── CREAR PEDIDO (mesero/cajero) ──────────────────────────────────────────
 
 export const CREAR_PEDIDO = gql`
   mutation CrearPedido(
@@ -192,8 +192,6 @@ export const CREAR_PEDIDO = gql`
     }
   }
 `;
-
-// ── COMANDAS DE COCINA ────────────────────────────────────────────────────
 
 export const GET_COMANDAS = gql`
   query GetComandas($estado: String, $estacion: String, $pedidoId: ID) {
@@ -237,8 +235,6 @@ export const COMANDA_LISTA = gql`
     }
   }
 `;
-
-// ── ENTREGAS ──────────────────────────────────────────────────────────────
 
 export const GET_ENTREGAS = gql`
   query GetEntregas(

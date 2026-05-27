@@ -1,6 +1,5 @@
 // src/features/loyalty/components/Gerente/GLoyalty.jsx
-// FIX: fechas correctas para crear promociones y cupones (400 Bad Request)
-
+// FIX: TabCupones filtra por restauranteId — ya no muestra cupones de otros restaurantes
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useLazyQuery } from "@apollo/client/react";
 import { useAuth } from "../../../../app/auth/AuthContext";
@@ -11,7 +10,6 @@ import {
   ToggleLeft,
   ToggleRight,
   Loader2,
-  Tag,
   Gift,
   Ticket,
   Users,
@@ -26,8 +24,6 @@ import {
   Coins,
   User,
   X,
-  TrendingUp,
-  TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
   Clock,
@@ -72,11 +68,7 @@ const fb = (e) => {
   e.target.style.borderColor = "#e2e8f0";
   e.target.style.boxShadow = "none";
 };
-
-// ── Helper fechas ─────────────────────────────────────────────────────────────
-// datetime-local input  → "2026-05-20T09:00"   necesita ":00"
 const toISODatetime = (v) => (v ? v + ":00Z" : "");
-// date input            → "2026-05-20"          necesita "T00:00:00" / "T23:59:59"
 const toISODateStart = (v) => (v ? v + "T00:00:00Z" : "");
 const toISODateEnd = (v) => (v ? v + "T23:59:59Z" : "");
 
@@ -106,7 +98,7 @@ const BENEFICIO_META = {
   "2x1": { label: "2×1", icon: Hash, color: "#f59e0b" },
 };
 
-// ── ClienteSelector ───────────────────────────────────────────────────────────
+// ── ClienteSelector ───────────────────────────────────────────────────────
 export function ClienteSelector({
   value,
   onChange,
@@ -116,12 +108,9 @@ export function ClienteSelector({
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
-
   const [buscarClientes, { data, loading }] = useLazyQuery(
     GET_CLIENTES_RESTAURANTE,
-    {
-      fetchPolicy: "network-only",
-    },
+    { fetchPolicy: "network-only" },
   );
 
   const handleSearch = useCallback(
@@ -135,15 +124,13 @@ export function ClienteSelector({
   );
 
   const clientes = data?.clientes ?? [];
-
-  const handleSelect = (cliente) => {
-    setSelected(cliente);
-    onChange(cliente.id);
-    if (onSelect) onSelect(cliente);
+  const handleSelect = (c) => {
+    setSelected(c);
+    onChange(c.id);
+    if (onSelect) onSelect(c);
     setSearch("");
     setOpen(false);
   };
-
   const handleClear = () => {
     setSelected(null);
     onChange("");
@@ -253,7 +240,7 @@ export function ClienteSelector({
   );
 }
 
-// ── ModalCrearPromocion ───────────────────────────────────────────────────────
+// ── ModalCrearPromocion ───────────────────────────────────────────────────
 function ModalCrearPromocion({ open, onClose, restauranteId }) {
   const INIT = {
     nombre: "",
@@ -288,7 +275,6 @@ function ModalCrearPromocion({ open, onClose, restauranteId }) {
             form.tipoBeneficio === "puntos_extra"
               ? parseInt(form.puntosBonus) || 0
               : 0,
-          // ✅ FIX: datetime-local da "2026-05-20T09:00" → agregar ":00"
           fechaInicio: toISODatetime(form.fechaInicio),
           fechaFin: toISODatetime(form.fechaFin),
         },
@@ -315,8 +301,6 @@ function ModalCrearPromocion({ open, onClose, restauranteId }) {
       });
     }
   };
-
-  const necesitaValor = !["puntos_extra"].includes(form.tipoBeneficio);
 
   return (
     <Modal
@@ -368,7 +352,7 @@ function ModalCrearPromocion({ open, onClose, restauranteId }) {
             <option value="2x1">2×1</option>
           </select>
         </Field>
-        {necesitaValor && (
+        {form.tipoBeneficio !== "puntos_extra" && (
           <Field
             label={
               form.tipoBeneficio === "descuento_pct"
@@ -454,7 +438,7 @@ function ModalCrearPromocion({ open, onClose, restauranteId }) {
   );
 }
 
-// ── PromocionCard ─────────────────────────────────────────────────────────────
+// ── PromocionCard ─────────────────────────────────────────────────────────
 function PromocionCard({ promo, onToggle, toggling }) {
   const esPropia = promo.alcance === "local";
   const beneficio =
@@ -513,11 +497,11 @@ function PromocionCard({ promo, onToggle, toggling }) {
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
             <span
-              className={`inline-flex items-center gap-1 text-[10px] font-dm font-semibold px-2 py-1 rounded-full ${promo.alcance === "global" ? "bg-blue-50 text-blue-600" : ""}`}
+              className="inline-flex items-center gap-1 text-[10px] font-dm font-semibold px-2 py-1 rounded-full"
               style={
-                promo.alcance === "local"
-                  ? { background: G[50], color: G[300] }
-                  : {}
+                promo.alcance === "global"
+                  ? { background: "#eff6ff", color: "#3b82f6" }
+                  : { background: G[50], color: G[300] }
               }
             >
               {promo.alcance === "global" ? (
@@ -566,23 +550,6 @@ function PromocionCard({ promo, onToggle, toggling }) {
                 </>
               )}
             </Badge>
-            {/* Mensaje hora de inicio si está programada */}
-            {programada && (
-              <span className="text-[9px] font-dm text-stone-400 mt-0.5 text-right leading-tight">
-                Activa desde
-                <br />
-                <span className="font-semibold" style={{ color: G[100] }}>
-                  {inicio.toLocaleDateString("es-CO", {
-                    day: "2-digit",
-                    month: "short",
-                  })}{" "}
-                  {inicio.toLocaleTimeString("es-CO", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </span>
-            )}
           </div>
         </div>
         {promo.descripcion && (
@@ -635,7 +602,7 @@ function PromocionCard({ promo, onToggle, toggling }) {
   );
 }
 
-// ── TabPromociones ────────────────────────────────────────────────────────────
+// ── TabPromociones ────────────────────────────────────────────────────────
 function TabPromociones({ restauranteId }) {
   const [modal, setModal] = useState(false);
   const [search, setSearch] = useState("");
@@ -721,12 +688,6 @@ function TabPromociones({ restauranteId }) {
         <div
           className="flex items-center gap-2.5 flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200"
           style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
-          onFocusCapture={(e) =>
-            (e.currentTarget.style.boxShadow = `0 0 0 2px ${G[300]}`)
-          }
-          onBlurCapture={(e) =>
-            (e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)")
-          }
         >
           <Search size={13} className="text-stone-300 shrink-0" />
           <input
@@ -803,8 +764,8 @@ function TabPromociones({ restauranteId }) {
   );
 }
 
-// ── ModalCrearCupon ───────────────────────────────────────────────────────────
-function ModalCrearCupon({ open, onClose }) {
+// ── ModalCrearCupon ───────────────────────────────────────────────────────
+function ModalCrearCupon({ open, onClose, restauranteId }) {
   const INIT = {
     clienteId: "",
     tipoDescuento: "porcentaje",
@@ -816,6 +777,7 @@ function ModalCrearCupon({ open, onClose }) {
   };
   const [form, setForm] = useState({ ...INIT });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // FIX: refetchQueries incluye las variables para que Apollo refresque la query filtrada
   const [crear, { loading }] = useMutation(CREAR_CUPON, {
     refetchQueries: ["GetCupones"],
   });
@@ -832,10 +794,11 @@ function ModalCrearCupon({ open, onClose }) {
       const { data } = await crear({
         variables: {
           clienteId: form.clienteId || null,
+          // FIX: pasar restauranteId para que el cupón quede asociado al restaurante
+          restauranteId,
           tipoDescuento: form.tipoDescuento,
           valorDescuento: parseFloat(form.valorDescuento),
           limiteUso: parseInt(form.limiteUso) || 1,
-          // ✅ FIX: date input da "2026-05-20" → agregar hora
           fechaInicio: toISODateStart(form.fechaInicio),
           fechaFin: toISODateEnd(form.fechaFin),
           codigo: form.codigo || null,
@@ -986,11 +949,15 @@ function ModalCrearCupon({ open, onClose }) {
   );
 }
 
-// ── TabCupones ────────────────────────────────────────────────────────────────
+// ── TabCupones ────────────────────────────────────────────────────────────
 function TabCupones({ restauranteId }) {
   const [modal, setModal] = useState(false);
   const [search, setSearch] = useState("");
+
+  // FIX: filtra por restauranteId — ya no muestra cupones de otros restaurantes
   const { data, loading } = useQuery(GET_CUPONES, {
+    variables: { restauranteId },
+    skip: !restauranteId,
     fetchPolicy: "cache-and-network",
   });
   const cupones = data?.cupones ?? [];
@@ -1069,9 +1036,24 @@ function TabCupones({ restauranteId }) {
                   className="border-b border-stone-100 hover:bg-stone-50/50 transition-colors"
                 >
                   <td className="py-3 pl-5 pr-4">
-                    <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg bg-stone-100 text-stone-700">
-                      {c.codigo}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg bg-stone-100 text-stone-700">
+                        {c.codigo}
+                      </span>
+                      {!c.restauranteId && (
+                        <span
+                          className="inline-flex items-center gap-1 text-[9px] font-dm font-bold px-1.5 py-0.5 rounded-full shrink-0"
+                          style={{
+                            background: "#eff6ff",
+                            color: "#2563eb",
+                            border: "1px solid #bfdbfe",
+                          }}
+                        >
+                          <Globe size={8} />
+                          Global
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-xs font-dm text-stone-600">
                     {c.tipoDescuentoDisplay}
@@ -1125,7 +1107,7 @@ function TabCupones({ restauranteId }) {
   );
 }
 
-// ── TabPuntos (igual que antes) ───────────────────────────────────────────────
+// ── TabPuntos ─────────────────────────────────────────────────────────────
 const NIVEL_PROGRESO = {
   bronce: { next: "plata", puntosNext: 500, color: "#d97706" },
   plata: { next: "oro", puntosNext: 1500, color: "#64748b" },
@@ -1246,8 +1228,8 @@ function TabPuntos() {
     fetchPolicy: "network-only",
   });
 
-  const handleSeleccionar = (cliente) => {
-    setClienteSeleccionado(cliente);
+  const handleSeleccionar = (c) => {
+    setClienteSeleccionado(c);
     setSkipPuntos(false);
     setSkipMovs(false);
     setMostrarMovs(false);
@@ -1260,9 +1242,6 @@ function TabPuntos() {
   };
 
   const cuenta = dataPuntos?.puntosCliente;
-  const nivelMeta = cuenta
-    ? (NIVEL_META[cuenta.nivel] ?? NIVEL_META.bronce)
-    : null;
   const movs = dataMovs?.transaccionesPuntos ?? [];
   const acumulados = movs
     .filter((m) => m.puntos > 0)
@@ -1320,7 +1299,6 @@ function TabPuntos() {
           />
         )}
       </div>
-
       {!skipPuntos && loadingPuntos && (
         <div className="space-y-3">
           <div className="h-28 rounded-2xl bg-stone-100 animate-pulse" />
@@ -1334,7 +1312,6 @@ function TabPuntos() {
           </div>
         </div>
       )}
-
       {!skipPuntos && !loadingPuntos && clienteSeleccionado && !cuenta && (
         <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl border border-stone-200 bg-stone-50">
           <XCircle size={16} className="text-stone-400 shrink-0" />
@@ -1348,8 +1325,7 @@ function TabPuntos() {
           </div>
         </div>
       )}
-
-      {cuenta && nivelMeta && !loadingPuntos && (
+      {cuenta && !loadingPuntos && (
         <div className="space-y-4">
           <div
             className="rounded-2xl overflow-hidden"
@@ -1395,7 +1371,6 @@ function TabPuntos() {
               <BarraProgreso saldo={cuenta.saldo} nivel={cuenta.nivel} />
             </div>
           </div>
-
           <div className="grid grid-cols-3 gap-3">
             {[
               {
@@ -1446,7 +1421,6 @@ function TabPuntos() {
               </div>
             ))}
           </div>
-
           <div
             className="bg-white rounded-2xl border border-stone-200 overflow-hidden"
             style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}
@@ -1512,7 +1486,7 @@ function TabPuntos() {
   );
 }
 
-// ── MAIN ──────────────────────────────────────────────────────────────────────
+// ── MAIN ──────────────────────────────────────────────────────────────────
 const TABS = [
   { id: "promociones", label: "Promociones", icon: Star },
   { id: "cupones", label: "Cupones", icon: Ticket },

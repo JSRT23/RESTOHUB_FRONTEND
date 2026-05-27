@@ -1,10 +1,5 @@
 // src/features/loyalty/graphql/operations.js
-// Queries y mutations para loyalty_service via gateway GraphQL.
-// Usadas por gerente_local y admin_central.
-
 import { gql } from "@apollo/client";
-
-// ── PUNTOS ────────────────────────────────────────────────────────────────
 
 export const GET_PUNTOS_CLIENTE = gql`
   query GetPuntosCliente($clienteId: ID!) {
@@ -185,14 +180,26 @@ export const DESACTIVAR_PROMOCION = gql`
 `;
 
 // ── CUPONES ───────────────────────────────────────────────────────────────
+// FIX: agrega $restauranteId para que el gerente solo vea los suyos
 
 export const GET_CUPONES = gql`
-  query GetCupones($clienteId: ID, $activo: Boolean, $codigo: String) {
-    cupones(clienteId: $clienteId, activo: $activo, codigo: $codigo) {
+  query GetCupones(
+    $clienteId: ID
+    $activo: Boolean
+    $codigo: String
+    $restauranteId: ID
+  ) {
+    cupones(
+      clienteId: $clienteId
+      activo: $activo
+      codigo: $codigo
+      restauranteId: $restauranteId
+    ) {
       id
       codigo
       promocionNombre
       clienteId
+      restauranteId
       tipoDescuento
       tipoDescuentoDisplay
       valorDescuento
@@ -210,6 +217,7 @@ export const CREAR_CUPON = gql`
   mutation CrearCupon(
     $promocionId: ID
     $clienteId: ID
+    $restauranteId: ID
     $tipoDescuento: String!
     $valorDescuento: Float!
     $limiteUso: Int
@@ -220,6 +228,7 @@ export const CREAR_CUPON = gql`
     crearCupon(
       promocionId: $promocionId
       clienteId: $clienteId
+      restauranteId: $restauranteId
       tipoDescuento: $tipoDescuento
       valorDescuento: $valorDescuento
       limiteUso: $limiteUso
